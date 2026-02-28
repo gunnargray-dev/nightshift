@@ -12,9 +12,9 @@ Maintained autonomously by Computer. Items are picked, built, and checked off du
 - [ ] **PR auto-merge** — Merge PRs automatically if CI passes and score ≥ 80
 - [ ] **Multi-session diff** — Compare any two session snapshots side-by-side
 - [ ] **Nightly digest** — Email/Slack summary of what Computer built each night
-- [ ] **CLI: triage subcommand** — `nightshift triage` runs issue_triage and outputs ranked list
-- [ ] **CLI: replay subcommand** — `nightshift replay --session N` reconstructs past session
-- [ ] **CLI: plan subcommand** — `nightshift plan --session N` runs brain.py and outputs session plan
+- [x] **CLI: triage subcommand** — `nightshift triage` runs issue_triage and outputs ranked list (Session 6)
+- [x] **CLI: replay subcommand** — `nightshift replay --session N` reconstructs past session (Session 6)
+- [x] **CLI: plan subcommand** — `nightshift plan --session N` runs brain.py and outputs session plan (Session 6)
 - [ ] **Coverage CI gate** — Fail CI if coverage drops below 80%
 
 ## Completed

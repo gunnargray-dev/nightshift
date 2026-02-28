@@ -22,10 +22,10 @@ Every morning, the human maintainer wakes up to a diff.
 
 | Metric | Count |
 |--------|-------|
-| Nights active | 5 |
-| Total PRs | 17 |
-| Total commits | 21 |
-| Lines changed | 5100 |
+| Nights active | 6 |
+| Total PRs | 19 |
+| Total commits | 23 |
+| Lines changed | 5310 |
 
 *Stats are updated by Computer each session.*
 
@@ -40,50 +40,32 @@ Every morning, the human maintainer wakes up to a diff.
 | `src/coverage_tracker.py` | Runs pytest-cov, stores history in JSON, renders trend table |
 | `src/readme_updater.py` | Generates dynamic README.md from live repo state |
 | `src/diff_visualizer.py` | Markdown summary of each night's git changes with block-bar heatmap |
-| `src/pr_scorer.py` | Scores PRs 0–100 across 5 dimensions; grades A+–F; Markdown leaderboard |
-| `src/cli.py` | Unified `nightshift` CLI tying all modules together (health/stats/diff/run/triage/replay) |
+| `src/pr_scorer.py` | Scores PRs 0–100 across 5 dimensions, grades A+–F, Markdown leaderboard |
+| `src/cli.py` | Unified `nightshift` CLI tying modules together (health/stats/diff/coverage/changelog/etc.) |
 | `src/refactor.py` | Self-refactor engine: AST analysis across 5 defect categories with auto-fix |
 | `src/arch_generator.py` | Auto-generates docs/ARCHITECTURE.md from AST walk of the repo |
 | `src/health_trend.py` | Tracks health scores across sessions; Unicode sparklines |
 | `src/issue_triage.py` | Classifies + prioritizes GitHub issues (BUG/FEATURE/ENHANCEMENT/QUESTION/CHORE) |
-| `src/brain.py` | Task prioritization engine — transparent scoring across 5 dimensions |
-| `src/session_replay.py` | Reconstructs any past session from NIGHTSHIFT_LOG.md with full narrative |
+| `src/brain.py` | Task prioritization engine: scores roadmap + issues for next session |
+| `src/session_replay.py` | Reconstructs any past session from NIGHTSHIFT_LOG.md with narrative |
 
 ## Usage
 
 ```bash
 # After pip install -e .
-nightshift health          # code health score
-nightshift stats           # repo stats
-nightshift changelog       # render changelog
-nightshift refactor        # find refactor candidates
-nightshift run --session 5 # full end-of-session pipeline
+nightshift health        # code health score
+nightshift stats         # repo stats
+nightshift changelog     # render changelog
+nightshift diff          # last session diff
+nightshift coverage      # coverage trend
+nightshift score         # PR score leaderboard
+nightshift arch --write  # regenerate docs/ARCHITECTURE.md
+nightshift refactor      # refactor report
+nightshift run           # full pipeline
 ```
-
-## Dashboard
-
-The repo evolution dashboard is deployable via GitHub Pages from `docs/index.html`.
-
-To enable: repo Settings → Pages → Source: Deploy from branch `main`, folder `/docs`
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for how to request features, report bugs, and contribute code.
-
-Computer reads every open issue labeled `human-priority` at the start of each session.
-
-## Project
-
-Nightshift is a **self-improving autonomous development system**. The repo is both the project and the meta-project — Computer builds tools, then improves the tools it used to build them.
-
-See [`ROADMAP.md`](ROADMAP.md) for what's planned.  
-See [`NIGHTSHIFT_LOG.md`](NIGHTSHIFT_LOG.md) for what's happened.  
-See [`.github/NIGHTSHIFT_RULES.md`](.github/NIGHTSHIFT_RULES.md) for the constraints.
-
-## For Humans
-
-Want the AI to build something? [Open an issue](../../issues/new) with the label `human-priority` and Computer will address it in the next overnight session.
 
 ---
 
-*Built by [@gunnargray-dev](https://github.com/gunnargray-dev) and Perplexity Computer.*
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
