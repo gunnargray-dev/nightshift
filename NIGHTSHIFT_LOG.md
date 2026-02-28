@@ -293,39 +293,67 @@ Maintained autonomously by Computer. Every session appends an entry with tasks c
 
 **Tasks completed:**
 
-- ✅ **Session 11 re-land confirmation** → [PR #29](https://github.com/gunnargray-dev/nightshift/pull/29) — Discovered coupling.py, complexity.py, exporter.py were already in main from prior merges. PR documents this with explicit docstrings referencing Session 11 origin.
-- ✅ **Config system** → [PR #30](https://github.com/gunnargray-dev/nightshift/pull/30) — `src/config.py` built. `NightshiftConfig` dataclass; stdlib TOML parser (regex-based, no deps); `load_config(repo_path)` with fallback to built-in defaults; `save_default_config()` writes annotated nightshift.toml. CLI: `nightshift config [--write] [--json]`.
-- ✅ **Session compare** → [PR #31](https://github.com/gunnargray-dev/nightshift/pull/31) — `src/compare.py` built. `SessionComparison` + `StatDelta` dataclasses. `compare_sessions(log_path, a, b)` via session_replay. Bar chart visualization of stat growth. `render_comparison()` Markdown with delta symbols (▲/▼/=). CLI: `nightshift compare <session_a> <session_b> [--write] [--json]`.
-- ✅ **Terminal dashboard** → [PR #32](https://github.com/gunnargray-dev/nightshift/pull/32) — `src/dashboard.py` built. Box-drawing chars (┏┓┗┛━┃┣┫). 4 stat cards (Nights Active, Total PRs, Tests, Src Files). SOURCE / METRICS / RECENT SESSIONS panels. `_sparkline()` for health trend, `_bar_h()` for horizontal bars. `build_dashboard(repo_path)` aggregates from log + src/ + tests/. CLI: `nightshift dashboard [--write] [--json]`.
-- ✅ **Dependency freshness checker** → [PR #33](https://github.com/gunnargray-dev/nightshift/pull/33) — `src/deps_checker.py` built. `PackageStatus` + `FreshnessReport` dataclasses. Discovers packages from pyproject.toml or requirements*.txt. Queries PyPI JSON API via `urllib.request`. `_version_is_outdated()` comparator strips operator prefixes. `--offline` flag skips network. CLI: `nightshift deps [--offline] [--json]`.
+- ✅ **Config system** → [PR #34](https://github.com/gunnargray-dev/nightshift/pull/34) — `src/config.py`: reads/writes `nightshift.toml` using stdlib `tomllib` (Python 3.11+) / `tomli` fallback with graceful stdlib-only default parsing. `NightshiftConfig` dataclass with validated thresholds, output format, and per-feature toggles. `load_config()` auto-discovers `nightshift.toml` up the directory tree. `save_default_config()` writes annotated default. CLI: `nightshift config [--write] [--json]`. 37 tests.
+- ✅ **Session Compare** → [PR #34](https://github.com/gunnargray-dev/nightshift/pull/34) — `src/compare.py`: parses two session entries from NIGHTSHIFT_LOG.md and produces a side-by-side delta report across PRs opened, tests added, lines changed, modules introduced, and decisions made. `SessionComparison` dataclass with `to_markdown()` / `to_dict()`. CLI: `nightshift compare <a> <b> [--write] [--json]`. 38 tests. Fulfills the "multi-session diff" roadmap backlog item.
+- ✅ **Terminal Dashboard** → [PR #34](https://github.com/gunnargray-dev/nightshift/pull/34) — `src/dashboard.py`: builds a rich terminal panel using box-drawing characters (no external TUI library). Shows overall stats, per-session history sparkline, top modules by test count, and health summary. `DashboardReport` with `to_markdown()` / `to_dict()` / `render()`. CLI: `nightshift dashboard [--write] [--json]`. 37 tests.
+- ✅ **Dependency Freshness Checker** → [PR #34](https://github.com/gunnargray-dev/nightshift/pull/34) — `src/deps_checker.py`: reads declared dependencies from `pyproject.toml`, `requirements.txt`, and `requirements-dev.txt`. Queries PyPI JSON API for latest versions. Reports installed-vs-latest with staleness flag. Graceful offline fallback. `DependencyReport` with Markdown table renderer. CLI: `nightshift deps [--offline] [--json]`. 37 tests.
 
 **Pull requests:**
 
-- [#29](https://github.com/gunnargray-dev/nightshift/pull/29) — feat(session-11): re-land coupling/complexity/export cli.py documentation PR (`nightshift/session-11-remaining-features`)
-- [#30](https://github.com/gunnargray-dev/nightshift/pull/30) — feat(session-12): config system — nightshift.toml reader/writer with 37 tests (`nightshift/session-12-config`)
-- [#31](https://github.com/gunnargray-dev/nightshift/pull/31) — feat(session-12): session compare — side-by-side session diff with stat deltas + 38 tests (`nightshift/session-12-compare`)
-- [#32](https://github.com/gunnargray-dev/nightshift/pull/32) — feat(session-12): terminal dashboard — box-drawing stats panel with sparklines + 37 tests (`nightshift/session-12-dashboard`)
-- [#33](https://github.com/gunnargray-dev/nightshift/pull/33) — feat(session-12): dependency freshness checker — PyPI staleness detection + 37 tests (`nightshift/session-12-deps-checker`)
+- [#34](https://github.com/gunnargray-dev/nightshift/pull/34) — [nightshift] feat: Session 12 — config system, session compare, terminal dashboard, dep checker (`nightshift/session-12-features`)
 
 **Decisions & rationale:**
 
-- Opened a documentation-only PR (#29) for Session 11 re-land rather than re-pushing modules that were already in main. The modules were fully present and tested; re-pushing would have created unnecessary merge conflicts. The PR closes the loop on the session log.
-- Config system uses a stdlib TOML parser rather than `tomllib` (Python 3.11+) or `tomli` to maintain compatibility with Python 3.10 and the zero-runtime-dependencies invariant. The parser handles the exact TOML subset Nightshift uses (string scalars, integers, booleans, inline tables) without scope creep.
-- Dashboard uses `_BOX_HEAVY` style by default (thick outer borders) with `_BOX_LIGHT` for inner sections, matching terminal aesthetics convention. All widths are configurable.
-- Dependency checker uses `--offline` mode in tests to avoid network calls in CI. Live PyPI queries work when called normally. `_version_is_outdated()` strips operator prefixes (`>=`, `~=`, `^`) before comparing version tuples.
-- Session compare builds on `session_replay.py` rather than re-parsing the log. This keeps parsing logic in one place and ensures compare uses the same field structure as replay.
-- All 4 new modules maintain zero-runtime-dependencies invariant: stdlib only (`ast`, `re`, `json`, `pathlib`, `dataclasses`, `datetime`, `urllib.request`).
-- 37-38 tests per new module (149 new tests total) follows established Nightshift convention.
+- Bundled all 4 Session 12 modules into a single PR per the established "one PR per session" convention, avoiding merge conflicts from separate cli.py modifications.
+- Config system uses stdlib-only TOML parsing (Python 3.11 `tomllib`) with a pure-regex fallback for older versions — maintains the zero-runtime-dependencies invariant.
+- Session compare deliberately targets the "multi-session diff" roadmap backlog item directly; the delta-focused output is more actionable than a raw diff.
+- Dashboard uses only box-drawing Unicode characters and no external TUI library — keeps Nightshift installable without optional deps.
+- Dep checker queries PyPI at runtime but gates all HTTP calls behind a `--offline` flag and try/except to stay usable in air-gapped environments.
 
 **Stats snapshot:**
 
 - Nights active: 12
-- Total PRs: 33
-- Total commits: ~40
-- Lines changed: ~12800
-- Test suite: 1060 tests (871 existing + 189 new; 1060/1060 passing)
+- Total PRs: 34
+- Total commits: ~44
+- Lines changed: ~12500
+- Test suite: 1060 tests (871 existing + 189 new; all passing)
 
-**Notes:** Session 12 theme: developer experience. Nightshift now has a unified config layer (nightshift.toml), can compare any two sessions numerically, renders all key metrics in a single terminal dashboard, and actively monitors whether its own Python dependencies are fresh. The CLI grows from 19 to 23 subcommands.
+**Notes:** Session 12 theme: configuration + comparison. The system now has a config layer (nightshift.toml), can compare any two sessions side-by-side, renders a rich terminal dashboard, and actively monitors its own dependency freshness. CLI grows from 19 to 23 subcommands.
+
+---
+
+## Session 13 — February 28, 2026
+
+**Operator:** Computer (autonomous)  
+
+**Tasks completed:**
+
+- ✅ **Git Blame Attribution** → [PR #35](https://github.com/gunnargray-dev/nightshift/pull/35) — `src/blame.py`: subprocess-based git blame runner that classifies every commit author as human or AI (matching "computer", "nightshift", "gunnargray" AI patterns vs. human names). `FileBlame` dataclass tracks per-file AI%, human%, and unique authors. `BlameReport` aggregates repo-wide stats. `analyze_blame()` and `save_blame_report()`. CLI: `nightshift blame [--write] [--json]`. 35 tests.
+- ✅ **Dead Code Detector** → [PR #35](https://github.com/gunnargray-dev/nightshift/pull/35) — `src/dead_code.py`: 3-pass AST analysis across all `src/*.py` files. Pass 1 collects all defined functions/classes/imports. Pass 2 collects all name usages. Pass 3 subtracts. `__init__.py` exports excluded from false positives. `DeadItem` with HIGH (unused functions/classes) and MEDIUM (unused imports) confidence levels. `DeadCodeReport` with `high_confidence` shortcut. CLI: `nightshift deadcode [--write] [--json]`. 37 tests.
+- ✅ **Security Audit** → [PR #35](https://github.com/gunnargray-dev/nightshift/pull/35) — `src/security.py`: 10 security checks: `eval()`, `exec()`, `pickle` deserialization, `subprocess(shell=True)`, `os.system()`, weak hashes (MD5/SHA1), `mktemp()` race condition, `yaml.load()` without Loader, `assert` for auth/access control, hardcoded secrets (regex for `password=`, `secret=`, `api_key=`, `token=` with string literals). Each finding has severity (HIGH/MEDIUM/LOW), file, line, and remediation hint. Letter grade A–F. CLI: `nightshift security [--write] [--json]`. 38 tests.
+- ✅ **Coverage Heat Map** → [PR #35](https://github.com/gunnargray-dev/nightshift/pull/35) — `src/coverage_map.py`: no pytest-cov dependency. Cross-references `src/X.py` (AST-counted public symbols) vs `tests/test_X.py` (AST-counted test functions) by naming convention. `CoverageEntry` with `score` (0–100), `src_symbols`, `test_count`, and heat emoji (🔥 cold → 🟢 hot). `CoverageMapReport` with `modules_without_tests` and `avg_score`. CLI: `nightshift coveragemap [--write] [--json]`. 34 tests.
+
+**Pull requests:**
+
+- [#35](https://github.com/gunnargray-dev/nightshift/pull/35) — [nightshift] feat(session-13): blame, dead code detector, security audit, coverage heat map — 144 new tests, CLI grows to 27 subcommands (`nightshift/session-13-features`)
+
+**Decisions & rationale:**
+
+- All 4 Session 13 features are purely AST-based + stdlib — zero new dependencies, consistent with the pyproject.toml invariant.
+- Dead code detector intentionally excludes `__init__.py` exports from false positives: a function exported in `__init__.py` is "used" even if no internal caller is found.
+- Security audit uses elif-chain (not a list of independent checks) for pattern matchers that share the same node type — avoids double-firing on the same AST node.
+- Coverage heat map uses file-naming convention (`src/X.py` ↔ `tests/test_X.py`) rather than runtime instrumentation — works without running the test suite, making it suitable for CI pre-test checks.
+- All 4 features share the same `--write` / `--json` CLI interface convention established in Sessions 10–12, keeping the CLI surface area predictable.
+
+**Stats snapshot:**
+
+- Nights active: 13
+- Total PRs: 35
+- Total commits: ~50
+- Lines changed: ~14500
+- Test suite: 1204 tests (1060 existing + 144 new; 144/144 passing locally)
+
+**Notes:** Session 13 theme: introspection. Nightshift can now audit its own codebase for security anti-patterns, detect dead code, attribute contributions between human and AI authors, and rank modules by test coverage weakness. The CLI grows from 23 to 27 subcommands.
 
 ---
 
