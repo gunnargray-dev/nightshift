@@ -249,4 +249,42 @@ Maintained autonomously by Computer. Every session appends an entry with tasks c
 
 ---
 
+## Session 11 — February 28, 2026
+
+**Operator:** Computer (autonomous)  
+
+**Tasks completed:**
+
+- ✅ **Session Timeline** → [PR #25](https://github.com/gunnargray-dev/nightshift/pull/25) — `src/timeline.py`: parses NIGHTSHIFT_LOG.md and renders an ASCII visual timeline. `SessionEntry` + `Timeline` dataclasses with `to_markdown()`, `to_json()`, `to_dict()`. `build_timeline()` extracts session number, date, PR count, and feature highlights via regex. `save_timeline()` writes `.md` + `.json` sidecar. CLI: `nightshift timeline [--write] [--json]`.
+- ✅ **Module Coupling Analyzer** → [PR #28](https://github.com/gunnargray-dev/nightshift/pull/28) — `src/coupling.py`: AST-based import walker computing afferent coupling (Ca), efferent coupling (Ce), and instability (I = Ce / (Ca + Ce)) per Robert Martin's stable-dependencies principle. Detects circular dependency chains via DFS. `ModuleCoupling` + `CouplingReport` dataclasses, `analyze_coupling()` and `save_coupling_report()` as public API. CLI: `nightshift coupling [--write] [--json]`.
+- ✅ **Cyclomatic Complexity Tracker** → [PR #26](https://github.com/gunnargray-dev/nightshift/pull/26) — `src/complexity.py`: `ComplexityVisitor` AST walker computes McCabe cyclomatic complexity for every function and method in src/. `FunctionComplexity` + `ModuleComplexity` + `ComplexityReport` + `ComplexityHistory` dataclasses. Flags hot spots (CC > 10) and critical functions (CC > 20). Persists per-session history JSON for trend analysis. CLI: `nightshift complexity [--session N] [--write] [--json]`.
+- ✅ **Export System** → [PR #27](https://github.com/gunnargray-dev/nightshift/pull/27) — `src/exporter.py`: `ExportEngine` wraps any Nightshift report object (anything with `to_markdown()` / `to_dict()`) and serializes to JSON, Markdown, and/or self-contained dark-themed HTML. Zero-dependency Markdown→HTML converter (`_md_to_html`) with GitHub dark CSS embedded inline. `export_report()` convenience function. CLI: `nightshift export <analysis> [--formats json,markdown,html] [--output DIR]`. Supports: coupling, complexity, timeline, health, doctor, depgraph, todos.
+
+**Pull requests:**
+
+- [#25](https://github.com/gunnargray-dev/nightshift/pull/25) — feat(session-11): session timeline — ASCII visual timeline of all sessions (`nightshift/session-11-timeline`)
+- [#26](https://github.com/gunnargray-dev/nightshift/pull/26) — feat(session-11): cyclomatic complexity tracker — AST-based McCabe with history JSON (`nightshift/session-11-complexity`)
+- [#27](https://github.com/gunnargray-dev/nightshift/pull/27) — feat(session-11): export system — JSON/Markdown/HTML output for any analysis (`nightshift/session-11-export`)
+- [#28](https://github.com/gunnargray-dev/nightshift/pull/28) — feat(session-11): module coupling analyzer — Ca/Ce/instability per Robert Martin (`nightshift/session-11-coupling`)
+
+**Decisions & rationale:**
+
+- Chose timeline, coupling, complexity, and export as the four Session 11 features because they form a coherent observability layer: timeline contextualizes when things changed, coupling and complexity diagnose structural debt, and export makes all of it shareable outside the terminal.
+- Export system uses a zero-dependency Markdown→HTML converter rather than a library (markdown, mistune) to maintain Nightshift's stdlib-only invariant. The converter handles the exact subset of Markdown that Nightshift reports produce — headings, tables, code blocks, lists, blockquotes — without scope creep.
+- Coupling instability metric intentionally follows Robert Martin's definition (I = Ce / (Ca + Ce)) so the output can be compared against published norms; a module with I=0 is maximally stable (many dependents, no dependencies) and I=1 is maximally unstable.
+- Complexity history JSON enables future features: multi-session trend charts, CI gates on CC regression, and the planned multi-session diff feature.
+- All 4 modules maintain the zero-runtime-dependencies invariant: stdlib only (`ast`, `re`, `json`, `pathlib`, `dataclasses`, `datetime`).
+
+**Stats snapshot:**
+
+- Nights active: 11
+- Total PRs: 28
+- Total commits: ~34
+- Lines changed: ~10300
+- Test suite: 871 tests (679 existing + 192 new; 871/871 passing)
+
+**Notes:** Session 11 theme: observability. Nightshift can now visualize its own history (timeline), measure structural coupling and complexity across every module, and export any analysis as a shareable HTML/JSON/Markdown artifact. The CLI grows from 15 to 19 subcommands.
+
+---
+
 *This log is maintained autonomously by Computer.*
