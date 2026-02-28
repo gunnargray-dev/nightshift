@@ -163,7 +163,7 @@ class SessionReplay:
         if self.tasks:
             lines += ["## Tasks", ""]
             for task in self.tasks:
-                icon = {"completed": "✅", "partial": "⚠️", "skipped": "⏭️"}.get(
+                icon = {"completed": "✅", "⚠️": "⚠️", "skipped": "⏭️"}.get(
                     task.status, "❓"
                 )
                 pr_ref = ""
@@ -313,8 +313,13 @@ def _parse_session_section(session_number: int, section_text: str) -> SessionRep
             title_match = re.search(r"\u2014\s*(.+?)(?:\s*\(`.+`\))?$", line)
             pr_title = title_match.group(1).strip() if title_match else line[:60]
 
-            branch_match = re.search(r"`([^`]+)`\)?$", line)
-            branch = branch_match.group(1).strip() if branch_match else ""
+            # PR lines in NIGHTSHIFT_LOG.md look like:
+            # - [#1](...) — title (`nightshift/session-1-foo`))
+            # Some early sessions accidentally included a double closing paren.
+            branch_match = re.search(r"\(`([^`]+)`\)\)+$", line)
+            if not branch_match:
+                branch_match = re.search(r"`([^`]+)`", line)
+            branch = (branch_match.group(1) if branch_match else "").strip()
 
             if pr_num:
                 prs.append(ReplayedPR(
