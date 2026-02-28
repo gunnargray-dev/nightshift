@@ -313,7 +313,9 @@ def _parse_session_section(session_number: int, section_text: str) -> SessionRep
             title_match = re.search(r"\u2014\s*(.+?)(?:\s*\(`.+`\))?$", line)
             pr_title = title_match.group(1).strip() if title_match else line[:60]
 
-            branch_match = re.search(r"`([^`]+)`\)?$", line)
+            # Branch names are usually rendered as (`branch`) but older logs had an
+            # extra trailing `)` like (`branch`)). Accept both.
+            branch_match = re.search(r"\(`([^`]+)`\)\)+\s*$", line)
             branch = branch_match.group(1).strip() if branch_match else ""
 
             if pr_num:
