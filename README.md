@@ -1,10 +1,10 @@
 # Nightshift
 
 <!-- badges:start -->
-[![Sessions](https://img.shields.io/badge/sessions-18-blueviolet?style=flat-square)](https://github.com/gunnargray-dev/nightshift/blob/main/NIGHTSHIFT_LOG.md)
-[![PRs](https://img.shields.io/badge/PRs-41-blue?style=flat-square)](https://github.com/gunnargray-dev/nightshift/pulls)
-[![Tests](https://img.shields.io/badge/tests-2050%2B-brightgreen?style=flat-square)](https://github.com/gunnargray-dev/nightshift/tree/main/tests)
-[![Modules](https://img.shields.io/badge/modules-52-orange?style=flat-square)](https://github.com/gunnargray-dev/nightshift/tree/main/src)
+[![Sessions](https://img.shields.io/badge/sessions-19-blueviolet?style=flat-square)](https://github.com/gunnargray-dev/nightshift/blob/main/NIGHTSHIFT_LOG.md)
+[![PRs](https://img.shields.io/badge/PRs-42-blue?style=flat-square)](https://github.com/gunnargray-dev/nightshift/pulls)
+[![Tests](https://img.shields.io/badge/tests-2128%2B-brightgreen?style=flat-square)](https://github.com/gunnargray-dev/nightshift/tree/main/tests)
+[![Modules](https://img.shields.io/badge/modules-61-orange?style=flat-square)](https://github.com/gunnargray-dev/nightshift/tree/main/src)
 [![CLI](https://img.shields.io/badge/CLI_commands-50-cyan?style=flat-square)](https://github.com/gunnargray-dev/nightshift/blob/main/src/cli.py)
 [![API](https://img.shields.io/badge/API_endpoints-39-teal?style=flat-square)](https://github.com/gunnargray-dev/nightshift/blob/main/src/server.py)
 [![Python](https://img.shields.io/badge/python-3.10%2B-yellow?style=flat-square)](https://python.org)
@@ -15,7 +15,7 @@
 
 Nightshift is a self-improving autonomous development system. An AI runs overnight, analyzes the repo, identifies what matters most, ships features, writes tests, and opens a pull request — all without human input. Then it does it again the next session, learning from what it built.
 
-**18 sessions. 41 PRs. 52 modules. 2,050+ tests. Zero human commits.**
+**19 sessions. 42 PRs. 61 modules. 2,128+ tests. Zero human commits.**
 
 ---
 
@@ -37,7 +37,7 @@ Nightshift is a self-improving autonomous development system. An AI runs overnig
 │                        · debt          ───────                      │
 │                        · momentum)     pytest (all green)           │
 │                             │                                       │
-│                             ▼          5. SHIP                      │
+│                             ↓          5. SHIP                      │
 │                         ranked task    ──────                       │
 │                         queue          git commit                   │
 │                                        open PR                      │
@@ -310,7 +310,7 @@ nightshift plugins --run pre_health  # run hook
 
 ```
 nightshift/
-├── src/                  # 52 Python modules (stdlib only)
+├── src/                  # 61 Python modules (stdlib only)
 │   ├── cli.py            # 50 subcommands (argparse)
 │   ├── server.py         # 39 API endpoints (http.server)
 │   ├── brain.py          # 5-dimension task prioritizer
@@ -319,7 +319,7 @@ nightshift/
 │   ├── evolve.py         # [S18] evolution proposals
 │   ├── session_scorer.py # [S18] session quality scoring
 │   └── ...49 more modules
-├── tests/                # 52 test files, 2050+ tests
+├── tests/                # 61 test files, 2128+ tests
 ├── dashboard/            # React + TypeScript + Tailwind SPA
 │   ├── src/              # 7 views
 │   └── ...
@@ -365,4 +365,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). The system will analyze your PR with `ni
 
 ---
 
-*Built autonomously by [Computer](https://perplexity.ai/computer) (Perplexity AI). 18 sessions, no human commits.*
+*Built autonomously by [Computer](https://perplexity.ai/computer) (Perplexity AI). 19 sessions, no human commits.*
