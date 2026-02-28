@@ -1020,6 +1020,101 @@ def cmd_dna(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Subcommand: benchmark
+# ---------------------------------------------------------------------------
+
+
+def cmd_benchmark(args: argparse.Namespace) -> int:
+    """Run performance benchmarks across all analysis modules."""
+    from src.benchmark import run_benchmarks, save_benchmark_report
+    _print_header("Performance Benchmark Suite")
+    repo = _repo(getattr(args, "repo", None))
+    session = getattr(args, "session", 15)
+    persist = not getattr(args, "no_persist", False)
+    report = run_benchmarks(repo_path=repo, session=session, persist=persist)
+    if args.json:
+        print(report.to_json())
+        return 0
+    if args.write:
+        out = repo / "docs" / "benchmark_report.md"
+        out.parent.mkdir(exist_ok=True)
+        save_benchmark_report(report, out)
+        _print_ok(f"Report written to {out}")
+        _print_ok(f"JSON sidecar → {out.with_suffix('.json')}")
+        return 0
+    print(report.to_markdown())
+    _print_info(
+        f"Modules benchmarked: {len(report.results)}  ·  "
+        f"Total time: {report.total_ms:.0f} ms  ·  "
+        f"Regressions: {len(report.regressions)}"
+    )
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: gitstats
+# ---------------------------------------------------------------------------
+
+
+def cmd_gitstats(args: argparse.Namespace) -> int:
+    """Show deep-dive git statistics: churn, velocity, commit frequency, PR size."""
+    from src.gitstats import compute_git_stats, save_git_stats_report
+    _print_header("Git Statistics Deep-Dive")
+    repo = _repo(getattr(args, "repo", None))
+    report = compute_git_stats(repo_path=repo)
+    if args.json:
+        print(report.to_json())
+        return 0
+    if args.write:
+        out = repo / "docs" / "git_stats.md"
+        out.parent.mkdir(exist_ok=True)
+        save_git_stats_report(report, out)
+        _print_ok(f"Report written to {out}")
+        _print_ok(f"JSON sidecar → {out.with_suffix('.json')}")
+        return 0
+    print(report.to_markdown())
+    _print_info(
+        f"Commits: {report.total_commits}  ·  "
+        f"Active days: {report.active_days}  ·  "
+        f"Churn/day: {report.churn_rate_per_day:.1f}"
+    )
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: badges
+# ---------------------------------------------------------------------------
+
+
+def cmd_badges(args: argparse.Namespace) -> int:
+    """Generate shields.io README badges for key repo metrics."""
+    from src.badges import generate_badges, save_badges_report, write_badges_to_readme
+    _print_header("README Badge Generator")
+    repo = _repo(getattr(args, "repo", None))
+    block = generate_badges(repo_path=repo)
+    if args.json:
+        print(block.to_json())
+        return 0
+    if getattr(args, "inject", False):
+        modified = write_badges_to_readme(block, repo_path=repo)
+        if modified:
+            _print_ok("Badges injected into README.md")
+        else:
+            _print_warn("Could not inject badges — no h1 or markers found in README.md")
+        return 0
+    if args.write:
+        out = repo / "docs" / "badges.md"
+        out.parent.mkdir(exist_ok=True)
+        save_badges_report(block, out)
+        _print_ok(f"Badge report written to {out}")
+        _print_ok(f"JSON sidecar → {out.with_suffix('.json')}")
+        return 0
+    print(block.to_markdown_block())
+    _print_info(f"Badges generated: {len(block.badges)}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # Argument parser
 # ---------------------------------------------------------------------------
 
@@ -1200,6 +1295,26 @@ Examples:
     p_dna.add_argument("--write", action="store_true", help="Write to docs/dna.md")
     p_dna.add_argument("--json", action="store_true", help="Output raw JSON")
     p_dna.set_defaults(func=cmd_dna)
+
+    # Session 15 subcommands
+    p_benchmark = sub.add_parser("benchmark", help="Performance benchmark suite for all modules")
+    p_benchmark.add_argument("--session", type=int, default=15, help="Current session number")
+    p_benchmark.add_argument("--no-persist", dest="no_persist", action="store_true",
+                             help="Skip writing to benchmark_history.json")
+    p_benchmark.add_argument("--write", action="store_true", help="Write to docs/benchmark_report.md")
+    p_benchmark.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_benchmark.set_defaults(func=cmd_benchmark)
+
+    p_gitstats = sub.add_parser("gitstats", help="Git statistics deep-dive (churn, velocity, PR size)")
+    p_gitstats.add_argument("--write", action="store_true", help="Write to docs/git_stats.md")
+    p_gitstats.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_gitstats.set_defaults(func=cmd_gitstats)
+
+    p_badges = sub.add_parser("badges", help="Generate shields.io README badges from live metrics")
+    p_badges.add_argument("--inject", action="store_true", help="Inject badges into README.md")
+    p_badges.add_argument("--write", action="store_true", help="Write to docs/badges.md")
+    p_badges.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_badges.set_defaults(func=cmd_badges)
 
     return parser
 
