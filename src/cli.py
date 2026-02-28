@@ -1,0 +1,657 @@
+"""Unified CLI entry point for Nightshift.
+
+Provides a single ``nightshift`` command that ties together all analysis
+modules into a coherent developer experience.  Every subcommand corresponds
+to one (or more) modules in ``src/``.
+
+Subcommands
+-----------
+nightshift health      — Run code health analysis across src/
+nightshift stats       — Show repo stats (commits, PRs, lines changed)
+nightshift diff        — Visualise the last session's git changes
+nightshift changelog   — Render CHANGELOG.md from git history
+nightshift coverage    — Show test coverage trend
+nightshift score       — Score the most recent PR
+nightshift arch        — Generate / refresh docs/ARCHITECTURE.md
+nightshift refactor    — Identify refactor candidates in src/
+nightshift run         — Run the full end-of-session pipeline
+nightshift depgraph    — Visualise module dependency graph
+nightshift todos       — Hunt stale TODO/FIXME annotations
+nightshift doctor      — Run full repo health diagnostic
+nightshift timeline    — ASCII visual timeline of all sessions
+nightshift coupling    — Module coupling analyzer (Ca, Ce, instability)
+nightshift complexity  — Cyclomatic complexity tracker
+nightshift export      — Export any analysis to JSON/Markdown/HTML
+
+Usage
+-----
+    python -m nightshift.cli <command> [options]
+    # or after ``pip install -e .``:
+    nightshift <command> [options]
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+from typing import Optional
+
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _repo(args_path: Optional[str] = None) -> Path:
+    return Path(args_path) if args_path else REPO_ROOT
+
+
+def _print_header(title: str) -> None:
+    bar = "─" * 60
+    print(f"\n{bar}")
+    print(f"  🌙 Nightshift  ·  {title}")
+    print(f"{bar}\n")
+
+
+def _print_ok(msg: str) -> None:
+    print(f"  ✅  {msg}")
+
+
+def _print_warn(msg: str) -> None:
+    print(f"  ⚠️   {msg}")
+
+
+def _print_info(msg: str) -> None:
+    print(f"  ·  {msg}")
+
+
+def cmd_health(args: argparse.Namespace) -> int:
+    from src.health import generate_health_report
+    _print_header("Code Health Report")
+    repo = _repo(getattr(args, "repo", None))
+    report = generate_health_report(repo_path=repo)
+    if args.json:
+        print(json.dumps(report.to_dict(), indent=2))
+        return 0
+    print(report.to_markdown())
+    _print_info(f"Overall score: {report.overall_health_score}/100")
+    return 0
+
+
+def cmd_stats(args: argparse.Namespace) -> int:
+    from src.stats import compute_stats
+    _print_header("Repository Stats")
+    repo = _repo(getattr(args, "repo", None))
+    log_path = repo / "NIGHTSHIFT_LOG.md"
+    stats = compute_stats(repo_path=repo, log_path=log_path)
+    if args.json:
+        print(json.dumps(stats.to_dict(), indent=2))
+        return 0
+    print(stats.readme_table())
+    print()
+    _print_info(f"Sessions in log: {len(stats.sessions)}")
+    return 0
+
+
+def cmd_diff(args: argparse.Namespace) -> int:
+    from src.diff_visualizer import build_session_diff, render_session_diff
+    _print_header(f"Session Diff — Session {args.session}")
+    repo = _repo(getattr(args, "repo", None))
+    diff = build_session_diff(repo_root=repo, session_number=args.session)
+    md = render_session_diff(diff)
+    if args.json:
+        import dataclasses
+        print(json.dumps(dataclasses.asdict(diff), indent=2))
+        return 0
+    print(md)
+    return 0
+
+
+def cmd_changelog(args: argparse.Namespace) -> int:
+    from src.changelog import generate_changelog, save_changelog
+    _print_header("Changelog")
+    repo = _repo(getattr(args, "repo", None))
+    changelog = generate_changelog(repo_path=repo)
+    if args.write:
+        out = repo / "CHANGELOG.md"
+        save_changelog(changelog, out)
+        _print_ok(f"Written to {out}")
+        return 0
+    if args.json:
+        print(json.dumps(changelog.to_dict(), indent=2))
+        return 0
+    print(changelog.to_markdown())
+    return 0
+
+
+def cmd_coverage(args: argparse.Namespace) -> int:
+    from src.coverage_tracker import CoverageHistory
+    _print_header("Test Coverage Trend")
+    repo = _repo(getattr(args, "repo", None))
+    history_path = repo / "docs" / "coverage_history.json"
+    if not history_path.exists():
+        _print_warn(f"No coverage history found at {history_path}")
+        _print_info("Run `nightshift run` to generate initial coverage data.")
+        return 1
+    with history_path.open() as f:
+        history = CoverageHistory.from_dict(json.load(f))
+    if args.json:
+        print(json.dumps(history.to_dict(), indent=2))
+        return 0
+    print(history.to_markdown())
+    latest = history.latest()
+    if latest:
+        _print_info(f"Latest: {latest.coverage_badge} (Session {latest.session})")
+    return 0
+
+
+def cmd_score(args: argparse.Namespace) -> int:
+    from src.pr_scorer import load_scores, render_leaderboard
+    _print_header("PR Quality Leaderboard")
+    repo = _repo(getattr(args, "repo", None))
+    scores_path = repo / "docs" / "pr_scores.json"
+    if not scores_path.exists():
+        _print_warn(f"No PR scores found at {scores_path}")
+        _print_info("Run `nightshift run` to score the latest PRs.")
+        return 1
+    scores = load_scores(scores_path)
+    if args.json:
+        print(json.dumps([s.__dict__ for s in scores], indent=2, default=str))
+        return 0
+    print(render_leaderboard(scores))
+    return 0
+
+
+def cmd_arch(args: argparse.Namespace) -> int:
+    try:
+        from src.arch_generator import generate_architecture_doc, save_architecture_doc
+    except ImportError:
+        _print_warn("arch_generator module not available")
+        return 1
+    _print_header("Architecture Doc Generator")
+    repo = _repo(getattr(args, "repo", None))
+    doc = generate_architecture_doc(repo_path=repo)
+    if args.write:
+        out = repo / "docs" / "ARCHITECTURE.md"
+        save_architecture_doc(doc, out)
+        _print_ok(f"Written to {out}")
+        return 0
+    print(doc)
+    return 0
+
+
+def cmd_refactor(args: argparse.Namespace) -> int:
+    try:
+        from src.refactor import RefactorEngine
+    except ImportError:
+        _print_warn("refactor module not available")
+        return 1
+    _print_header("Self-Refactor Engine")
+    repo = _repo(getattr(args, "repo", None))
+    engine = RefactorEngine(repo_path=repo)
+    report = engine.analyze()
+    if args.apply:
+        applied = engine.apply_safe_fixes(report)
+        _print_ok(f"Applied {applied} safe fixes")
+        return 0
+    if args.json:
+        print(json.dumps(report.to_dict(), indent=2))
+        return 0
+    print(report.to_markdown())
+    return 0
+
+
+def cmd_replay(args: argparse.Namespace) -> int:
+    from src.session_replay import replay, replay_all
+    _print_header(f"Session Replay")
+    repo = _repo(getattr(args, "repo", None))
+    log_path = repo / "NIGHTSHIFT_LOG.md"
+    if args.session is not None:
+        r = replay(log_path, args.session)
+        if r is None:
+            _print_warn(f"Session {args.session} not found in {log_path}")
+            return 1
+        if args.json:
+            print(json.dumps(r.to_dict(), indent=2, default=str))
+        else:
+            print(r.to_markdown())
+    else:
+        all_r = replay_all(log_path)
+        if not all_r:
+            _print_warn(f"No sessions found in {log_path}")
+            return 1
+        for r in all_r:
+            print(f"Session {r.session_number}: {r.date} — {r.task_count} task(s), {r.pr_count} PR(s)")
+    return 0
+
+
+def cmd_plan(args: argparse.Namespace) -> int:
+    from src.brain import Brain
+    _print_header(f"Session Plan — Session {args.session}")
+    repo = _repo(getattr(args, "repo", None))
+    brain = Brain(repo_root=repo)
+    plan = brain.plan(
+        session_number=args.session,
+        roadmap_path=repo / "ROADMAP.md",
+        issues_path=repo / "docs" / "triage.json",
+        health_history_path=repo / "docs" / "health_history.json",
+    )
+    if args.json:
+        print(json.dumps(plan.to_dict(), indent=2, default=str))
+        return 0
+    print(plan.to_markdown())
+    return 0
+
+
+def cmd_triage(args: argparse.Namespace) -> int:
+    from src.issue_triage import load_issues, triage_issues, render_triage_report
+    _print_header("Issue Triage")
+    repo = _repo(getattr(args, "repo", None))
+    issues_path = Path(args.issues) if args.issues else repo / "docs" / "issues.json"
+    if not issues_path.exists():
+        _print_warn(f"Issues file not found: {issues_path}")
+        _print_info("Export issues with the GitHub CLI: gh issue list --json ... > docs/issues.json")
+        return 1
+    issues = load_issues(issues_path)
+    triaged = triage_issues(issues)
+    if args.json:
+        print(json.dumps([t.to_dict() for t in triaged], indent=2, default=str))
+        return 0
+    print(render_triage_report(triaged))
+    return 0
+
+
+def cmd_depgraph(args: argparse.Namespace) -> int:
+    from src.dep_graph import build_dep_graph, render_dep_graph, save_dep_graph
+    _print_header("Module Dependency Graph")
+    repo = _repo(getattr(args, "repo", None))
+    graph = build_dep_graph(repo / "src")
+    if args.write:
+        out = repo / "docs" / "dep_graph.md"
+        save_dep_graph(graph, out)
+        _print_ok(f"Written to {out} (+ JSON sidecar)")
+        return 0
+    if args.json:
+        print(json.dumps(graph.to_dict(), indent=2, default=str))
+        return 0
+    print(render_dep_graph(graph))
+    cycles = graph.find_cycles()
+    if cycles:
+        _print_warn(f"{len(cycles)} circular dependency chain(s) detected")
+    else:
+        _print_ok("No circular dependencies")
+    return 0
+
+
+def cmd_todos(args: argparse.Namespace) -> int:
+    from src.todo_hunter import hunt, render_todo_report, save_todo_report
+    _print_header("TODO / FIXME Hunter")
+    repo = _repo(getattr(args, "repo", None))
+    items = hunt(repo / "src", current_session=args.session, threshold=args.threshold)
+    if args.write:
+        out = repo / "docs" / "todo_report.md"
+        save_todo_report(items, out, current_session=args.session, threshold=args.threshold)
+        _print_ok(f"Report written to {out}")
+        return 0
+    if args.json:
+        print(json.dumps([i.to_dict() for i in items], indent=2, default=str))
+        return 0
+    print(render_todo_report(items, current_session=args.session, threshold=args.threshold))
+    stale_count = sum(1 for i in items if i.is_stale)
+    if stale_count:
+        _print_warn(f"{stale_count} stale annotation(s) found")
+    else:
+        _print_ok("No stale annotations")
+    return 0
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    from src.doctor import diagnose, render_report, save_report
+    _print_header("Nightshift Doctor")
+    repo = _repo(getattr(args, "repo", None))
+    report = diagnose(repo)
+    if args.write:
+        out = repo / "docs" / "doctor_report.md"
+        save_report(report, out)
+        _print_ok(f"Report written to {out}")
+        return 0
+    if args.json:
+        print(json.dumps(report.to_dict(), indent=2, default=str))
+        return 0
+    print(render_report(report))
+    grade = report.grade
+    if grade in ("A", "B"):
+        _print_ok(f"Grade: {grade} — repo is healthy")
+    elif grade in ("C", "D"):
+        _print_warn(f"Grade: {grade} — some issues need attention")
+    else:
+        _print_warn(f"Grade: {grade} — critical issues detected")
+    return 0 if report.fail_count == 0 else 1
+
+
+def cmd_timeline(args: argparse.Namespace) -> int:
+    from src.timeline import build_timeline, save_timeline
+    _print_header("Session Timeline")
+    repo = _repo(getattr(args, "repo", None))
+    log_path = repo / "NIGHTSHIFT_LOG.md"
+    timeline = build_timeline(log_path=log_path, repo_path=repo)
+    if args.json:
+        print(timeline.to_json())
+        return 0
+    if args.write:
+        out = repo / "docs" / "timeline.md"
+        save_timeline(timeline, out)
+        _print_ok(f"Timeline written to {out}")
+        _print_ok(f"JSON sidecar → {out.with_suffix('.json')}")
+        return 0
+    print(timeline.to_markdown())
+    _print_info(f"Sessions: {timeline.total_sessions}  ·  Total PRs: {timeline.total_prs}")
+    return 0
+
+
+def cmd_coupling(args: argparse.Namespace) -> int:
+    from src.coupling import analyze_coupling, save_coupling_report
+    _print_header("Module Coupling Analysis")
+    repo = _repo(getattr(args, "repo", None))
+    report = analyze_coupling(repo_path=repo)
+    if args.json:
+        print(report.to_json())
+        return 0
+    if args.write:
+        out = repo / "docs" / "coupling_report.md"
+        save_coupling_report(report, out)
+        _print_ok(f"Report written to {out}")
+        _print_ok(f"JSON sidecar → {out.with_suffix('.json')}")
+        return 0
+    print(report.to_markdown())
+    _print_info(
+        f"Modules: {len(report.modules)}  ·  "
+        f"Avg instability: {report.avg_instability:.2f}  ·  "
+        f"Circular deps: {len(report.circular_groups)}"
+    )
+    if report.circular_groups:
+        _print_warn("Circular dependency chains detected — see report for details")
+    return 0
+
+
+def cmd_complexity(args: argparse.Namespace) -> int:
+    from src.complexity import (
+        analyze_complexity,
+        load_complexity_history,
+        save_complexity_report,
+        save_complexity_history,
+    )
+    _print_header("Cyclomatic Complexity")
+    repo = _repo(getattr(args, "repo", None))
+    report = analyze_complexity(repo_path=repo, session_number=args.session)
+    history_path = repo / "docs" / "complexity_history.json"
+    history = load_complexity_history(history_path)
+    history.add(report)
+    if args.json:
+        print(report.to_json())
+        return 0
+    if args.write:
+        out = repo / "docs" / "complexity_report.md"
+        save_complexity_report(report, out)
+        save_complexity_history(history, history_path)
+        _print_ok(f"Report written to {out}")
+        _print_ok(f"History updated → {history_path}")
+        return 0
+    print(report.to_markdown())
+    print(history.to_markdown())
+    _print_info(
+        f"Functions: {report.total_functions}  ·  "
+        f"Avg CC: {report.global_avg:.1f}  ·  "
+        f"Max CC: {report.global_max}  ·  "
+        f"Hot spots: {len(report.hot_spots)}"
+    )
+    if report.critical_count > 0:
+        _print_warn(f"{report.critical_count} critical functions (CC > 20) need attention")
+    return 0
+
+
+def cmd_export(args: argparse.Namespace) -> int:
+    from src.exporter import export_report, FORMATS
+    _print_header("Export")
+    repo = _repo(getattr(args, "repo", None))
+    out_dir = repo / "docs" / "exports"
+    if args.output:
+        out_dir = Path(args.output)
+    formats = [f.strip() for f in args.formats.split(",") if f.strip()]
+    if not formats:
+        formats = list(FORMATS)
+    command = args.analysis
+    if command == "coupling":
+        from src.coupling import analyze_coupling
+        report = analyze_coupling(repo_path=repo)
+        name = "coupling-report"
+        title = "Module Coupling Analysis"
+    elif command == "complexity":
+        from src.complexity import analyze_complexity
+        report = analyze_complexity(repo_path=repo, session_number=args.session)
+        name = "complexity-report"
+        title = "Cyclomatic Complexity Report"
+    elif command == "timeline":
+        from src.timeline import build_timeline
+        report = build_timeline(repo_path=repo)
+        name = "timeline-report"
+        title = "Session Timeline"
+    elif command == "health":
+        from src.health import generate_health_report
+        report = generate_health_report(repo_path=repo)
+        name = "health-report"
+        title = "Code Health Report"
+    elif command == "doctor":
+        from src.doctor import diagnose
+        report = diagnose(repo)
+        name = "doctor-report"
+        title = "Nightshift Doctor"
+    elif command == "depgraph":
+        from src.dep_graph import build_dep_graph
+        report = build_dep_graph(repo_path=repo)
+        name = "dep-graph"
+        title = "Module Dependency Graph"
+    elif command == "todos":
+        from src.todo_hunter import hunt
+        items = hunt(repo_path=repo)
+        class TodoWrapper:
+            def __init__(self, items):
+                self._items = items
+            def to_markdown(self):
+                from src.todo_hunter import render_todo_report
+                return render_todo_report(self._items)
+            def to_dict(self):
+                return {"todos": [i.to_dict() for i in self._items]}
+            def to_json(self):
+                import json
+                return json.dumps(self.to_dict(), indent=2)
+        report = TodoWrapper(items)
+        name = "todos-report"
+        title = "Stale TODO Report"
+    else:
+        _print_warn(f"Unknown analysis: {command!r}")
+        _print_info("Available: coupling, complexity, timeline, health, doctor, depgraph, todos")
+        return 1
+    metadata = {"Analysis": command, "Repo": str(repo)}
+    result = export_report(
+        report, out_dir=out_dir, name=name, formats=formats, title=title, metadata=metadata,
+    )
+    for fmt, path in result.files.items():
+        _print_ok(f"{fmt.upper():10} → {path}")
+    for err in result.errors:
+        _print_warn(f"Export error: {err}")
+    return 0 if not result.errors else 1
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    """Run the full end-of-session Nightshift pipeline."""
+    _print_header("Full Session Pipeline")
+    repo = _repo(getattr(args, "repo", None))
+    session = getattr(args, "session", 4)
+    errors: list[str] = []
+    try:
+        from src.health import generate_health_report, save_health_report
+        report = generate_health_report(repo_path=repo)
+        out = repo / "docs" / "health_report.md"
+        out.parent.mkdir(exist_ok=True)
+        save_health_report(report, out)
+        _print_ok(f"Health report → {out}  (score: {report.overall_health_score}/100)")
+    except Exception as exc:
+        errors.append(f"health: {exc}")
+        _print_warn(f"Health analysis failed: {exc}")
+    try:
+        from src.stats import compute_stats, update_readme_stats
+        stats = compute_stats(repo_path=repo, log_path=repo / "NIGHTSHIFT_LOG.md")
+        readme_path = repo / "README.md"
+        if readme_path.exists():
+            new_content = update_readme_stats(readme_path, stats)
+            readme_path.write_text(new_content, encoding="utf-8")
+            _print_ok(f"README stats updated  (nights: {stats.nights_active}, PRs: {stats.total_prs})")
+    except Exception as exc:
+        errors.append(f"stats: {exc}")
+        _print_warn(f"Stats update failed: {exc}")
+    try:
+        from src.changelog import generate_changelog, save_changelog
+        cl = generate_changelog(repo_path=repo)
+        save_changelog(cl, repo / "CHANGELOG.md")
+        total = sum(s.total_commits() for s in cl.sections)
+        _print_ok(f"CHANGELOG.md updated  ({total} commits across {len(cl.sections)} sessions)")
+    except Exception as exc:
+        errors.append(f"changelog: {exc}")
+        _print_warn(f"Changelog failed: {exc}")
+    try:
+        from src.arch_generator import generate_architecture_doc, save_architecture_doc
+        doc = generate_architecture_doc(repo_path=repo)
+        save_architecture_doc(doc, repo / "docs" / "ARCHITECTURE.md")
+        _print_ok("docs/ARCHITECTURE.md refreshed")
+    except Exception as exc:
+        _print_info(f"arch_generator not available: {exc}")
+    try:
+        from src.refactor import RefactorEngine
+        engine = RefactorEngine(repo_path=repo)
+        ref_report = engine.analyze()
+        out = repo / "docs" / "refactor_report.md"
+        out.write_text(ref_report.to_markdown(), encoding="utf-8")
+        _print_ok(f"Refactor report → {out}  ({ref_report.total_suggestions} suggestions)")
+    except Exception as exc:
+        _print_info(f"refactor module not available: {exc}")
+    print()
+    if errors:
+        _print_warn(f"Pipeline completed with {len(errors)} error(s):")
+        for e in errors:
+            _print_info(f"  {e}")
+        return 1
+    _print_ok("Pipeline complete.")
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Build and return the top-level argument parser."""
+    parser = argparse.ArgumentParser(
+        prog="nightshift",
+        description="🌙 Nightshift — autonomous dev system CLI",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("--repo", metavar="PATH", help="Path to repo root (default: auto-detected)")
+    sub = parser.add_subparsers(dest="command", metavar="command")
+    sub.required = True
+    p = sub.add_parser("health", help="Code health analysis")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_health)
+    p = sub.add_parser("stats", help="Repository statistics")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_stats)
+    p = sub.add_parser("diff", help="Session diff visualiser")
+    p.add_argument("--session", type=int, default=4)
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_diff)
+    p = sub.add_parser("changelog", help="Generate CHANGELOG.md")
+    p.add_argument("--write", action="store_true")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_changelog)
+    p = sub.add_parser("coverage", help="Test coverage trend")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_coverage)
+    p = sub.add_parser("score", help="PR quality leaderboard")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_score)
+    p = sub.add_parser("arch", help="Generate docs/ARCHITECTURE.md")
+    p.add_argument("--write", action="store_true")
+    p.set_defaults(func=cmd_arch)
+    p = sub.add_parser("refactor", help="Self-refactor engine")
+    p.add_argument("--apply", action="store_true")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_refactor)
+    p = sub.add_parser("replay", help="Replay a past session")
+    p.add_argument("--session", type=int, default=None)
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_replay)
+    p = sub.add_parser("plan", help="Generate a session plan")
+    p.add_argument("--session", type=int, default=1)
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_plan)
+    p = sub.add_parser("triage", help="Run issue triage")
+    p.add_argument("--issues", metavar="PATH")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_triage)
+    p = sub.add_parser("depgraph", help="Module dependency graph")
+    p.add_argument("--write", action="store_true")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_depgraph)
+    p = sub.add_parser("todos", help="Hunt stale TODO/FIXME annotations")
+    p.add_argument("--session", type=int, default=10)
+    p.add_argument("--threshold", type=int, default=2)
+    p.add_argument("--write", action="store_true")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_todos)
+    p = sub.add_parser("doctor", help="Full repo health diagnostic")
+    p.add_argument("--write", action="store_true")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_doctor)
+    p = sub.add_parser("timeline", help="ASCII visual timeline of all sessions")
+    p.add_argument("--write", action="store_true")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_timeline)
+    p = sub.add_parser("coupling", help="Module coupling analyzer (Ca, Ce, instability)")
+    p.add_argument("--write", action="store_true")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_coupling)
+    p = sub.add_parser("complexity", help="Cyclomatic complexity tracker")
+    p.add_argument("--session", type=int, default=11)
+    p.add_argument("--write", action="store_true")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_complexity)
+    p = sub.add_parser("export", help="Export any analysis to JSON/Markdown/HTML")
+    p.add_argument(
+        "analysis",
+        choices=["coupling", "complexity", "timeline", "health", "doctor", "depgraph", "todos"],
+    )
+    p.add_argument("--formats", default="json,markdown,html")
+    p.add_argument("--output", metavar="DIR")
+    p.add_argument("--session", type=int, default=11)
+    p.set_defaults(func=cmd_export)
+    p = sub.add_parser("run", help="Full end-of-session pipeline")
+    p.add_argument("--session", type=int, default=4)
+    p.set_defaults(func=cmd_run)
+    return parser
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    """CLI entry point. Returns exit code."""
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    try:
+        return args.func(args)
+    except KeyboardInterrupt:
+        print("\nAborted.")
+        return 130
+    except Exception as exc:  # noqa: BLE001
+        print(f"\n❌ Error: {exc}", file=sys.stderr)
+        if "--debug" in sys.argv:
+            import traceback
+            traceback.print_exc()
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
