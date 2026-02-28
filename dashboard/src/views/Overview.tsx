@@ -11,6 +11,15 @@ import { PageHeader } from "../components/PageHeader";
 import { Badge } from "../components/Badge";
 import { StatCardSkeleton } from "../components/Skeleton";
 
+function computeScore(f: any): number {
+  if (f.parse_error) return 50;
+  let score = 100;
+  score -= Math.min((f.long_lines ?? 0) * 0.5, 20);
+  score -= Math.min((f.todo_count ?? 0) * 2, 20);
+  score -= (1 - (f.docstring_coverage ?? 1)) * 20;
+  return Math.max(0, Math.round(score * 10) / 10);
+}
+
 function healthBadge(score: number) {
   if (score >= 85) return <Badge variant="success">Excellent</Badge>;
   if (score >= 70) return <Badge variant="warning">Good</Badge>;
@@ -23,6 +32,12 @@ export function Overview() {
 
   const s = stats.data as any;
   const h = health.data as any;
+
+  const fileList: any[] = Array.isArray(h?.files) ? h.files : [];
+  const overallHealth =
+    fileList.length > 0
+      ? Math.round(fileList.reduce((sum, f) => sum + computeScore(f), 0) / fileList.length)
+      : null;
 
   return (
     <div className="max-w-5xl">
@@ -50,40 +65,39 @@ export function Overview() {
             />
             <StatCard
               label="Modules"
-              value={h?.files ? Object.keys(h.files).length : "\u2014"}
+              value={fileList.length || "\u2014"}
               sub="in src/"
               icon={<Blocks size={15} />}
             />
             <StatCard
-              label="Tests"
+              label="Commits"
               value={s?.total_commits ?? "\u2014"}
-              sub="Total commits"
+              sub="Total"
               icon={<TestTubeDiagonal size={15} />}
             />
             <StatCard
               label="Health"
-              value={h?.overall_health_score != null ? `${Math.round(h.overall_health_score)}` : "\u2014"}
-              sub={h?.overall_health_score != null ? undefined : "Loading..."}
+              value={overallHealth != null ? `${overallHealth}` : "\u2014"}
               icon={<TrendingUp size={15} />}
             />
           </>
         )}
       </div>
 
-      {h?.overall_health_score != null && (
+      {overallHealth != null && (
         <div className="rounded-md border border-border bg-bg-surface p-5 mb-6">
           <div className="flex items-center justify-between mb-4">
             <span className="text-sm font-medium text-text-primary">Overall Health</span>
-            {healthBadge(h.overall_health_score)}
+            {healthBadge(overallHealth)}
           </div>
           <div className="h-2 rounded-full bg-bg-elevated overflow-hidden">
             <div
               className="h-full rounded-full bg-accent transition-all duration-500"
-              style={{ width: `${h.overall_health_score}%` }}
+              style={{ width: `${overallHealth}%` }}
             />
           </div>
           <div className="mt-2 text-xs text-text-tertiary tabular-nums">
-            {Math.round(h.overall_health_score)} / 100
+            {overallHealth} / 100
           </div>
         </div>
       )}

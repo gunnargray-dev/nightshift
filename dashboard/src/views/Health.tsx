@@ -4,6 +4,16 @@ import { DataTable } from "../components/DataTable";
 import { Badge } from "../components/Badge";
 import { TableSkeleton } from "../components/Skeleton";
 
+/** Compute health score matching Python's FileHealth.health_score property. */
+function computeScore(f: any): number {
+  if (f.parse_error) return 50;
+  let score = 100;
+  score -= Math.min((f.long_lines ?? 0) * 0.5, 20);
+  score -= Math.min((f.todo_count ?? 0) * 2, 20);
+  score -= (1 - (f.docstring_coverage ?? 1)) * 20;
+  return Math.max(0, Math.round(score * 10) / 10);
+}
+
 function scoreBadge(score: number) {
   if (score >= 90) return <Badge variant="success">Excellent</Badge>;
   if (score >= 80) return <Badge variant="success">Good</Badge>;
@@ -15,16 +25,13 @@ export function Health() {
   const { data, isLoading } = useHealth();
   const h = data as any;
 
-  const files = h?.files
-    ? Object.entries(h.files).map(([path, metrics]: [string, any]) => ({
-        path,
-        ...metrics,
-      }))
-    : [];
-
-  const sorted = [...files].sort(
-    (a: any, b: any) => (b.health_score ?? 0) - (a.health_score ?? 0)
-  );
+  const fileList: any[] = Array.isArray(h?.files) ? h.files : [];
+  const scored = fileList.map((f: any) => ({ ...f, health_score: computeScore(f) }));
+  const sorted = [...scored].sort((a, b) => b.health_score - a.health_score);
+  const overall =
+    sorted.length > 0
+      ? Math.round(sorted.reduce((s, f) => s + f.health_score, 0) / sorted.length)
+      : null;
 
   const columns = [
     {
@@ -40,15 +47,14 @@ export function Health() {
       align: "right" as const,
       render: (row: any) => (
         <span className="font-mono text-xs tabular-nums">
-          {row.health_score != null ? Math.round(row.health_score) : "\u2014"}
+          {Math.round(row.health_score)}
         </span>
       ),
     },
     {
       key: "status",
       header: "Status",
-      render: (row: any) =>
-        row.health_score != null ? scoreBadge(row.health_score) : null,
+      render: (row: any) => scoreBadge(row.health_score),
     },
     {
       key: "functions",
@@ -91,14 +97,12 @@ export function Health() {
         description="Per-module code quality scores from static analysis."
       />
 
-      {h?.overall_health_score != null && (
+      {overall != null && (
         <div className="flex items-center gap-3 mb-6">
           <span className="text-sm text-text-secondary">Overall:</span>
-          <span className="text-lg font-semibold tabular-nums">
-            {Math.round(h.overall_health_score)}
-          </span>
+          <span className="text-lg font-semibold tabular-nums">{overall}</span>
           <span className="text-sm text-text-tertiary">/ 100</span>
-          {scoreBadge(h.overall_health_score)}
+          {scoreBadge(overall)}
         </div>
       )}
 

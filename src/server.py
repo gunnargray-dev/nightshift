@@ -55,7 +55,7 @@ class NightshiftHandler(BaseHTTPRequestHandler):
     """HTTP request handler that dispatches to nightshift CLI commands."""
 
     def _run_command(self, cli_args: list[str]) -> str:
-        """Run a nightshift CLI command and return stdout."""
+        """Run a nightshift CLI command and return the JSON portion of stdout."""
         repo = getattr(self.server, "repo_path", Path("."))
         result = subprocess.run(
             [sys.executable, "-m", "src.cli"] + cli_args,
@@ -66,7 +66,12 @@ class NightshiftHandler(BaseHTTPRequestHandler):
         )
         if result.returncode != 0:
             raise RuntimeError(result.stderr or "Command failed")
-        return result.stdout
+        # CLI commands print a header before JSON — extract just the JSON
+        output = result.stdout
+        for i, ch in enumerate(output):
+            if ch in ("{", "["):
+                return output[i:]
+        return output
 
     def _send_json(self, code: int, body: str) -> None:
         """Send a JSON response with CORS headers."""
