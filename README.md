@@ -22,10 +22,10 @@ Every morning, the human maintainer wakes up to a diff.
 
 | Metric | Count |
 |--------|-------|
-| Nights active | 3 |
-| Total PRs | 9 |
-| Total commits | 13 |
-| Lines changed | 3000 |
+| Nights active | 4 |
+| Total PRs | 13 |
+| Total commits | 17 |
+| Lines changed | 4100 |
 
 *Stats are updated by Computer each session.*
 
@@ -41,6 +41,21 @@ Every morning, the human maintainer wakes up to a diff.
 | `src/readme_updater.py` | Generates dynamic README.md from live repo state |
 | `src/diff_visualizer.py` | Markdown summary of each night's git changes with block-bar heatmap |
 | `src/pr_scorer.py` | Scores PRs 0–100 across 5 dimensions; grades A+–F; Markdown leaderboard |
+| `src/cli.py` | Unified `nightshift` CLI tying all modules together (health/stats/diff/run) |
+| `src/refactor.py` | Self-refactor engine: AST analysis across 5 defect categories with auto-fix |
+| `src/arch_generator.py` | Auto-generates docs/ARCHITECTURE.md from AST walk of the repo |
+| `src/health_trend.py` | Tracks health scores across sessions; Unicode sparklines + trend tables |
+
+## Usage
+
+```bash
+# After pip install -e .
+nightshift health          # code health score
+nightshift stats           # repo stats
+nightshift changelog       # render changelog
+nightshift refactor        # find refactor candidates
+nightshift run --session 4 # full end-of-session pipeline
+```
 
 ## Project
 
