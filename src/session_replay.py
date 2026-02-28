@@ -163,15 +163,15 @@ class SessionReplay:
         if self.tasks:
             lines += ["## Tasks", ""]
             for task in self.tasks:
-                icon = {"completed": "✅", "partial": "⚠️", "skipped": "⏭️"}.get(
-                    task.status, "❓"
+                icon = {"completed": "\u2705", "partial": "\u26a0\ufe0f", "skipped": "\u23ed\ufe0f"}.get(
+                    task.status, "\u2753"
                 )
                 pr_ref = ""
                 if task.pr_number:
                     if task.pr_url:
-                        pr_ref = f" → [PR #{task.pr_number}]({task.pr_url})"
+                        pr_ref = f" \u2192 [PR #{task.pr_number}]({task.pr_url})"
                     else:
-                        pr_ref = f" → PR #{task.pr_number}"
+                        pr_ref = f" \u2192 PR #{task.pr_number}"
                 lines.append(f"- {icon} **{task.name}**{pr_ref}: {task.description}")
 
         if self.prs:
@@ -179,7 +179,7 @@ class SessionReplay:
             for pr in self.prs:
                 url_part = f"[#{pr.number}]({pr.url})" if pr.url else f"#{pr.number}"
                 branch_part = f" (`{pr.branch}`)" if pr.branch else ""
-                lines.append(f"- {url_part} — {pr.title}{branch_part}")
+                lines.append(f"- {url_part} \u2014 {pr.title}{branch_part}")
 
         if self.decisions:
             lines += ["", "## Key Decisions", ""]
@@ -261,11 +261,11 @@ def _parse_session_section(session_number: int, section_text: str) -> SessionRep
             line = line.strip()
             if not line.startswith("-"):
                 continue
-            if "✅" in line:
+            if "\u2705" in line:
                 status = "completed"
-            elif "⚠️" in line or "⚠" in line:
+            elif "\u26a0\ufe0f" in line or "\u26a0" in line:
                 status = "partial"
-            elif "⏭️" in line or "⏭" in line:
+            elif "\u23ed\ufe0f" in line or "\u23ed" in line:
                 status = "skipped"
             else:
                 status = "completed"
@@ -313,7 +313,9 @@ def _parse_session_section(session_number: int, section_text: str) -> SessionRep
             title_match = re.search(r"\u2014\s*(.+?)(?:\s*\(`.+`\))?$", line)
             pr_title = title_match.group(1).strip() if title_match else line[:60]
 
-            branch_match = re.search(r"`([^`]+)`\)?$", line)
+            # Fix: use \)* (zero or more) to handle log entries that have one or
+            # two trailing closing parens after the backtick-quoted branch name.
+            branch_match = re.search(r"`([^`]+)`\)*$", line)
             branch = branch_match.group(1).strip() if branch_match else ""
 
             if pr_num:
@@ -442,8 +444,8 @@ def compare_sessions(
     lines.append(row("PRs Opened", str(ra.pr_count) if ra else "N/A", str(rb.pr_count) if rb else "N/A"))
     lines.append(row("Date", ra.date if ra else "N/A", rb.date if rb else "N/A"))
 
-    a_total = ra.stats_snapshot.get("total_prs", "—") if ra else "—"
-    b_total = rb.stats_snapshot.get("total_prs", "—") if rb else "—"
+    a_total = ra.stats_snapshot.get("total_prs", "\u2014") if ra else "\u2014"
+    b_total = rb.stats_snapshot.get("total_prs", "\u2014") if rb else "\u2014"
     lines.append(row("Cumulative PRs", str(a_total), str(b_total)))
 
     lines += [""]
