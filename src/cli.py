@@ -1,6 +1,6 @@
 """Unified CLI entry point for Nightshift.
 
-Provides a single ``nightshift`` command that ties together all 8 analysis
+Provides a single ``nightshift`` command that ties together all analysis
 modules into a coherent developer experience.  Every subcommand corresponds
 to one (or more) modules in ``src/``.
 
@@ -15,6 +15,9 @@ nightshift score       — Score the most recent PR
 nightshift arch        — Generate / refresh docs/ARCHITECTURE.md
 nightshift refactor    — Identify refactor candidates in src/
 nightshift run         — Run the full end-of-session pipeline
+nightshift depgraph    — Visualise module dependency graph
+nightshift todos       — Hunt stale TODO/FIXME annotations
+nightshift doctor      — Run full repo health diagnostic
 
 Usage
 -----
@@ -282,6 +285,192 @@ def cmd_refactor(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Subcommand: replay
+# ---------------------------------------------------------------------------
+
+
+def cmd_replay(args: argparse.Namespace) -> int:
+    """Replay a past session from NIGHTSHIFT_LOG.md."""
+    from src.session_replay import replay, replay_all
+
+    _print_header(f"Session Replay")
+    repo = _repo(getattr(args, "repo", None))
+    log_path = repo / "NIGHTSHIFT_LOG.md"
+
+    if args.session is not None:
+        r = replay(log_path, args.session)
+        if r is None:
+            _print_warn(f"Session {args.session} not found in {log_path}")
+            return 1
+        if args.json:
+            print(json.dumps(r.to_dict(), indent=2, default=str))
+        else:
+            print(r.to_markdown())
+    else:
+        all_r = replay_all(log_path)
+        if not all_r:
+            _print_warn(f"No sessions found in {log_path}")
+            return 1
+        for r in all_r:
+            print(f"Session {r.session_number}: {r.date} — {r.task_count} task(s), {r.pr_count} PR(s)")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: plan
+# ---------------------------------------------------------------------------
+
+
+def cmd_plan(args: argparse.Namespace) -> int:
+    """Generate a session plan using Brain module scoring."""
+    from src.brain import Brain
+
+    _print_header(f"Session Plan — Session {args.session}")
+    repo = _repo(getattr(args, "repo", None))
+    brain = Brain(repo_root=repo)
+    plan = brain.plan(
+        session_number=args.session,
+        roadmap_path=repo / "ROADMAP.md",
+        issues_path=repo / "docs" / "triage.json",
+        health_history_path=repo / "docs" / "health_history.json",
+    )
+
+    if args.json:
+        print(json.dumps(plan.to_dict(), indent=2, default=str))
+        return 0
+
+    print(plan.to_markdown())
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: triage
+# ---------------------------------------------------------------------------
+
+
+def cmd_triage(args: argparse.Namespace) -> int:
+    """Run issue triage from a saved JSON export."""
+    from src.issue_triage import load_issues, triage_issues, render_triage_report
+
+    _print_header("Issue Triage")
+    repo = _repo(getattr(args, "repo", None))
+    issues_path = Path(args.issues) if args.issues else repo / "docs" / "issues.json"
+
+    if not issues_path.exists():
+        _print_warn(f"Issues file not found: {issues_path}")
+        _print_info("Export issues with the GitHub CLI: gh issue list --json ... > docs/issues.json")
+        return 1
+
+    issues = load_issues(issues_path)
+    triaged = triage_issues(issues)
+
+    if args.json:
+        print(json.dumps([t.to_dict() for t in triaged], indent=2, default=str))
+        return 0
+
+    print(render_triage_report(triaged))
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: depgraph
+# ---------------------------------------------------------------------------
+
+
+def cmd_depgraph(args: argparse.Namespace) -> int:
+    """Visualise the module dependency graph for src/."""
+    from src.dep_graph import build_dep_graph, render_dep_graph, save_dep_graph
+
+    _print_header("Module Dependency Graph")
+    repo = _repo(getattr(args, "repo", None))
+    graph = build_dep_graph(repo / "src")
+
+    if args.write:
+        out = repo / "docs" / "dep_graph.md"
+        save_dep_graph(graph, out)
+        _print_ok(f"Written to {out} (+ JSON sidecar)")
+        return 0
+
+    if args.json:
+        print(json.dumps(graph.to_dict(), indent=2, default=str))
+        return 0
+
+    print(render_dep_graph(graph))
+    cycles = graph.find_cycles()
+    if cycles:
+        _print_warn(f"{len(cycles)} circular dependency chain(s) detected")
+    else:
+        _print_ok("No circular dependencies")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: todos
+# ---------------------------------------------------------------------------
+
+
+def cmd_todos(args: argparse.Namespace) -> int:
+    """Hunt stale TODO/FIXME/HACK/XXX annotations across src/."""
+    from src.todo_hunter import hunt, render_todo_report, save_todo_report
+
+    _print_header("TODO / FIXME Hunter")
+    repo = _repo(getattr(args, "repo", None))
+    items = hunt(repo / "src", current_session=args.session, threshold=args.threshold)
+
+    if args.write:
+        out = repo / "docs" / "todo_report.md"
+        save_todo_report(items, out, current_session=args.session, threshold=args.threshold)
+        _print_ok(f"Report written to {out}")
+        return 0
+
+    if args.json:
+        print(json.dumps([i.to_dict() for i in items], indent=2, default=str))
+        return 0
+
+    print(render_todo_report(items, current_session=args.session, threshold=args.threshold))
+    stale_count = sum(1 for i in items if i.is_stale)
+    if stale_count:
+        _print_warn(f"{stale_count} stale annotation(s) found")
+    else:
+        _print_ok("No stale annotations")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: doctor
+# ---------------------------------------------------------------------------
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    """Run full repo health diagnostics — Nightshift's pre-flight check."""
+    from src.doctor import diagnose, render_report, save_report
+
+    _print_header("Nightshift Doctor")
+    repo = _repo(getattr(args, "repo", None))
+    report = diagnose(repo)
+
+    if args.write:
+        out = repo / "docs" / "doctor_report.md"
+        save_report(report, out)
+        _print_ok(f"Report written to {out}")
+        return 0
+
+    if args.json:
+        print(json.dumps(report.to_dict(), indent=2, default=str))
+        return 0
+
+    print(render_report(report))
+    grade = report.grade
+    if grade in ("A", "B"):
+        _print_ok(f"Grade: {grade} — repo is healthy")
+    elif grade in ("C", "D"):
+        _print_warn(f"Grade: {grade} — some issues need attention")
+    else:
+        _print_warn(f"Grade: {grade} — critical issues detected")
+    return 0 if report.fail_count == 0 else 1
+
+
+# ---------------------------------------------------------------------------
 # Subcommand: run (full pipeline)
 # ---------------------------------------------------------------------------
 
@@ -442,6 +631,44 @@ Examples:
     p_ref.add_argument("--apply", action="store_true", help="Apply safe auto-fixes")
     p_ref.add_argument("--json", action="store_true", help="Output raw JSON")
     p_ref.set_defaults(func=cmd_refactor)
+
+    # replay
+    p_replay = sub.add_parser("replay", help="Replay a past session from NIGHTSHIFT_LOG.md")
+    p_replay.add_argument("--session", type=int, default=None, help="Session number to replay (omit to list all)")
+    p_replay.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_replay.set_defaults(func=cmd_replay)
+
+    # plan
+    p_plan = sub.add_parser("plan", help="Generate a session plan via Brain scoring")
+    p_plan.add_argument("--session", type=int, default=1, help="Session number to plan for (default: 1)")
+    p_plan.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_plan.set_defaults(func=cmd_plan)
+
+    # triage
+    p_triage = sub.add_parser("triage", help="Run issue triage from a saved JSON export")
+    p_triage.add_argument("--issues", metavar="PATH", help="Path to issues JSON (default: docs/issues.json)")
+    p_triage.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_triage.set_defaults(func=cmd_triage)
+
+    # depgraph
+    p_dep = sub.add_parser("depgraph", help="Module dependency graph")
+    p_dep.add_argument("--write", action="store_true", help="Write to docs/dep_graph.md")
+    p_dep.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_dep.set_defaults(func=cmd_depgraph)
+
+    # todos
+    p_todos = sub.add_parser("todos", help="Hunt stale TODO/FIXME annotations")
+    p_todos.add_argument("--session", type=int, default=10, help="Current session number (default: 10)")
+    p_todos.add_argument("--threshold", type=int, default=2, help="Sessions before a TODO is 'stale' (default: 2)")
+    p_todos.add_argument("--write", action="store_true", help="Write report to docs/todo_report.md")
+    p_todos.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_todos.set_defaults(func=cmd_todos)
+
+    # doctor
+    p_doctor = sub.add_parser("doctor", help="Full repo health diagnostic")
+    p_doctor.add_argument("--write", action="store_true", help="Write report to docs/doctor_report.md")
+    p_doctor.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_doctor.set_defaults(func=cmd_doctor)
 
     # run
     p_run = sub.add_parser("run", help="Full end-of-session pipeline")
