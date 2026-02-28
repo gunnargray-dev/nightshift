@@ -12,7 +12,7 @@ Every morning, the human maintainer wakes up to a diff.
 
 1. **11 PM CST** — Computer wakes up via scheduled task
 2. **Survey** — Reads the full repo state, open issues, and its own roadmap
-3. **Plan** — Autonomously decides what to build (2-5 improvements per session)
+3. **Brain** — `src/brain.py` scores candidate tasks by impact, roadmap alignment, and health signals
 4. **Code** — Writes code locally, runs it, runs tests, iterates until passing
 5. **Push** — Creates feature branches and opens PRs with detailed descriptions
 6. **Log** — Appends a session summary to `NIGHTSHIFT_LOG.md`
@@ -22,10 +22,10 @@ Every morning, the human maintainer wakes up to a diff.
 
 | Metric | Count |
 |--------|-------|
-| Nights active | 4 |
-| Total PRs | 13 |
-| Total commits | 17 |
-| Lines changed | 4100 |
+| Nights active | 5 |
+| Total PRs | 17 |
+| Total commits | 21 |
+| Lines changed | 5100 |
 
 *Stats are updated by Computer each session.*
 
@@ -41,10 +41,13 @@ Every morning, the human maintainer wakes up to a diff.
 | `src/readme_updater.py` | Generates dynamic README.md from live repo state |
 | `src/diff_visualizer.py` | Markdown summary of each night's git changes with block-bar heatmap |
 | `src/pr_scorer.py` | Scores PRs 0–100 across 5 dimensions; grades A+–F; Markdown leaderboard |
-| `src/cli.py` | Unified `nightshift` CLI tying all modules together (health/stats/diff/run) |
+| `src/cli.py` | Unified `nightshift` CLI tying all modules together (health/stats/diff/run/triage/replay) |
 | `src/refactor.py` | Self-refactor engine: AST analysis across 5 defect categories with auto-fix |
 | `src/arch_generator.py` | Auto-generates docs/ARCHITECTURE.md from AST walk of the repo |
-| `src/health_trend.py` | Tracks health scores across sessions; Unicode sparklines + trend tables |
+| `src/health_trend.py` | Tracks health scores across sessions; Unicode sparklines |
+| `src/issue_triage.py` | Classifies + prioritizes GitHub issues (BUG/FEATURE/ENHANCEMENT/QUESTION/CHORE) |
+| `src/brain.py` | Task prioritization engine — transparent scoring across 5 dimensions |
+| `src/session_replay.py` | Reconstructs any past session from NIGHTSHIFT_LOG.md with full narrative |
 
 ## Usage
 
@@ -54,8 +57,20 @@ nightshift health          # code health score
 nightshift stats           # repo stats
 nightshift changelog       # render changelog
 nightshift refactor        # find refactor candidates
-nightshift run --session 4 # full end-of-session pipeline
+nightshift run --session 5 # full end-of-session pipeline
 ```
+
+## Dashboard
+
+The repo evolution dashboard is deployable via GitHub Pages from `docs/index.html`.
+
+To enable: repo Settings → Pages → Source: Deploy from branch `main`, folder `/docs`
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to request features, report bugs, and contribute code.
+
+Computer reads every open issue labeled `human-priority` at the start of each session.
 
 ## Project
 
