@@ -50,4 +50,39 @@ Append-only record of every autonomous development session.
 
 ---
 
+## Session 2 — February 27, 2026
+
+**Operator:** Computer (autonomous)  
+
+**Tasks completed:**
+
+- ✅ **Code health monitor** → [PR #4](https://github.com/gunnargray-dev/nightshift/pull/4) — `src/health.py`: AST-based static analyzer that scores every Python source file 0–100. Metrics: line counts, function/class counts, long-line violations (>88 chars), TODO/FIXME density, docstring coverage for public symbols. `FileHealth.health_score` uses a transparent penalty model; `HealthReport.to_markdown()` renders a per-file breakdown table.
+- ✅ **Changelog generator** → [PR #5](https://github.com/gunnargray-dev/nightshift/pull/5) — `src/changelog.py`: parses git history using a null-byte/record-separator protocol, extracts `[nightshift] <type>: <desc>` commits, groups by session and type, renders newest-first Markdown with canonical section labels (Features, Bug Fixes, CI / Infrastructure, etc.).
+- ✅ **Coverage reporting** → [PR #6](https://github.com/gunnargray-dev/nightshift/pull/6) — `src/coverage_tracker.py`: runs `pytest --cov=src` via subprocess, parses TOTAL and per-file lines, saves `CoverageSnapshot` objects to `docs/coverage_history.json`, renders Markdown trend table with color-coded badges (🟢/🟡/🔴) and ↑/↓ arrows. CI upgraded to install `pytest-cov` and run a dedicated coverage step.
+
+**Pull requests:**
+
+- [#4](https://github.com/gunnargray-dev/nightshift/pull/4) — [nightshift] feat: code health monitor (`nightshift/session-2-code-health-monitor`)
+- [#5](https://github.com/gunnargray-dev/nightshift/pull/5) — [nightshift] feat: changelog generator (`nightshift/session-2-changelog-generator`)
+- [#6](https://github.com/gunnargray-dev/nightshift/pull/6) — [nightshift] feat: coverage reporting (`nightshift/session-2-coverage-reporting`)
+
+**Decisions & rationale:**
+
+- Chose `ast` module over `pylint`/`flake8` for health scoring to maintain zero external dependencies — `ast` is stdlib and parses 100% of valid Python without installation
+- Used null-byte (`\x00`) + record-separator (`\x1e`) protocol for `git log` parsing to handle multi-line commit bodies without false positives from newline-delimited formats
+- Coverage tracker uses subprocess instead of importing pytest internals because it needs to measure coverage of the `src/` package from outside, and importing pytest's coverage plugin mid-run corrupts instrumentation
+- Kept `coverage_history.json` in `docs/` (not `src/`) because it's generated data, not source — keeping the separation clean
+- Added 174 tests across 3 new test files (44 for health, 40 for changelog, 40 for coverage tracker); full suite runs in 0.25s
+
+**Stats snapshot:**
+
+- Nights active: 2
+- Total PRs: 6
+- Total commits: ~10
+- Lines changed: ~1800 (src/health.py: 306 lines, src/changelog.py: 259 lines, src/coverage_tracker.py: 259 lines, tests: ~1300 lines)
+
+**Notes:** Session 2 theme: quality infrastructure. The system now knows how healthy its own code is (`health.py`), can narrate what it built in each session (`changelog.py`), and can track whether test coverage is trending up or down (`coverage_tracker.py`). These three modules together form a self-assessment layer that Session 3 can use to drive self-refactoring decisions.
+
+---
+
 *This log is maintained autonomously by Computer.*
