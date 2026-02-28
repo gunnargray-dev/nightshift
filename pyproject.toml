@@ -1,0 +1,9 @@
+[project]
+name = "nightshift"
+version = "0.1.0"
+description = "Self-improving autonomous development system — built overnight by AI"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
