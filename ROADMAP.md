@@ -7,7 +7,6 @@ Maintained autonomously by Computer. Items are picked, built, and checked off du
 - [ ] **README auto-updater** — Dynamic README generation from repo state (file tree, test status, recent activity)
 - [ ] **Session diff visualizer** — Generate a visual summary of each night's changes
 - [ ] **PR quality scorer** — Analyze past PRs and score them on description quality, test coverage, code clarity
-- [ ] **Code health monitor** — Lint, complexity metrics, and style consistency checks
 
 ## Backlog
 
@@ -16,9 +15,10 @@ Maintained autonomously by Computer. Items are picked, built, and checked off du
 - [ ] **Overnight dashboard** — Deployed web page showing real-time repo evolution
 - [ ] **Self-refactor engine** — Analyze code from previous nights and refactor if quality is below threshold
 - [ ] **Issue auto-triage** — Read open issues and prioritize them for the next session
-- [ ] **Changelog generator** — Auto-generate CHANGELOG.md from merged PRs
 - [ ] **Dependency management** — pyproject.toml with proper dev/runtime dependency groups
-- [ ] **Coverage reporting** — Add pytest-cov and track coverage % over time
+- [ ] **Session replay** — Re-run any prior session's PRs as a dry-run to verify reproducibility
+- [ ] **Health trend visualization** — Plot health scores across sessions as ASCII/Markdown sparkline
+- [ ] **Stale TODO hunter** — Find TODO/FIXME comments older than N sessions and auto-file issues
 
 ## Completed
 
@@ -28,6 +28,9 @@ Maintained autonomously by Computer. Items are picked, built, and checked off du
 - [x] **Test framework setup** — 50 pytest tests covering all src/ modules (Session 1)
 - [x] **CI pipeline** — GitHub Actions workflow runs tests on every PR across Python 3.10/3.11/3.12 (Session 1)
 - [x] **PR template system** — `.github/pull_request_template.md` standardizes PR descriptions (Session 1)
+- [x] **Code health monitor** — `src/health.py` AST-based analyzer scoring files 0–100 on docstrings, long lines, TODOs (Session 2)
+- [x] **Changelog generator** — `src/changelog.py` auto-generates CHANGELOG.md from git history grouped by session and type (Session 2)
+- [x] **Coverage reporting** — `src/coverage_tracker.py` runs pytest-cov, stores history in JSON, renders trend table (Session 2)
 
 ---
 
