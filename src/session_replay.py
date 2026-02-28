@@ -219,35 +219,58 @@ class SessionReplay:
 
 
 # ---------------------------------------------------------------------------
-# Parsing helpers
+# Public API
 # ---------------------------------------------------------------------------
 
-def _extract_session_sections(log_text: str) -> dict[int, str]:
-    """Split NIGHTSHIFT_LOG.md into per-session text blocks."""
-    sections: dict[int, str] = {}
-    pattern = r"(?=^## Session (\d+)\s*[\u2014-])"
-    parts = re.split(pattern, log_text, flags=re.MULTILINE)
+def replay(log_path: Path, session_number: int) -> SessionReplay:
+    """Replay a single session from NIGHTSHIFT_LOG.md."""
+    log_text = log_path.read_text(encoding="utf-8")
+    sections = _split_sessions(log_text)
+    for s in sections:
+        if s[0] == session_number:
+            return _parse_session_section(s[1], session_number)
 
-    i = 0
-    while i < len(parts):
-        if i + 1 < len(parts) and parts[i].isdigit():
-            session_num = int(parts[i])
-            session_text = parts[i + 1]
-            sections[session_num] = session_text
-            i += 2
-        else:
-            i += 1
-
-    return sections
+    raise ValueError(f"Session {session_number} not found in log")
 
 
-def _parse_session_section(session_number: int, section_text: str) -> SessionReplay:
-    """Parse a single session section from the log into a SessionReplay."""
-    date_match = re.search(r"^## Session \d+\s*[\u2014-]\s*(.+)$", section_text, re.MULTILINE)
-    date = date_match.group(1).strip() if date_match else "Unknown"
+def replay_all(log_path: Path) -> list[SessionReplay]:
+    """Replay all sessions in chronological order."""
+    log_text = log_path.read_text(encoding="utf-8")
+    sections = _split_sessions(log_text)
+    out = []
+    for session_number, section_text in sections:
+        out.append(_parse_session_section(section_text, session_number))
+    return out
 
-    op_match = re.search(r"\*\*Operator:\*\*\s*(.+?)(?:\s{2,}|$)", section_text, re.MULTILINE)
-    operator = op_match.group(1).strip() if op_match else "Computer (autonomous)"
+
+# ---------------------------------------------------------------------------
+# Parsing logic
+# ---------------------------------------------------------------------------
+
+def _split_sessions(log_text: str) -> list[tuple[int, str]]:
+    """Split the full log into individual session sections."""
+    # Session headings are: "## Session N — ..."
+    # Using a capturing group to keep the session number.
+    parts = re.split(r"^##\s+Session\s+(\d+)\b", log_text, flags=re.MULTILINE)
+
+    # re.split returns: [prefix, num1, section1, num2, section2, ...]
+    out: list[tuple[int, str]] = []
+    it = iter(parts[1:])
+    for num_str, section_body in zip(it, it):
+        num = int(num_str)
+        section_text = f"## Session {num_str}{section_body}"
+        out.append((num, section_text))
+    return out
+
+
+def _parse_session_section(section_text: str, session_number: int) -> SessionReplay:
+    """Parse a session section into a SessionReplay."""
+    # Header: "## Session N — Month Day, Year"
+    header_match = re.search(r"^##\s+Session\s+\d+\s+—\s+(.+)$", section_text, re.MULTILINE)
+    date = header_match.group(1).strip() if header_match else ""
+
+    operator_match = re.search(r"\*\*Operator:\*\*\s*(.+)$", section_text, re.MULTILINE)
+    operator = operator_match.group(1).strip() if operator_match else ""
 
     tasks: list[ReplayedTask] = []
     tasks_section = re.search(
@@ -261,23 +284,20 @@ def _parse_session_section(session_number: int, section_text: str) -> SessionRep
             line = line.strip()
             if not line.startswith("-"):
                 continue
-            if "✅" in line:
-                status = "completed"
-            elif "⚠️" in line or "⚠" in line:
+
+            # Expected format:
+            # - ✅ **Task name** → [PR #12](url) — description
+            status = "completed"
+            if "⚠️" in line:
                 status = "partial"
-            elif "⏭️" in line or "⏭" in line:
+            if "⏭️" in line:
                 status = "skipped"
-            else:
-                status = "completed"
 
             name_match = re.search(r"\*\*(.+?)\*\*", line)
-            name = name_match.group(1).strip() if name_match else line[:40]
+            name = name_match.group(1).strip() if name_match else "Unknown"
 
-            pr_match = re.search(r"\[PR #(\d+)\]\((https?://[^\)]+)\)", line)
-            pr_number_only = re.search(r"PR #(\d+)", line)
-            pr_number = int(pr_match.group(1)) if pr_match else (
-                int(pr_number_only.group(1)) if pr_number_only else None
-            )
+            pr_match = re.search(r"\[PR\s+#(\d+)\]\((https?://[^\)]+)\)", line)
+            pr_number = int(pr_match.group(1)) if pr_match else None
             pr_url = pr_match.group(2) if pr_match else ""
 
             desc_match = re.search(r"\u2014\s*(.+)$", line)
@@ -313,8 +333,16 @@ def _parse_session_section(session_number: int, section_text: str) -> SessionRep
             title_match = re.search(r"\u2014\s*(.+?)(?:\s*\(`.+`\))?$", line)
             pr_title = title_match.group(1).strip() if title_match else line[:60]
 
-            branch_match = re.search(r"`([^`]+)`\)?$", line)
-            branch = branch_match.group(1).strip() if branch_match else ""
+            # Branch is usually recorded as: — title (`branch-name`)
+            # but some older logs embedded the branch inside the title, e.g.:
+            #   — [nightshift] feat: ... (`nightshift/session-1-foo`))
+            # so we try both patterns.
+            branch_match = re.search(r"\(`([^`]+)`\)\s*$", line)
+            if branch_match:
+                branch = branch_match.group(1).strip("() ")
+            else:
+                branch_match = re.search(r"\(`([^`]+)`\)\)+\s*$", line)
+                branch = branch_match.group(1).strip("() ") if branch_match else ""
 
             if pr_num:
                 prs.append(ReplayedPR(
@@ -363,101 +391,3 @@ def _parse_session_section(session_number: int, section_text: str) -> SessionRep
         notes=notes,
         raw_section=section_text,
     )
-
-
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
-
-def replay(log_path: Path, session_number: int) -> Optional[SessionReplay]:
-    """Reconstruct what a specific session did.
-
-    Args:
-        log_path: Path to NIGHTSHIFT_LOG.md.
-        session_number: The session to replay.
-
-    Returns:
-        A SessionReplay, or None if session not found.
-    """
-    if not log_path.exists():
-        return None
-
-    log_text = log_path.read_text(encoding="utf-8")
-    sections = _extract_session_sections(log_text)
-
-    if session_number not in sections:
-        return None
-
-    return _parse_session_section(session_number, sections[session_number])
-
-
-def replay_all(log_path: Path) -> list[SessionReplay]:
-    """Reconstruct every session from the log.
-
-    Returns:
-        List of SessionReplay objects sorted by session_number ascending.
-    """
-    if not log_path.exists():
-        return []
-
-    log_text = log_path.read_text(encoding="utf-8")
-    sections = _extract_session_sections(log_text)
-
-    replays = []
-    for session_num in sorted(sections.keys()):
-        replays.append(_parse_session_section(session_num, sections[session_num]))
-
-    return replays
-
-
-def compare_sessions(
-    log_path: Path,
-    session_a: int,
-    session_b: int,
-) -> str:
-    """Generate a Markdown comparison between two sessions.
-
-    Args:
-        log_path: Path to NIGHTSHIFT_LOG.md.
-        session_a: First session number.
-        session_b: Second session number.
-
-    Returns:
-        Markdown string comparing the two sessions.
-    """
-    ra = replay(log_path, session_a)
-    rb = replay(log_path, session_b)
-
-    lines = [
-        f"# Session {session_a} vs Session {session_b} Comparison",
-        "",
-        "| Metric | Session {} | Session {} |".format(session_a, session_b),
-        "|--------|-----------|-----------|" ,
-    ]
-
-    def row(metric: str, va: str, vb: str) -> str:
-        return f"| {metric} | {va} | {vb} |"
-
-    lines.append(row("Tasks Completed", str(ra.task_count) if ra else "N/A", str(rb.task_count) if rb else "N/A"))
-    lines.append(row("PRs Opened", str(ra.pr_count) if ra else "N/A", str(rb.pr_count) if rb else "N/A"))
-    lines.append(row("Date", ra.date if ra else "N/A", rb.date if rb else "N/A"))
-
-    a_total = ra.stats_snapshot.get("total_prs", "—") if ra else "—"
-    b_total = rb.stats_snapshot.get("total_prs", "—") if rb else "—"
-    lines.append(row("Cumulative PRs", str(a_total), str(b_total)))
-
-    lines += [""]
-
-    if ra:
-        lines += [f"## Session {session_a} Modules Added", ""]
-        for m in ra.modules_added or ["(none recorded)"]:
-            lines.append(f"- `{m}`")
-        lines += [""]
-
-    if rb:
-        lines += [f"## Session {session_b} Modules Added", ""]
-        for m in rb.modules_added or ["(none recorded)"]:
-            lines.append(f"- `{m}`")
-        lines += [""]
-
-    return "\n".join(lines)
