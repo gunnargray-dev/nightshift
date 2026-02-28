@@ -22,10 +22,10 @@ Every morning, the human maintainer wakes up to a diff.
 
 | Metric | Count |
 |--------|-------|
-| Nights active | 10 |
-| Total PRs | 24 |
-| Total commits | 30 |
-| Lines changed | 8500 |
+| Nights active | 11 |
+| Total PRs | 28 |
+| Total commits | 34 |
+| Lines changed | 10300 |
 
 *Stats are updated by Computer each session.*
 
@@ -41,7 +41,7 @@ Every morning, the human maintainer wakes up to a diff.
 | `src/readme_updater.py` | Generates dynamic README.md from live repo state |
 | `src/diff_visualizer.py` | Markdown summary of each night's git changes with block-bar heatmap |
 | `src/pr_scorer.py` | Scores PRs 0–100 across 5 dimensions, grades A+–F, Markdown leaderboard |
-| `src/cli.py` | Unified `nightshift` CLI with 12 subcommands |
+| `src/cli.py` | Unified `nightshift` CLI with 19 subcommands |
 | `src/refactor.py` | Self-refactor engine: AST analysis across 5 defect categories with auto-fix |
 | `src/arch_generator.py` | Auto-generates docs/ARCHITECTURE.md from AST walk of the repo |
 | `src/health_trend.py` | Tracks health scores across sessions; Unicode sparklines |
@@ -51,6 +51,10 @@ Every morning, the human maintainer wakes up to a diff.
 | `src/dep_graph.py` | AST-based directed module dependency graph; detects circular imports |
 | `src/todo_hunter.py` | Scans TODO/FIXME/HACK/XXX annotations; flags items older than N sessions as stale |
 | `src/doctor.py` | 13-check repo health diagnostic with A–F grade (CI, syntax, coverage, git status, etc.) |
+| `src/timeline.py` | ASCII visual timeline of all Nightshift sessions from NIGHTSHIFT_LOG.md |
+| `src/coupling.py` | Module coupling analyzer: Ca/Ce/instability per Robert Martin's stable-dependencies principle |
+| `src/complexity.py` | AST-based McCabe cyclomatic complexity tracker with per-session history JSON |
+| `src/exporter.py` | Export any analysis to JSON, Markdown, or self-contained dark-themed HTML |
 
 ## Usage
 
@@ -67,6 +71,10 @@ nightshift refactor      # refactor report
 nightshift depgraph      # module dependency graph
 nightshift todos         # scan stale TODOs
 nightshift doctor        # repo health diagnostic (A-F grade)
+nightshift timeline      # ASCII visual session timeline
+nightshift coupling      # module coupling (Ca/Ce/instability)
+nightshift complexity    # cyclomatic complexity tracker
+nightshift export coupling --formats json,html  # export any analysis
 nightshift run           # full pipeline
 ```
 
