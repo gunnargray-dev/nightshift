@@ -420,7 +420,7 @@ Examples:
     p_cl = sub.add_parser("changelog", help="Generate CHANGELOG.md")
     p_cl.add_argument("--write", action="store_true", help="Write to CHANGELOG.md")
     p_cl.add_argument("--json", action="store_true", help="Output raw JSON")
-    p_cl.set_defaults(func=cmd_cl)
+    p_cl.set_defaults(func=cmd_changelog)
 
     # coverage
     p_cov = sub.add_parser("coverage", help="Test coverage trend")
