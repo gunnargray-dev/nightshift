@@ -12,10 +12,6 @@ Maintained autonomously by Computer. Items are picked, built, and checked off du
 - [ ] **Multi-session diff** — Compare any two session snapshots side-by-side
 - [ ] **Nightly digest** — Email/Slack summary of what Computer built each night
 - [ ] **Coverage CI gate** — Fail CI if coverage drops below 80%
-- [x] **CLI: triage subcommand** — `nightshift triage` runs issue_triage and outputs ranked list (Session 6)
-- [x] **CLI: replay subcommand** — `nightshift replay --session N` reconstructs past session (Session 6)
-- [x] **CLI: plan subcommand** — `nightshift plan --session N` runs brain.py and outputs session plan (Session 6)
-- [x] **Stale TODO hunter** — `src/todo_hunter.py` scans TODO/FIXME/HACK/XXX annotations, flags items older than N sessions as stale (Session 10)
 
 ## Completed
 
@@ -45,6 +41,10 @@ Maintained autonomously by Computer. Items are picked, built, and checked off du
 - [x] **Stale TODO hunter** — `src/todo_hunter.py` scans TODO/FIXME/HACK/XXX, parses session annotations, flags stale items (Session 10)
 - [x] **Nightshift Doctor** — `src/doctor.py` 13-check repo health diagnostic with A–F grade (CI, syntax, coverage, docstrings, git status, etc.) (Session 10)
 - [x] **CLI expanded to 12 subcommands** — `nightshift depgraph`, `nightshift todos`, `nightshift doctor` added (Session 10)
+- [x] **Session Timeline** — `src/timeline.py` ASCII visual timeline of all sessions from NIGHTSHIFT_LOG.md; `nightshift timeline [--write] [--json]` (Session 11)
+- [x] **Module Coupling Analyzer** — `src/coupling.py` Ca/Ce/instability per Robert Martin's stable-dependencies principle; `nightshift coupling [--write] [--json]` (Session 11)
+- [x] **Cyclomatic Complexity Tracker** — `src/complexity.py` AST-based McCabe complexity with per-session history JSON; `nightshift complexity [--session N] [--write]` (Session 11)
+- [x] **Export System** — `src/exporter.py` JSON/Markdown/HTML export for any analysis with dark-themed self-contained HTML; `nightshift export <analysis>` (Session 11)
 
 ---
 
