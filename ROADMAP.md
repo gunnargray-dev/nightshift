@@ -7,15 +7,15 @@ Maintained autonomously by Computer. Items are picked, built, and checked off du
 ## Backlog
 
 - [ ] **Dependency management** — pyproject.toml with proper dev/runtime dependency groups
-- [ ] **Stale TODO hunter** — Find TODO/FIXME comments older than N sessions and auto-file issues
 - [ ] **Health score CI gate** — Fail CI if overall health score drops below threshold
 - [ ] **PR auto-merge** — Merge PRs automatically if CI passes and score ≥ 80
 - [ ] **Multi-session diff** — Compare any two session snapshots side-by-side
 - [ ] **Nightly digest** — Email/Slack summary of what Computer built each night
+- [ ] **Coverage CI gate** — Fail CI if coverage drops below 80%
 - [x] **CLI: triage subcommand** — `nightshift triage` runs issue_triage and outputs ranked list (Session 6)
 - [x] **CLI: replay subcommand** — `nightshift replay --session N` reconstructs past session (Session 6)
 - [x] **CLI: plan subcommand** — `nightshift plan --session N` runs brain.py and outputs session plan (Session 6)
-- [ ] **Coverage CI gate** — Fail CI if coverage drops below 80%
+- [x] **Stale TODO hunter** — `src/todo_hunter.py` scans TODO/FIXME/HACK/XXX annotations, flags items older than N sessions as stale (Session 10)
 
 ## Completed
 
@@ -40,6 +40,11 @@ Maintained autonomously by Computer. Items are picked, built, and checked off du
 - [x] **Overnight dashboard** — `docs/index.html` single-file GitHub Pages dashboard showing repo evolution, session history, module inventory, health scores (Session 5)
 - [x] **Brain module** — `src/brain.py` transparent task prioritization engine with 5-dimension scoring (issue urgency, roadmap alignment, health improvement, complexity fit, cross-module synergy) (Session 5)
 - [x] **Session replay** — `src/session_replay.py` reconstructs any past session from NIGHTSHIFT_LOG.md with full narrative, `compare_sessions()` for cross-session diff (Session 5)
+- [x] **CI fix + session_replay regex** — Fixed `\)*` branch-parsing regex; all 584 tests pass on Python 3.10/3.11/3.12 (Session 10)
+- [x] **Module dependency graph** — `src/dep_graph.py` AST-based directed graph of src/ imports; detects circular deps, computes in/out degree (Session 10)
+- [x] **Stale TODO hunter** — `src/todo_hunter.py` scans TODO/FIXME/HACK/XXX, parses session annotations, flags stale items (Session 10)
+- [x] **Nightshift Doctor** — `src/doctor.py` 13-check repo health diagnostic with A–F grade (CI, syntax, coverage, docstrings, git status, etc.) (Session 10)
+- [x] **CLI expanded to 12 subcommands** — `nightshift depgraph`, `nightshift todos`, `nightshift doctor` added (Session 10)
 
 ---
 

@@ -22,10 +22,10 @@ Every morning, the human maintainer wakes up to a diff.
 
 | Metric | Count |
 |--------|-------|
-| Nights active | 6 |
-| Total PRs | 19 |
-| Total commits | 23 |
-| Lines changed | 5310 |
+| Nights active | 10 |
+| Total PRs | 24 |
+| Total commits | 30 |
+| Lines changed | 8500 |
 
 *Stats are updated by Computer each session.*
 
@@ -41,13 +41,16 @@ Every morning, the human maintainer wakes up to a diff.
 | `src/readme_updater.py` | Generates dynamic README.md from live repo state |
 | `src/diff_visualizer.py` | Markdown summary of each night's git changes with block-bar heatmap |
 | `src/pr_scorer.py` | Scores PRs 0–100 across 5 dimensions, grades A+–F, Markdown leaderboard |
-| `src/cli.py` | Unified `nightshift` CLI tying modules together (health/stats/diff/coverage/changelog/etc.) |
+| `src/cli.py` | Unified `nightshift` CLI with 12 subcommands |
 | `src/refactor.py` | Self-refactor engine: AST analysis across 5 defect categories with auto-fix |
 | `src/arch_generator.py` | Auto-generates docs/ARCHITECTURE.md from AST walk of the repo |
 | `src/health_trend.py` | Tracks health scores across sessions; Unicode sparklines |
 | `src/issue_triage.py` | Classifies + prioritizes GitHub issues (BUG/FEATURE/ENHANCEMENT/QUESTION/CHORE) |
 | `src/brain.py` | Task prioritization engine: scores roadmap + issues for next session |
 | `src/session_replay.py` | Reconstructs any past session from NIGHTSHIFT_LOG.md with narrative |
+| `src/dep_graph.py` | AST-based directed module dependency graph; detects circular imports |
+| `src/todo_hunter.py` | Scans TODO/FIXME/HACK/XXX annotations; flags items older than N sessions as stale |
+| `src/doctor.py` | 13-check repo health diagnostic with A–F grade (CI, syntax, coverage, git status, etc.) |
 
 ## Usage
 
@@ -61,6 +64,9 @@ nightshift coverage      # coverage trend
 nightshift score         # PR score leaderboard
 nightshift arch --write  # regenerate docs/ARCHITECTURE.md
 nightshift refactor      # refactor report
+nightshift depgraph      # module dependency graph
+nightshift todos         # scan stale TODOs
+nightshift doctor        # repo health diagnostic (A-F grade)
 nightshift run           # full pipeline
 ```
 
