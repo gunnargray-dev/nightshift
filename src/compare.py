@@ -98,13 +98,15 @@ class SessionComparison:
         a = self.session_a
         b = self.session_b
 
+        sep_a = "\u2500" * 29
+        sep_b = "\u2500" * 29
         lines = [
             f"# Session Comparison: Session {a.session_number} vs Session {b.session_number}",
             "",
             "## Overview",
             "",
             f"| Metric | Session {a.session_number} ({a.date}) | Session {b.session_number} ({b.date}) | Delta |",
-            f"|--------|─{'\u2500' * 29}|─{'\u2500' * 29}|-------|",
+            "|--------|\u2500" + sep_a + "|\u2500" + sep_b + "|-------|",
         ]
 
         for m in self.metrics:
@@ -156,7 +158,7 @@ def _extract_session(log_content: str, session_number: int) -> Optional[SessionS
     # Split into session blocks
     blocks = re.split(r"(?=^## Session \d+)", log_content, flags=re.MULTILINE)
     for block in blocks:
-        header = re.match(r"## Session (\d+)\s*[—-]\s*(.+?)$", block, flags=re.MULTILINE)
+        header = re.match(r"## Session (\d+)\s*[\u2014-]\s*(.+?)$", block, flags=re.MULTILINE)
         if not header:
             continue
         if int(header.group(1)) != session_number:

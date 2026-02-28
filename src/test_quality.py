@@ -17,6 +17,7 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Optional
 
+from src.scoring import score_to_grade as _grade
 
 @dataclass
 class TestFileScore:
@@ -143,11 +144,13 @@ class _TestFileVisitor(ast.NodeVisitor):
         if name in ("teardown", "teardown_method"):
             self.teardown_present = True
         for dec in node.decorator_list:
-            if isinstance(dec, ast.Attribute) and dec.attr == "parametrize":
+            # Unwrap Call nodes: @pytest.mark.parametrize(...) is a Call
+            dec_node = dec.func if isinstance(dec, ast.Call) else dec
+            if isinstance(dec_node, ast.Attribute) and dec_node.attr == "parametrize":
                 self.parametrize_count += 1
-            elif isinstance(dec, ast.Name) and dec.id == "parametrize":
+            elif isinstance(dec_node, ast.Name) and dec_node.id == "parametrize":
                 self.parametrize_count += 1
-            elif isinstance(dec, ast.Attribute) and "fixture" in dec.attr.lower():
+            elif isinstance(dec_node, ast.Attribute) and "fixture" in dec_node.attr.lower():
                 self.fixture_count += 1
         self.generic_visit(node)
 
@@ -181,18 +184,7 @@ class _TestFileVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
 
-def _grade(score: float) -> str:
-    if score >= 95: return "A+"
-    if score >= 90: return "A"
-    if score >= 85: return "A-"
-    if score >= 80: return "B+"
-    if score >= 75: return "B"
-    if score >= 70: return "B-"
-    if score >= 65: return "C+"
-    if score >= 60: return "C"
-    if score >= 50: return "C-"
-    if score >= 40: return "D"
-    return "F"
+# _grade imported from src.scoring above
 
 
 def _score_test_file(path: Path, module_name: str) -> TestFileScore:

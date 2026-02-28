@@ -20,6 +20,8 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Optional
 
+from src.scoring import grade_colour as _grade_colour_hex, score_colour as _score_colour_hex
+
 
 def _shields_static(label: str, message: str, color: str, style: str = "flat-square") -> str:
     label_enc = label.replace(" ", "%20").replace("-", "--").replace("_", "__")
@@ -29,6 +31,7 @@ def _shields_static(label: str, message: str, color: str, style: str = "flat-squ
 
 
 def _grade_color(grade: str) -> str:
+    """Return a shields.io colour name for a letter *grade*."""
     grade = grade.strip().upper()
     if grade.startswith("A"): return "brightgreen"
     if grade.startswith("B"): return "green"
@@ -38,11 +41,8 @@ def _grade_color(grade: str) -> str:
 
 
 def _score_color(score: float) -> str:
-    if score >= 80: return "brightgreen"
-    if score >= 65: return "green"
-    if score >= 50: return "yellow"
-    if score >= 35: return "orange"
-    return "red"
+    """Return a shields.io colour name for a numeric 0–100 *score*."""
+    return _score_colour_hex(score, shields=True)
 
 
 @dataclass
@@ -54,6 +54,7 @@ class Badge:
     alt: str = ""
 
     def to_markdown(self) -> str:
+        """Render this badge as a Markdown image link for shields.io."""
         alt = self.alt or self.label
         label_enc = self.label.replace(" ", "%20").replace("-", "--").replace("_", "__")
         msg_enc = self.message.replace(" ", "%20").replace("-", "--").replace("_", "__")
@@ -61,6 +62,7 @@ class Badge:
                 f"{label_enc}-{msg_enc}-{self.color}?style=flat%2Dsquare)")
 
     def to_dict(self) -> dict:
+        """Serialise this badge to a plain dictionary."""
         return asdict(self)
 
 
@@ -71,18 +73,22 @@ class BadgeBlock:
     generated_at: str = ""
 
     def to_markdown(self) -> str:
+        """Render all badges as a single space-separated Markdown string."""
         return "  ".join(b.to_markdown() for b in self.badges)
 
     def to_markdown_block(self) -> str:
+        """Render all badges as a Markdown string with a trailing newline."""
         return self.to_markdown() + "\n"
 
     def to_json(self) -> str:
+        """Serialise the badge block to a pretty-printed JSON string."""
         return json.dumps(
             {"badges": [b.to_dict() for b in self.badges], "generated_at": self.generated_at},
             indent=2,
         )
 
     def to_dict(self) -> dict:
+        """Serialise the badge block to a plain dictionary (JSON-safe)."""
         return {"badges": [b.to_dict() for b in self.badges], "generated_at": self.generated_at}
 
 

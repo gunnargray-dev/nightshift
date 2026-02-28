@@ -224,7 +224,7 @@ class MaturityReport:
                 f"### `{m.name}` — {m.total_score:.0f}/100 {m.tier_emoji}",
                 "",
                 f"- **Tests:** {m.test_count} test functions "
-                f"({'\u2705' if m.test_path else '\u274c no test file'})",
+                + ("(\u2705)" if m.test_path else "(\u274c no test file)"),
                 f"- **Docs:** {m.docstring_coverage*100:.0f}% function docstring coverage",
                 f"- **Complexity:** avg {m.avg_complexity:.1f} cyclomatic complexity",
                 f"- **Age:** {m.session_age} session(s) old",

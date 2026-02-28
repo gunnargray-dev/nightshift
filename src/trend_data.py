@@ -105,6 +105,25 @@ _SEED_DATA: list[dict] = [
 ]
 
 
+def _interpolate_cumulative(metrics: list[SessionMetrics]) -> None:
+    """Forward-fill zero values in cumulative metrics.
+
+    For metrics like *tests*, *modules*, and *lines_changed* that only ever
+    increase, a zero likely means the data was missing for that session.  This
+    helper propagates the last non-zero value forward so dashboards display
+    smooth, monotonically increasing trend lines.
+    """
+    cumulative_attrs = ("tests", "modules", "lines_changed", "prs")
+    for attr in cumulative_attrs:
+        last_value = 0
+        for sm in metrics:
+            current = getattr(sm, attr, 0)
+            if current == 0 and last_value > 0:
+                setattr(sm, attr, last_value)
+            else:
+                last_value = current
+
+
 def _parse_log(log_path: Path) -> list[SessionMetrics]:
     if not log_path.exists():
         return []

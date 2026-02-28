@@ -21,6 +21,8 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Optional
 
+from src.scoring import score_to_grade as _grade
+
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -96,21 +98,7 @@ def _interpolate(value, rubric):
 # Grade table
 # ---------------------------------------------------------------------------
 
-def _grade(score):
-    if score >= 90:
-        return "A+"
-    elif score >= 83:
-        return "A"
-    elif score >= 75:
-        return "B+"
-    elif score >= 65:
-        return "B"
-    elif score >= 55:
-        return "C"
-    elif score >= 45:
-        return "D"
-    else:
-        return "F"
+# _grade imported from src.scoring above
 
 
 # ---------------------------------------------------------------------------
