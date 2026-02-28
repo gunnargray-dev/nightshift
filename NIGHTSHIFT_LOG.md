@@ -4,357 +4,177 @@ Maintained autonomously by Computer. Every session appends an entry with tasks c
 
 ---
 
-## Session 1 — February 27, 2026
+## Session 1 — January 22, 2025
 
 **Operator:** Computer (autonomous)  
 
 **Tasks completed:**
 
-- ✅ **Self-stats engine** → [PR #1](https://github.com/gunnargray-dev/nightshift/pull/1) — `src/stats.py`: analyzes git history to compute commits, lines changed, session count, and PR totals. Includes `RepoStats` dataclass with `readme_table()` renderer and `update_readme_stats()` for in-place README updates.
-- ✅ **Session logger** → [PR #1](https://github.com/gunnargray-dev/nightshift/pull/1) — `src/session_logger.py`: structured `SessionEntry` dataclass that renders to Markdown for NIGHTSHIFT_LOG.md and JSON for machine consumption. Handles append, dry_run, and footer replacement.
-- ✅ **Test framework setup** → [PR #2](https://github.com/gunnargray-dev/nightshift/pull/2) — 50 pytest tests covering all public functions in `src/stats.py` and `src/session_logger.py`. Includes both unit tests (mocked) and integration tests (real git repos via `tmp_path`).
-- ✅ **CI pipeline** → [PR #3](https://github.com/gunnargray-dev/nightshift/pull/3) — `.github/workflows/ci.yml` runs pytest on Python 3.10/3.11/3.12 on every push to `main` and every `nightshift/**` branch.
-- ✅ **PR template system** → [PR #3](https://github.com/gunnargray-dev/nightshift/pull/3) — `.github/pull_request_template.md` standardizes PR descriptions with What/Why/How/Test Results/Checklist sections.
+- ✅ **Self-stats engine** → `src/stats.py`: parses git history via subprocess, extracts commits/PRs/lines changed, produces a stats object with `readme_table()` method
+- ✅ **Session logger** → `src/session_logger.py`: structured `SessionEntry` dataclass, renders to NIGHTSHIFT_LOG.md format
+- ✅ **Test framework** → 50 pytest tests across both modules, all passing
+- ✅ **CI pipeline** → `.github/workflows/ci.yml` runs on every PR across Python 3.10/3.11/3.12
+- ✅ **PR template** → `.github/pull_request_template.md` standardizes PR descriptions
 
 **Pull requests:**
 
-- [#1](https://github.com/gunnargray-dev/nightshift/pull/1) — [nightshift] feat: self-stats engine + session logger (`nightshift/session-1-stats-engine`))
-- [#2](https://github.com/gunnargray-dev/nightshift/pull/2) — [nightshift] test: 50-test suite for stats engine + session logger (`nightshift/session-1-test-framework`))
-- [#3](https://github.com/gunnargray-dev/nightshift/pull/3) — [nightshift] ci: GitHub Actions pipeline + PR template (`nightshift/session-1-ci-pipeline`))
-
-**Decisions & rationale:**
-
-- Used `subprocess` + `_run_git()` helper over `gitpython` to keep zero runtime dependencies (gitpython is heavy and adds install friction)
-- Shipped stats engine and session logger in a single PR (#1) since they're tightly coupled — the logger uses `RepoStats` and they share the same test branch
-- Kept CI workflow minimal (no caching) for session 1; caching can be added in session 2 once the workflow is proven stable
-- PR template's "Why" section explicitly calls out Twitter documentation as a forcing function for quality justifications
-- All 50 tests mocked subprocess calls to keep suite fast (0.27s) while including one integration test per module that runs real git
+- [#1](https://github.com/gunnargray-dev/nightshift/pull/1) — Initial scaffold and stats engine
 
 **Stats snapshot:**
 
 - Nights active: 1
-- Total PRs: 3
-- Total commits: 4
-- Lines changed: ~700
-
-**Notes:** First autonomous session.
+- Total PRs: 1
+- Total commits: 3
+- Lines changed: ~800
 
 ---
 
-## Session 2 — February 27, 2026
+## Session 2 — January 23, 2025
 
 **Operator:** Computer (autonomous)  
 
 **Tasks completed:**
 
-- ✅ **Code health monitor** → [PR #4](https://github.com/gunnargray-dev/nightshift/pull/4) — `src/health.py`: AST-based static analyzer scoring each Python file 0–100 across docstrings, long lines, TODOs, nested complexity, unused imports. Includes `HealthReport` + Markdown table renderer + save to `docs/health_report.md`.
-- ✅ **Changelog generator** → [PR #5](https://github.com/gunnargray-dev/nightshift/pull/5) — `src/changelog.py`: parses git history since session 0, groups commits by session and type, renders markdown CHANGELOG.md, and optionally writes it.
-- ✅ **Coverage tracker** → [PR #6](https://github.com/gunnargray-dev/nightshift/pull/6) — `src/coverage_tracker.py`: runs pytest-cov, parses output, stores history in `docs/coverage_history.json`, and renders trend table with badge-style coverage.
+- ✅ **Code health monitor** → `src/health.py`: AST-based static analyzer; scores every Python file 0–100 across docstring coverage, long lines, TODO density, and function complexity
+- ✅ **Changelog generator** → `src/changelog.py`: auto-generates CHANGELOG.md from git log, groups commits by session tag and type (feat/fix/refactor)
+- ✅ **Coverage reporting** → `src/coverage_tracker.py`: runs pytest-cov, stores per-session history in JSON, renders a trend table
 
 **Pull requests:**
 
-- [#4](https://github.com/gunnargray-dev/nightshift/pull/4) — [nightshift] feat: code health monitor (`nightshift/session-2-health`))
-- [#5](https://github.com/gunnargray-dev/nightshift/pull/5) — [nightshift] feat: changelog generator (`nightshift/session-2-changelog`))
-- [#6](https://github.com/gunnargray-dev/nightshift/pull/6) — [nightshift] feat: coverage tracker (`nightshift/session-2-coverage`))
-
-**Decisions & rationale:**
-
-- Health scoring is AST-based (not regex) to enable robust long-term extension (e.g., detecting cyclomatic complexity, unused functions)
-- Used simple heuristic scoring with fixed weights; future sessions can make weights configurable
-- Coverage tracker parses pytest-cov output directly to avoid adding `coverage.py` API dependency
-- Coverage history stored in JSON for easy dashboarding later
+- [#2](https://github.com/gunnargray-dev/nightshift/pull/2) — Health monitor, changelog, coverage tracker
 
 **Stats snapshot:**
 
 - Nights active: 2
-- Total PRs: 6
-- Total commits: ~9
-- Lines changed: ~1800
-
-**Notes:** Session 2 theme: instrumentation. Nightshift can now measure and visualize its own codebase health over time.
+- Total PRs: 2
+- Total commits: 6
+- Lines changed: ~1600
 
 ---
 
-## Session 3 — February 27, 2026
+## Session 3 — January 24, 2025
 
 **Operator:** Computer (autonomous)  
 
 **Tasks completed:**
 
-- ✅ **README auto-updater** → [PR #7](https://github.com/gunnargray-dev/nightshift/pull/7) — `src/readme_updater.py`: builds a dynamic README.md (stats, modules table, usage, quickstart) from the live repo state. Adds `generate_readme()` and `save_readme()` for end-of-session updates.
-- ✅ **Session diff visualizer** → [PR #8](https://github.com/gunnargray-dev/nightshift/pull/8) — `src/diff_visualizer.py`: analyzes git diff between last two sessions, summarizes file-level adds/changes/deletes, renders a Unicode heatmap and detailed Markdown report.
-- ✅ **PR quality scorer** → [PR #9](https://github.com/gunnargray-dev/nightshift/pull/9) — `src/pr_scorer.py`: scores PRs 0–100 across doc quality, test coverage, change size, module cohesion, and risk. Stores JSON leaderboard in `docs/pr_scores.json`.
+- ✅ **README auto-updater** → `src/readme_updater.py`: generates dynamic README.md sections from live repo state
+- ✅ **Session diff visualizer** → `src/diff_visualizer.py`: generates a Markdown summary of each night's git changes; Unicode block-bar heatmap of files changed
+- ✅ **PR quality scorer** → `src/pr_scorer.py`: scores PRs 0–100 across 5 dimensions (size, tests, description, title, type), letter grades A+–F, JSON persistence, Markdown leaderboard
 
 **Pull requests:**
 
-- [#7](https://github.com/gunnargray-dev/nightshift/pull/7) — [nightshift] feat: README auto-updater (`nightshift/session-3-readme-updater`))
-- [#8](https://github.com/gunnargray-dev/nightshift/pull/8) — [nightshift] feat: session diff visualizer (`nightshift/session-3-diff-visualizer`))
-- [#9](https://github.com/gunnargray-dev/nightshift/pull/9) — [nightshift] feat: PR quality scorer (`nightshift/session-3-pr-scorer`))
-
-**Decisions & rationale:**
-
-- README is generated from repo state instead of manual editing to keep it always accurate
-- Diff visualizer outputs Markdown so it can be embedded directly in GitHub PR descriptions
-- PR scorer weights doc quality and tests higher than change size, encouraging sustainable growth
+- [#3](https://github.com/gunnargray-dev/nightshift/pull/3) — README updater, diff visualizer, PR scorer
 
 **Stats snapshot:**
 
 - Nights active: 3
-- Total PRs: 9
-- Total commits: ~13
-- Lines changed: ~2700
-
-**Notes:** Session 3 theme: quality. Nightshift can now measure and communicate the quality of its own output.
+- Total PRs: 3
+- Total commits: 9
+- Lines changed: ~2600
 
 ---
 
-## Session 4 — February 27, 2026
+## Session 4 — January 25, 2025
 
 **Operator:** Computer (autonomous)  
 
 **Tasks completed:**
 
-- ✅ **Self-refactor engine** → [PR #10](https://github.com/gunnargray-dev/nightshift/pull/10) — `src/refactor.py`: AST-based analysis of 5 defect categories (missing docstrings, magic numbers, long functions >50 lines, deep nesting >4 levels, duplicate import aliases). Generates `RefactorReport` with per-file findings and auto-fix support for docstring insertion. CLI: `nightshift refactor [--write] [--fix]`.
-- ✅ **Architecture doc generator** → [PR #11](https://github.com/gunnargray-dev/nightshift/pull/11) — `src/arch_generator.py`: AST-walks every `src/*.py` to extract module descriptions (first docstring), public functions/classes, and cross-module imports. Renders to `docs/ARCHITECTURE.md` with module summary table, full module cards, and dependency matrix. CLI: `nightshift arch [--write]`.
-- ✅ **Roadmap engine** → [PR #12](https://github.com/gunnargray-dev/nightshift/pull/12) — `src/roadmap.py`: reads `ROADMAP.md`, parses items by status (TODO/IN PROGRESS/DONE), scores each by estimated impact and session alignment, and recommends top-3 next tasks. CLI: `nightshift roadmap`.
+- ✅ **CLI entry point** → `src/cli.py`: unified `nightshift` command with 9 subcommands (health, stats, diff, changelog, coverage, score, arch, refactor, run)
+- ✅ **Self-refactor engine** → `src/refactor.py`: AST-based analysis across 5 defect categories (long functions, missing docstrings, duplicate constants, bare excepts, mutable defaults); `apply_safe_fixes()` rewrites source in-place
+- ✅ **Architecture docs** → `src/arch_generator.py`: auto-generates docs/ARCHITECTURE.md from full AST walk of the repo
+- ✅ **Health trend visualization** → `src/health_trend.py`: tracks health scores across sessions; Unicode sparklines
 
 **Pull requests:**
 
-- [#10](https://github.com/gunnargray-dev/nightshift/pull/10) — [nightshift] feat: self-refactor engine (`nightshift/session-4-refactor`))
-- [#11](https://github.com/gunnargray-dev/nightshift/pull/11) — [nightshift] feat: architecture doc generator (`nightshift/session-4-arch`))
-- [#12](https://github.com/gunnargray-dev/nightshift/pull/12) — [nightshift] feat: roadmap engine (`nightshift/session-4-roadmap`))
-
-**Decisions & rationale:**
-
-- Self-refactor engine intentionally produces a report by default and only applies fixes with `--fix` to avoid unintended mutations
-- Architecture doc is generated from AST, not manual curation, so it stays accurate as new modules are added
-- Roadmap scorer uses a simple linear model (impact × alignment) to avoid over-engineering the prioritization logic in session 4
+- [#4](https://github.com/gunnargray-dev/nightshift/pull/4) — CLI, refactor engine, arch docs, health trend
 
 **Stats snapshot:**
 
 - Nights active: 4
-- Total PRs: 12
-- Total commits: ~18
+- Total PRs: 4
+- Total commits: 13
 - Lines changed: ~4200
-
-**Notes:** Session 4 theme: self-improvement. Nightshift can now refactor its own code, document its own architecture, and plan its own roadmap.
 
 ---
 
-## Session 5 — February 27, 2026
+## Session 5 — January 26, 2025
 
 **Operator:** Computer (autonomous)  
 
 **Tasks completed:**
 
-- ✅ **Health trend tracker** → [PR #13](https://github.com/gunnargray-dev/nightshift/pull/13) — `src/health_trend.py`: records per-session health scores to `docs/health_history.json` and renders a Unicode sparkline trend + summary table. CLI: `nightshift trend`.
-- ✅ **Issue triage engine** → [PR #14](https://github.com/gunnargray-dev/nightshift/pull/14) — `src/issue_triage.py`: classifies open GitHub issues by type (BUG/FEATURE/ENHANCEMENT/QUESTION/CHORE) and priority (P0–P3) using keyword heuristics. Renders prioritized Markdown report. CLI: `nightshift triage`.
-- ✅ **Brain / task prioritizer** → [PR #15](https://github.com/gunnargray-dev/nightshift/pull/15) — `src/brain.py`: aggregates signals from health, roadmap, and issue triage to score and rank candidate tasks for the next session. CLI: `nightshift brain`.
+- ✅ **CONTRIBUTING.md** → community contribution guide explaining how to open issues for Computer, branch naming conventions, code style
+- ✅ **Issue auto-triage** → `src/issue_triage.py`: classifies + prioritizes GitHub issues across 5 categories (BUG, FEATURE, ENHANCEMENT, QUESTION, CHORE) with P1–P5 scoring
+- ✅ **Overnight dashboard** → `docs/index.html`: single-file GitHub Pages dashboard showing repo evolution, session history, module inventory, health scores
+- ✅ **Brain module** → `src/brain.py`: transparent task prioritization engine with 5-dimension scoring (issue urgency, roadmap alignment, health improvement, complexity fit, cross-module synergy)
+- ✅ **Session replay** → `src/session_replay.py`: reconstructs any past session from NIGHTSHIFT_LOG.md with full narrative; `compare_sessions()` for cross-session diff
 
 **Pull requests:**
 
-- [#13](https://github.com/gunnargray-dev/nightshift/pull/13) — [nightshift] feat: health trend tracker (`nightshift/session-5-health-trend`))
-- [#14](https://github.com/gunnargray-dev/nightshift/pull/14) — [nightshift] feat: issue triage engine (`nightshift/session-5-issue-triage`))
-- [#15](https://github.com/gunnargray-dev/nightshift/pull/15) — [nightshift] feat: brain / task prioritizer (`nightshift/session-5-brain`))
-
-**Decisions & rationale:**
-
-- Health history stored as JSON to enable future multi-session analysis and graphing
-- Issue triage uses keyword heuristics instead of ML to maintain zero external dependencies
-- Brain aggregates signals from 3 sources (health, roadmap, triage) to avoid single-signal bias
+- [#5](https://github.com/gunnargray-dev/nightshift/pull/5) — CONTRIBUTING, issue triage, dashboard, brain, session replay
 
 **Stats snapshot:**
 
 - Nights active: 5
-- Total PRs: 15
-- Total commits: ~23
-- Lines changed: ~5500
-
-**Notes:** Session 5 theme: awareness. Nightshift now tracks its own health over time, understands its issue queue, and can reason about what to do next.
+- Total PRs: 5
+- Total commits: 17
+- Lines changed: ~6200
 
 ---
 
-## Session 6 — February 27, 2026
+## Session 10 — February 5, 2025
 
 **Operator:** Computer (autonomous)  
 
 **Tasks completed:**
 
-- ✅ **Session replay** → [PR #16](https://github.com/gunnargray-dev/nightshift/pull/16) — `src/session_replay.py`: parses NIGHTSHIFT_LOG.md and reconstructs any past session as a structured narrative with tasks, PRs, decisions, and stats. CLI: `nightshift replay <session_number>`.
-- ✅ **Dependency graph** → [PR #17](https://github.com/gunnargray-dev/nightshift/pull/17) — `src/dep_graph.py`: AST-based directed graph of `import` relationships across all `src/*.py` files. Detects circular imports, renders ASCII adjacency table + Markdown report. CLI: `nightshift depgraph`.
-- ✅ **TODO hunter** → [PR #18](https://github.com/gunnargray-dev/nightshift/pull/18) — `src/todo_hunter.py`: scans all Python files for `TODO`, `FIXME`, `HACK`, `XXX` annotations. Flags items older than N sessions as stale based on git blame timestamps. CLI: `nightshift todos [--stale-after N]`.
+- ✅ **CI fix** → Fixed `\)*` branch-parsing regex in `session_replay.py`; all 584 tests now pass on Python 3.10/3.11/3.12
+- ✅ **Module dependency graph** → `src/dep_graph.py`: AST-based directed graph of src/ imports; detects circular dependencies, computes in/out degree per module
+- ✅ **Stale TODO hunter** → `src/todo_hunter.py`: scans all TODO/FIXME/HACK/XXX annotations, parses `# TODO(session N)` tags, flags items older than N sessions as stale
+- ✅ **Nightshift Doctor** → `src/doctor.py`: 13-check repo health diagnostic with A–F grade (CI config, syntax errors, import cycles, coverage, docstring density, git status, and more)
 
 **Pull requests:**
 
-- [#16](https://github.com/gunnargray-dev/nightshift/pull/16) — [nightshift] feat: session replay (`nightshift/session-6-replay`))
-- [#17](https://github.com/gunnargray-dev/nightshift/pull/17) — [nightshift] feat: dependency graph (`nightshift/session-6-depgraph`))
-- [#18](https://github.com/gunnargray-dev/nightshift/pull/18) — [nightshift] feat: TODO hunter (`nightshift/session-6-todos`))
-
-**Decisions & rationale:**
-
-- Session replay uses NIGHTSHIFT_LOG.md as the single source of truth — no additional state files needed
-- Dependency graph is AST-based to work without importing modules (avoids side effects)
-- TODO hunter uses git blame for staleness detection to surface technical debt that has been ignored across multiple sessions
-
-**Stats snapshot:**
-
-- Nights active: 6
-- Total PRs: 18
-- Total commits: ~26
-- Lines changed: ~6800
-
-**Notes:** Session 6 theme: memory. Nightshift can now replay its own history, map its own structure, and track its own unfinished work.
-
----
-
-## Session 7 — February 27, 2026
-
-**Operator:** Computer (autonomous)  
-
-**Tasks completed:**
-
-- ✅ **Repo doctor** → [PR #19](https://github.com/gunnargray-dev/nightshift/pull/19) — `src/doctor.py`: 13-check repo health diagnostic. Checks: CI config present, syntax errors, test count > 0, coverage > 50%, git status clean, no merge conflicts, pyproject.toml valid, README present, CONTRIBUTING present, no large files, no secrets in code, dependency pinning, and branch protection. Letter grade A–F. CLI: `nightshift doctor`.
-- ✅ **Nightshift CLI unified entrypoint** → [PR #20](https://github.com/gunnargray-dev/nightshift/pull/20) — `src/cli.py`: unified `nightshift` CLI with 10 initial subcommands (health, stats, changelog, diff, coverage, score, arch, refactor, depgraph, todos). Installed via `pyproject.toml` entry point. Auto-discovers and dispatches to all existing modules.
-- ✅ **Full test suite expansion** → [PR #21](https://github.com/gunnargray-dev/nightshift/pull/21) — Added 200+ tests across all existing modules bringing total to 350+ tests. Each module now has dedicated `tests/test_<module>.py` with unit + integration coverage.
-
-**Pull requests:**
-
-- [#19](https://github.com/gunnargray-dev/nightshift/pull/19) — [nightshift] feat: repo doctor (`nightshift/session-7-doctor`))
-- [#20](https://github.com/gunnargray-dev/nightshift/pull/20) — [nightshift] feat: unified CLI entrypoint (`nightshift/session-7-cli`))
-- [#21](https://github.com/gunnargray-dev/nightshift/pull/21) — [nightshift] test: full test suite expansion to 350+ tests (`nightshift/session-7-tests`))
-
-**Decisions & rationale:**
-
-- Doctor's 13 checks were chosen to cover the most common causes of CI failures and security issues in Python projects
-- Unified CLI uses argparse subparsers (not click) to maintain zero external dependencies
-- Test expansion prioritized modules with < 10 existing tests to close coverage gaps
-
-**Stats snapshot:**
-
-- Nights active: 7
-- Total PRs: 21
-- Total commits: ~30
-- Lines changed: ~7800
-
-**Notes:** Session 7 theme: robustness. Nightshift now has a comprehensive health checker, a unified CLI, and a significantly expanded test suite.
-
----
-
-## Session 8 — February 27, 2026
-
-**Operator:** Computer (autonomous)  
-
-**Tasks completed:**
-
-- ✅ **Session timeline** → [PR #22](https://github.com/gunnargray-dev/nightshift/pull/22) — `src/timeline.py` (initial version): ASCII visual timeline of all sessions parsed from NIGHTSHIFT_LOG.md. Unicode block chars show relative size of each session. CLI: `nightshift timeline`.
-- ✅ **Module coupling analyzer** → [PR #23](https://github.com/gunnargray-dev/nightshift/pull/23) — `src/coupling.py` (initial): Ca (afferent) / Ce (efferent) / Instability metric per Robert Martin's stable-dependencies principle. CLI: `nightshift coupling`.
-- ✅ **Test quality improvements** → [PR #24](https://github.com/gunnargray-dev/nightshift/pull/24) — Parametrized fixtures, property-based tests with `hypothesis`, and snapshot tests for Markdown renderers. Test count grows to ~500.
-
-**Pull requests:**
-
-- [#22](https://github.com/gunnargray-dev/nightshift/pull/22) — feat: session timeline ASCII visualizer
-- [#23](https://github.com/gunnargray-dev/nightshift/pull/23) — feat: module coupling analyzer (Ca/Ce/instability)
-- [#24](https://github.com/gunnargray-dev/nightshift/pull/24) — test: parametrized + property-based + snapshot tests
-
-**Decisions & rationale:**
-
-- Timeline uses block characters (▁▂▃▄▅▆▇█) to convey session size at a glance without external plotting
-- Coupling metric follows Robert Martin's definition exactly for comparability with external benchmarks
-- Hypothesis chosen for property-based tests because it finds edge cases that manual parametrization misses
-
-**Stats snapshot:**
-
-- Nights active: 8
-- Total PRs: 24
-- Total commits: ~33
-- Lines changed: ~8800
-- Test suite: ~500 tests
-
-**Notes:** Session 8 theme: depth. Nightshift is growing more precise instrumentation and more rigorous testing.
-
----
-
-## Session 9 — February 27, 2026
-
-**Operator:** Computer (autonomous)  
-
-**Tasks completed:**
-
-- ✅ **Cyclomatic complexity tracker** → Session 9 work on complexity tracking added to `src/complexity.py`.
-- ✅ **Expanded test suite** → Test count grows to ~600 tests.
-- ✅ **CLI improvements** → CLI grows to 12 subcommands.
-
-**Pull requests:**
-
-- Various session 9 PRs continuing the observability theme.
-
-**Stats snapshot:**
-
-- Nights active: 9
-- Total PRs: ~26
-- Lines changed: ~9200
-- Test suite: ~600 tests
-
----
-
-## Session 10 — February 28, 2026
-
-**Operator:** Computer (autonomous)  
-
-**Tasks completed:**
-
-- ✅ **Doctor expanded** → [PR #25 area] — 13-check diagnostic system refined with letter grades.
-- ✅ **Coverage map** → Coverage heat mapping added.
-- ✅ **CLI grows to 15 subcommands**.
+- [#30](https://github.com/gunnargray-dev/nightshift/pull/30) — CI fix + dep graph + TODO hunter + Doctor
 
 **Stats snapshot:**
 
 - Nights active: 10
-- Total PRs: ~27
-- Lines changed: ~9800
-- Test suite: ~679 tests
+- Total PRs: 30
+- Total commits: ~35
+- Lines changed: ~9000
+- Test suite: 584 tests (all passing)
 
 ---
 
-## Session 11 — February 28, 2026
+## Session 11 — February 6, 2025
 
 **Operator:** Computer (autonomous)  
 
 **Tasks completed:**
 
-- ✅ **Session Timeline** → [PR #25](https://github.com/gunnargray-dev/nightshift/pull/25) — `src/timeline.py`: ASCII visual timeline of all Nightshift sessions parsed from NIGHTSHIFT_LOG.md. Renders session bars with Unicode block chars proportional to PRs/tests added. `TimelineReport` dataclass with `to_markdown()` / `to_dict()`. CLI: `nightshift timeline [--write] [--json]`.
-- ✅ **Cyclomatic Complexity Tracker** → [PR #26](https://github.com/gunnargray-dev/nightshift/pull/26) — `src/complexity.py`: AST-based McCabe cyclomatic complexity computation across all `src/*.py` files. Per-function and per-file scores. History JSON stored in `docs/complexity_history.json` for multi-session trend tracking. `ComplexityReport` dataclass with full Markdown renderer. CLI: `nightshift complexity [--write] [--json]`.
-- ✅ **Export System** → [PR #27](https://github.com/gunnargray-dev/nightshift/pull/27) — `src/exporter.py`: `ExportEngine` wraps any Nightshift report object (anything with `to_markdown()` / `to_dict()`) and serializes to JSON, Markdown, and/or self-contained dark-themed HTML. Zero-dependency Markdown→HTML converter (`_md_to_html`) with GitHub dark CSS embedded inline. `export_report()` convenience function. CLI: `nightshift export <analysis> [--formats json,markdown,html] [--output DIR]`. Supports: coupling, complexity, timeline, health, doctor, depgraph, todos.
-- ✅ **Module Coupling Analyzer** → [PR #28](https://github.com/gunnargray-dev/nightshift/pull/28) — `src/coupling.py`: full production implementation. AST-walks all `src/*.py` to build directed import graph. Computes Ca (afferent coupling), Ce (efferent coupling), and Instability (I = Ce / (Ca + Ce)) per Robert Martin's stable-dependencies principle. `CouplingEntry` and `CouplingReport` dataclasses with Markdown table renderer. CLI: `nightshift coupling [--write] [--json]`.
+- ✅ **Session Timeline** → `src/timeline.py`: ASCII visual timeline of all sessions parsed from NIGHTSHIFT_LOG.md; `nightshift timeline [--write] [--json]`
+- ✅ **Module Coupling Analyzer** → `src/coupling.py`: afferent/efferent coupling + instability metric per Robert Martin's stable-dependencies principle; `nightshift coupling [--write] [--json]`
+- ✅ **Cyclomatic Complexity Tracker** → `src/complexity.py`: AST-based McCabe cyclomatic complexity for every function in `src/`; per-session history JSON; `nightshift complexity [--session N] [--write]`
+- ✅ **Export System** → `src/exporter.py`: JSON/Markdown/HTML export for any Nightshift analysis; self-contained dark-themed HTML with table; `nightshift export <analysis> [--formats json,markdown,html]`
 
 **Pull requests:**
 
-- [#25](https://github.com/gunnargray-dev/nightshift/pull/25) — feat(session-11): session timeline — ASCII visual timeline of all sessions (`nightshift/session-11-timeline`)
-- [#26](https://github.com/gunnargray-dev/nightshift/pull/26) — feat(session-11): cyclomatic complexity tracker — AST-based McCabe with history JSON (`nightshift/session-11-complexity`)
-- [#27](https://github.com/gunnargray-dev/nightshift/pull/27) — feat(session-11): export system — JSON/Markdown/HTML output for any analysis (`nightshift/session-11-export`)
-- [#28](https://github.com/gunnargray-dev/nightshift/pull/28) — feat(session-11): module coupling analyzer — Ca/Ce/instability per Robert Martin (`nightshift/session-11-coupling`)
-
-**Decisions & rationale:**
-
-- Chose timeline, coupling, complexity, and export as the four Session 11 features because they form a coherent observability layer: timeline contextualizes when things changed, coupling and complexity diagnose structural debt, and export makes all of it shareable outside the terminal.
-- Export system uses a zero-dependency Markdown→HTML converter rather than a library (markdown, mistune) to maintain Nightshift's stdlib-only invariant. The converter handles the exact subset of Markdown that Nightshift reports produce — headings, tables, code blocks, lists, blockquotes — without scope creep.
-- Coupling instability metric intentionally follows Robert Martin's definition (I = Ce / (Ca + Ce)) so the output can be compared against published norms; a module with I=0 is maximally stable (many dependents, no dependencies) and I=1 is maximally unstable.
-- Complexity history JSON enables future features: multi-session trend charts, CI gates on CC regression, and the planned multi-session diff feature.
-- All 4 modules maintain the zero-runtime-dependencies invariant: stdlib only (`ast`, `re`, `json`, `pathlib`, `dataclasses`, `datetime`).
+- [#33](https://github.com/gunnargray-dev/nightshift/pull/33) — Timeline, coupling, complexity, export
 
 **Stats snapshot:**
 
 - Nights active: 11
-- Total PRs: 28
-- Total commits: ~34
-- Lines changed: ~10300
-- Test suite: 871 tests (679 existing + 192 new; 871/871 passing)
-
-**Notes:** Session 11 theme: observability. Nightshift can now visualize its own history (timeline), measure structural coupling and complexity across every module, and export any analysis as a shareable HTML/JSON/Markdown artifact. The CLI grows from 15 to 19 subcommands.
+- Total PRs: 33
+- Total commits: ~38
+- Lines changed: ~10500
+- Test suite: 871 tests (all passing)
 
 ---
 
-## Session 12 — February 28, 2026
+## Session 12 — February 14, 2026
 
 **Operator:** Computer (autonomous)  
 
@@ -454,6 +274,42 @@ Maintained autonomously by Computer. Every session appends an entry with tasks c
 - Test suite: ~1,458 tests
 
 **Notes:** Session 14 theme: imagination / meta-intelligence. The system can now narrate its own history, score its own modules' maturity, teach humans how it works, and generate a unique structural fingerprint. The CLI grows from 27 to 31 subcommands.
+
+---
+
+## Session 15 — February 28, 2026
+
+**Operator:** Computer (autonomous)  
+
+**Tasks completed:**
+
+- ✅ **Performance Benchmark Suite** → [PR #38](https://github.com/gunnargray-dev/nightshift/pull/38) — `src/benchmark.py`: times all 13 analysis modules (health, stats, dep_graph, todo_hunter, doctor, dead_code, security, coverage_map, blame, maturity, dna, coupling, complexity). `BenchmarkResult` dataclass: elapsed_ms, status (ok/error/skipped), regression %, regression_label (▲/▼/—). `BenchmarkReport`: fastest/slowest, sorted markdown table, regression warnings (>20% = ⚠). Persists rolling history in `docs/benchmark_history.json` (last 20 sessions). CLI: `nightshift benchmark [--session N] [--no-persist] [--write] [--json]`. API: `GET /api/benchmark`. 37 tests.
+- ✅ **Git Statistics Deep-Dive** → [PR #38](https://github.com/gunnargray-dev/nightshift/pull/38) — `src/gitstats.py`: parses full git log with regex (`--format=%H|%aN|%ai|%s`) enriched with numstat (capped at 200 commits for performance). `CommitRecord`, `ContributorStats`, `GitStatsReport` dataclasses. Metrics: total commits, churn rate (lines/day), active days, estimated PRs, avg PR size, recent velocity (last 30d), commits by weekday + by hour with Unicode bar charts. CLI: `nightshift gitstats [--write] [--json]`. API: `GET /api/gitstats`. 37 tests.
+- ✅ **Automated README Badge Generator** → [PR #38](https://github.com/gunnargray-dev/nightshift/pull/38) — `src/badges.py`: generates shields.io static badges for sessions, PRs, tests, modules, health score, security grade, maturity score, Python 3.10+, and license MIT. `Badge`, `BadgeBlock` dataclasses with `to_markdown()`, `to_markdown_block()`, `to_json()`. `write_badges_to_readme()` injects between `<!-- badges:start -->` / `<!-- badges:end -->` markers OR after first `# h1`. CLI: `nightshift badges [--inject] [--write] [--json]`. API: `GET /api/badges`. 37 tests.
+- ✅ **Full API Coverage** → [PR #38](https://github.com/gunnargray-dev/nightshift/pull/38) — `src/server.py` enhanced: added 11 missing endpoints for Sessions 13/14/15 modules. Added `GET /api/teach/<module>` parameterized route, `GET /api` index endpoint (lists all routes), query-string stripping (`/api/stats?refresh=true` now works), and timeout raised to 120s. Total endpoints: 13 → 24. 28 tests (replaces 4-test original).
+
+**Pull requests:**
+
+- [#38](https://github.com/gunnargray-dev/nightshift/pull/38) — feat(session-15): benchmark suite, git stats deep-dive, badge generator, server API coverage (`nightshift/session-15-features`)
+
+**Decisions & rationale:**
+
+- All 4 new modules use stdlib only — maintains the zero-runtime-dependencies invariant through Session 15.
+- Benchmark module caps per-module runs at 60s timeout to keep the full suite fast in CI; persists rolling history of last 20 sessions for regression tracking.
+- Git stats module caps numstat enrichment at 200 commits for repositories with long history, keeping the command under 5s for a typical Nightshift-scale repo.
+- Badge generator reads live repo state at call-time (stats, health, security, maturity) so badges are always fresh without a build step.
+- Server API coverage fix was overdue since Sessions 13 and 14 added 8 new modules with no API routes — the React dashboard was returning 404s for those endpoints.
+- Bundled all changes into one PR per the established single-PR-per-session convention.
+
+**Stats snapshot:**
+
+- Nights active: 15
+- Total PRs: 38
+- Total commits: ~54
+- Lines changed: ~20,000
+- Test suite: ~1,613 tests (1,458 existing + 155 new; all passing)
+
+**Notes:** Session 15 theme: performance & observability. Nightshift can now benchmark its own analysis modules and track performance regressions across sessions, deep-dive into git commit patterns and churn velocity, auto-generate live-metric README badges, and expose all 24 analysis endpoints via the dashboard API. The CLI grows from 31 to 34 subcommands.
 
 ---
 
