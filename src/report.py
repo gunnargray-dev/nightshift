@@ -27,6 +27,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from src.scoring import grade_colour as _grade_colour, score_colour as _score_colour, score_to_grade as _score_to_grade
+
 
 @dataclass
 class ReportSection:
@@ -64,26 +66,7 @@ class ExecutiveReport:
         return _render_html(self)
 
 
-def _grade_colour(grade: str) -> str:
-    return {
-        "A+": "#00c853", "A": "#00c853", "A-": "#00e676",
-        "B+": "#76ff03", "B": "#76ff03", "B-": "#c6ff00",
-        "C+": "#ffea00", "C": "#ffea00", "C-": "#ffd600",
-        "D+": "#ff9100", "D": "#ff9100", "D-": "#ff6d00",
-        "F": "#ff1744",
-    }.get(grade, "#78909c")
-
-
-def _score_colour(score: float) -> str:
-    if score >= 90:
-        return "#00c853"
-    if score >= 75:
-        return "#76ff03"
-    if score >= 60:
-        return "#ffea00"
-    if score >= 40:
-        return "#ff9100"
-    return "#ff1744"
+# _grade_colour, _score_colour and _score_to_grade are imported from src.scoring
 
 
 def _render_section(sec: ReportSection) -> str:
@@ -223,22 +206,7 @@ def _safe_score(d: Optional[dict], *keys: str) -> Optional[float]:
         return None
 
 
-def _score_to_grade(score: Optional[float]) -> str:
-    if score is None:
-        return ""
-    if score >= 95: return "A+"
-    if score >= 90: return "A"
-    if score >= 85: return "A-"
-    if score >= 80: return "B+"
-    if score >= 75: return "B"
-    if score >= 70: return "B-"
-    if score >= 65: return "C+"
-    if score >= 60: return "C"
-    if score >= 55: return "C-"
-    if score >= 50: return "D+"
-    if score >= 45: return "D"
-    if score >= 40: return "D-"
-    return "F"
+# _score_to_grade imported from src.scoring above
 
 
 def _html_table_from_list(rows: list[dict], columns: list[str]) -> str:

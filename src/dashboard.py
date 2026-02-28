@@ -64,7 +64,9 @@ def _bar(value: float, max_value: float = 100.0, width: int = 20) -> str:
     pct = min(max(value / max_value, 0.0), 1.0)
     filled = int(pct * width)
     empty = width - filled
-    return f"[█{'\u2588' * (filled - 1) if filled > 0 else ''}░{'\u2591' * (empty - 1) if empty > 0 else ''}] {value:.0f}/{max_value:.0f}"
+    inner_fill = "\u2588" * (filled - 1) if filled > 0 else ""
+    inner_empty = "\u2591" * (empty - 1) if empty > 0 else ""
+    return f"[\u2588{inner_fill}\u2591{inner_empty}] {value:.0f}/{max_value:.0f}"
 
 
 # ---------------------------------------------------------------------------

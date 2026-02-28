@@ -28,6 +28,17 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Optional
 
+from src.scoring import (
+    score_to_grade as _score_to_grade_full,
+    score_to_status as _score_to_status,
+    score_to_overall_status as _overall_status,
+)
+
+
+def _grade(score: float) -> str:
+    """Return a simple A/B/C/D/F grade (no +/- variants) for *score*."""
+    return _score_to_grade_full(score, simple=True)
+
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -46,9 +57,11 @@ class AuditSection:
     detail: Optional[str] = None  # optional extra detail lines
 
     def weighted_contribution(self) -> float:
+        """Return *score* × *weight* — this section's contribution to the composite."""
         return self.score * self.weight
 
     def to_dict(self) -> dict:
+        """Serialise this section to a plain dictionary."""
         return asdict(self)
 
 
@@ -66,17 +79,21 @@ class AuditReport:
     # convenience accessors
     @property
     def passes(self) -> list[AuditSection]:
+        """Return all sections whose status is ``"pass"``."""
         return [s for s in self.sections if s.status == "pass"]
 
     @property
     def warnings(self) -> list[AuditSection]:
+        """Return all sections whose status is ``"warn"``."""
         return [s for s in self.sections if s.status == "warn"]
 
     @property
     def failures(self) -> list[AuditSection]:
+        """Return all sections whose status is ``"fail"``."""
         return [s for s in self.sections if s.status == "fail"]
 
     def to_dict(self) -> dict:
+        """Serialise the full report to a plain dictionary (JSON-safe)."""
         d = asdict(self)
         d["passes"] = len(self.passes)
         d["warnings"] = len(self.warnings)
@@ -84,9 +101,11 @@ class AuditReport:
         return d
 
     def to_json(self) -> str:
+        """Return the report serialised as a pretty-printed JSON string."""
         return json.dumps(self.to_dict(), indent=2)
 
     def to_markdown(self) -> str:
+        """Render the full audit report as a Markdown document."""
         lines: list[str] = []
         grade_emoji = {
             "A": "🏆", "B": "✅", "C": "⚠️", "D": "🔶", "F": "❌",
@@ -184,32 +203,7 @@ def _complexity_to_score(avg_cc: float) -> float:
     return max(0.0, 25.0 - (avg_cc - 20) * 2.5)
 
 
-def _score_to_status(score: float, warn_threshold: float = 70.0, fail_threshold: float = 50.0) -> str:
-    if score >= warn_threshold:
-        return "pass"
-    if score >= fail_threshold:
-        return "warn"
-    return "fail"
-
-
-def _grade(score: float) -> str:
-    if score >= 90:
-        return "A"
-    if score >= 75:
-        return "B"
-    if score >= 60:
-        return "C"
-    if score >= 45:
-        return "D"
-    return "F"
-
-
-def _overall_status(score: float) -> str:
-    if score >= 75:
-        return "healthy"
-    if score >= 50:
-        return "needs-attention"
-    return "critical"
+# _score_to_status: imported from src.scoring as _score_to_status
 
 
 # ---------------------------------------------------------------------------

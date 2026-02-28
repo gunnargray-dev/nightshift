@@ -17,6 +17,7 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Optional
 
+from src.scoring import score_to_grade as _grade
 
 @dataclass
 class TestFileScore:
@@ -181,18 +182,7 @@ class _TestFileVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
 
-def _grade(score: float) -> str:
-    if score >= 95: return "A+"
-    if score >= 90: return "A"
-    if score >= 85: return "A-"
-    if score >= 80: return "B+"
-    if score >= 75: return "B"
-    if score >= 70: return "B-"
-    if score >= 65: return "C+"
-    if score >= 60: return "C"
-    if score >= 50: return "C-"
-    if score >= 40: return "D"
-    return "F"
+# _grade imported from src.scoring above
 
 
 def _score_test_file(path: Path, module_name: str) -> TestFileScore:

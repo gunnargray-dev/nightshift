@@ -46,16 +46,18 @@ class BenchmarkResult:
 
     @property
     def regression_label(self) -> str:
+        """Human-readable regression string, e.g. ``"\u25b2 +35%  \u26a0"`` or ``"—"``."""
         r = self.regression
         if r is None:
-            return "—"
+            return "\u2014"
         if r > 20:
-            return f"▲ +{r:.0f}%  ⚠"
+            return f"\u25b2 +{r:.0f}%  \u26a0"
         if r < -10:
-            return f"▼ {r:.0f}%"
+            return f"\u25bc {r:.0f}%"
         return f"{r:+.0f}%"
 
     def to_dict(self) -> dict:
+        """Serialise this result to a plain dictionary including derived fields."""
         d = asdict(self)
         d["regression"] = self.regression
         d["regression_label"] = self.regression_label
@@ -75,21 +77,25 @@ class BenchmarkReport:
 
     @property
     def regressions(self) -> list[BenchmarkResult]:
+        """Return all results where timing regressed more than 20% vs baseline."""
         return [r for r in self.results if r.regression is not None and r.regression > 20]
 
     @property
     def fastest(self) -> Optional[BenchmarkResult]:
+        """Return the result with the shortest elapsed time (``status == "ok"`` only)."""
         ok = [r for r in self.results if r.status == "ok"]
         return min(ok, key=lambda r: r.elapsed_ms) if ok else None
 
     @property
     def slowest(self) -> Optional[BenchmarkResult]:
+        """Return the result with the longest elapsed time (``status == "ok"`` only)."""
         ok = [r for r in self.results if r.status == "ok"]
         return max(ok, key=lambda r: r.elapsed_ms) if ok else None
 
     # ---- serialisation --------------------------------------------------
 
     def to_dict(self) -> dict:
+        """Serialise the report to a plain dictionary (JSON-safe)."""
         return {
             "results": [r.to_dict() for r in self.results],
             "total_ms": self.total_ms,
@@ -99,9 +105,11 @@ class BenchmarkReport:
         }
 
     def to_json(self) -> str:
+        """Serialise the report to a pretty-printed JSON string."""
         return json.dumps(self.to_dict(), indent=2)
 
     def to_markdown(self) -> str:
+        """Render the benchmark report as a Markdown table."""
         lines: list[str] = ["# Nightshift Performance Benchmark\n"]
         if self.timestamp:
             lines.append(f"*Recorded: {self.timestamp}*\n")
