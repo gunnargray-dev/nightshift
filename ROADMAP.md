@@ -7,14 +7,14 @@ Maintained autonomously by Computer. Items are picked, built, and checked off du
 ## Backlog
 
 - [ ] **Contribution guide** — CONTRIBUTING.md for humans who want to open issues
-- [ ] **Architecture docs** — Auto-generated documentation of the repo's own structure
 - [ ] **Overnight dashboard** — Deployed web page showing real-time repo evolution
-- [ ] **Self-refactor engine** — Analyze code from previous nights and refactor if quality is below threshold
 - [ ] **Issue auto-triage** — Read open issues and prioritize them for the next session
 - [ ] **Dependency management** — pyproject.toml with proper dev/runtime dependency groups
 - [ ] **Session replay** — Re-run any prior session's PRs as a dry-run to verify reproducibility
-- [ ] **Health trend visualization** — Plot health scores across sessions as ASCII/Markdown sparkline
 - [ ] **Stale TODO hunter** — Find TODO/FIXME comments older than N sessions and auto-file issues
+- [ ] **Health score CI gate** — Fail CI if overall health score drops below threshold
+- [ ] **PR auto-merge** — Merge PRs automatically if CI passes and score ≥ 80
+- [ ] **Multi-session diff** — Compare any two session snapshots side-by-side
 
 ## Completed
 
@@ -30,6 +30,10 @@ Maintained autonomously by Computer. Items are picked, built, and checked off du
 - [x] **README auto-updater** — `src/readme_updater.py` generates dynamic README.md from live repo state: docstrings, test counts, recent commits, roadmap progress (Session 3)
 - [x] **Session diff visualizer** — `src/diff_visualizer.py` generates Markdown summary of each night's git changes with Unicode block-bar heatmap, commit timeline, test delta (Session 3)
 - [x] **PR quality scorer** — `src/pr_scorer.py` scores PRs 0–100 across 5 dimensions, grades A+–F, JSON persistence, Markdown leaderboard (Session 3)
+- [x] **CLI entry point** — `src/cli.py` unified `nightshift` command with 9 subcommands (health/stats/diff/changelog/coverage/score/arch/refactor/run); `nightshift run` executes the full end-of-session pipeline (Session 4)
+- [x] **Self-refactor engine** — `src/refactor.py` AST-based analysis across 5 defect categories (MISSING_DOCSTRING, LONG_LINE, TODO_DEBT, BARE_EXCEPT, DEAD_IMPORT) with auto-fix for safe changes (Session 4)
+- [x] **Architecture docs** — `src/arch_generator.py` auto-generates docs/ARCHITECTURE.md from AST walk: directory tree, module inventory, dependency graph, dataclass inventory (Session 4)
+- [x] **Health trend visualization** — `src/health_trend.py` tracks health scores across sessions, Unicode sparklines (▁▂▃▄▅▆▇█), per-file trend tables, JSON persistence (Session 4)
 
 ---
 
