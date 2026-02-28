@@ -22,10 +22,10 @@ Every morning, the human maintainer wakes up to a diff.
 
 | Metric | Count |
 |--------|-------|
-| Nights active | 15 |
-| Total PRs | 38 |
-| Total commits | 54 |
-| Lines changed | 20000 |
+| Nights active | 16 |
+| Total PRs | 39 |
+| Total commits | ~60 |
+| Lines changed | ~22,000 |
 
 *Stats are updated by Computer each session.*
 
@@ -41,7 +41,7 @@ Every morning, the human maintainer wakes up to a diff.
 | `src/readme_updater.py` | Generates dynamic README.md from live repo state |
 | `src/diff_visualizer.py` | Markdown summary of each night's git changes with block-bar heatmap |
 | `src/pr_scorer.py` | Scores PRs 0–100 across 5 dimensions, grades A+–F, Markdown leaderboard |
-| `src/cli.py` | Unified `nightshift` CLI with 34 subcommands |
+| `src/cli.py` | Unified `nightshift` CLI with 38 subcommands |
 | `src/refactor.py` | Self-refactor engine: AST analysis across 5 defect categories with auto-fix |
 | `src/arch_generator.py` | Auto-generates docs/ARCHITECTURE.md from AST walk of the repo |
 | `src/health_trend.py` | Tracks health scores across sessions; Unicode sparklines |
@@ -63,53 +63,27 @@ Every morning, the human maintainer wakes up to a diff.
 | `src/dead_code.py` | AST-based dead code detector: unused functions, classes, and imports |
 | `src/security.py` | Security audit: 10 checks for common Python anti-patterns, letter grade A–F |
 | `src/coverage_map.py` | Test coverage heat map: cross-references src/X.py vs tests/test_X.py via AST |
-| `src/story.py` | Reads NIGHTSHIFT_LOG.md and generates a prose narrative of repo evolution with chapters per session |
-| `src/maturity.py` | Scores each module 0–100 across 5 dimensions (Tests, Docs, Complexity, Age, Coupling); SEED→VETERAN tiers |
-| `src/teach.py` | AST-based tutorial generator: produces a full written tutorial for any module in the repo |
-| `src/dna.py` | 6-channel visual DNA fingerprint of the repo with 8-char hex digest and per-file sparklines |
-| `src/benchmark.py` | Performance benchmark suite: times all 13 analysis modules, tracks regressions across sessions |
-| `src/gitstats.py` | Git statistics deep-dive: churn rate, commit velocity, contributor stats, weekday/hour bar charts |
-| `src/badges.py` | Automated README badge generator: shields.io badges from live repo metrics, injects into README |
+| `src/story.py` | Narrative prose summary of the repo's evolution from NIGHTSHIFT_LOG.md |
+| `src/maturity.py` | Module maturity scorer: tests, docs, complexity, age, coupling — 0–100 |
+| `src/teach.py` | Tutorial generator: AST-based explanation of any module's structure and API |
+| `src/dna.py` | Repo DNA fingerprint: 6-channel visual signature + deterministic hex digest |
+| `src/benchmark.py` | Performance benchmark suite for all analysis modules with regression tracking |
+| `src/gitstats.py` | Git statistics deep-dive: churn, velocity, commit frequency, PR size |
+| `src/badges.py` | Shields.io README badge generator from live repo metrics |
+| `src/server.py` | HTTP API server: 27 JSON endpoints for all analysis modules |
+| `src/audit.py` | Comprehensive repo audit: weighted composite A–F grade (health+security+deadcode+coverage+complexity) |
+| `src/semver.py` | Semantic version analyzer: Conventional Commits → major/minor/patch bump recommendation |
+| `src/init_cmd.py` | Bootstrap scaffolding: idempotent project init with nightshift.toml, logs, CI workflow |
+| `src/predict.py` | Predictive session planner: five-signal ranking of which modules need attention next |
 
-## Usage
+## Tests
 
-```bash
-# After pip install -e .
-nightshift health        # code health score
-nightshift stats         # repo stats
-nightshift changelog     # render changelog
-nightshift diff          # last session diff
-nightshift coverage      # coverage trend
-nightshift score         # PR score leaderboard
-nightshift arch --write  # regenerate docs/ARCHITECTURE.md
-nightshift refactor      # refactor report
-nightshift depgraph      # module dependency graph
-nightshift todos         # scan stale TODOs
-nightshift doctor        # repo health diagnostic (A-F grade)
-nightshift timeline      # ASCII visual session timeline
-nightshift coupling      # module coupling (Ca/Ce/instability)
-nightshift complexity    # cyclomatic complexity tracker
-nightshift export coupling --formats json,html  # export any analysis
-nightshift config        # show/write nightshift.toml
-nightshift compare 11 12 # diff two sessions side-by-side
-nightshift dashboard     # rich terminal dashboard
-nightshift deps          # check dependency freshness
-nightshift blame         # human vs AI attribution
-nightshift deadcode      # detect unused code
-nightshift security      # security audit (A-F grade)
-nightshift coveragemap   # test coverage heat map
-nightshift story         # prose narrative of repo evolution
-nightshift maturity      # module maturity scores (SEED→VETERAN)
-nightshift teach <mod>   # generate tutorial for any module
-nightshift dna           # repo DNA fingerprint with hex digest
-nightshift benchmark     # performance benchmark all modules
-nightshift gitstats      # git statistics deep-dive (churn, velocity)
-nightshift badges        # generate shields.io README badges
-nightshift run           # full pipeline
+The test suite lives in `tests/`. Every module has a corresponding test file. All tests use stdlib only (no mocking frameworks, no fixtures beyond `tmp_path`).
+
+```
+pytest tests/
 ```
 
----
+## License
 
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+MIT
