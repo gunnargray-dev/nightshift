@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🌙 Nightshift — Repo Evolution Dashboard</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --bg2: #161b22;
+      --bg3: #1c2129;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --accent2: #bc8cff;
+      --green: #3fb950;
+      --yellow: #d29922;
+      --red: #f85149;
+      --orange: #db6d28;
+      --purple: #bc8cff;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .header {
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      padding: 20px 32px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .header .moon { font-size: 32px; }
+    .header h1 { font-size: 22px; font-weight: 700; color: var(--text); }
+    .header .subtitle { color: var(--muted); font-size: 13px; margin-top: 2px; }
+    .header-right { margin-left: auto; text-align: right; }
+    .header-right a {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 13px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .header-right a:hover { text-decoration: underline; }
+    .main { max-width: 1280px; margin: 0 auto; padding: 32px; }
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+    .stat-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+    }
+    .stat-card .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+    .stat-card .value { font-size: 32px; font-weight: 700; margin-top: 4px; color: var(--accent); }
+    .stat-card .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .section { margin-bottom: 32px; }
+    .section-title {
+      font-size: 16px; font-weight: 600; color: var(--text);
+      margin-bottom: 16px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+    @media (max-width: 768px) { .grid-2 { grid-template-columns: 1fr; } }
+    .card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .card-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .05em;
+    }
+    .card-body { padding: 16px; }
+    .timeline { list-style: none; }
+    .timeline li {
+      display: flex; gap: 12px; padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .timeline li:last-child { border-bottom: none; }
+    .timeline .session-badge {
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 20px; padding: 2px 10px;
+      font-size: 11px; font-weight: 700; color: var(--accent);
+      white-space: nowrap; height: fit-content; margin-top: 2px;
+    }
+    .timeline .info { flex: 1; }
+    .timeline .t-title { font-size: 13px; color: var(--text); }
+    .timeline .t-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .timeline .t-prs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+    .timeline .pr-chip {
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 4px; padding: 1px 6px; font-size: 11px; color: var(--accent);
+      text-decoration: none;
+    }
+    .bar-chart { }
+    .bar-row {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 10px;
+    }
+    .bar-label { font-size: 12px; color: var(--muted); width: 100px; text-align: right; white-space: nowrap; }
+    .bar-track { flex: 1; background: var(--bg3); border-radius: 4px; height: 14px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 4px; }
+    .bar-val { font-size: 11px; color: var(--muted); width: 50px; }
+    .module-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+    }
+    .module-chip {
+      background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 12px;
+    }
+    .module-chip .m-name { font-size: 13px; font-weight: 600; color: var(--accent2); }
+    .module-chip .m-file { font-size: 11px; color: var(--muted); margin-top: 2px; font-family: monospace; }
+    .module-chip .m-desc { font-size: 12px; color: var(--text); margin-top: 6px; }
+    .module-chip .m-session { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 8px 6px; border-bottom: 1px solid var(--border); }
+    td { padding: 8px 6px; border-bottom: 1px solid var(--border); }
+    tr:last-child td { border-bottom: none; }
+    .badge { display: inline-block; border-radius: 4px; padding: 1px 6px; font-size: 11px; font-weight: 700; }
+    .badge-green { background: rgba(63,185,80,.2); color: var(--green); }
+    .badge-yellow { background: rgba(210,153,34,.2); color: var(--yellow); }
+    footer { border-top: 1px solid var(--border); text-align: center; padding: 20px; color: var(--muted); font-size: 12px; }
+    footer a { color: var(--accent); text-decoration: none; }
+    .live-dot { display: inline-block; width: 8px; height: 8px; background: var(--green); border-radius: 50%; margin-right: 4px; animation: blink 2s infinite; }
+    @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:.3; } }
+  </style>
+</head>
+<body>
+<div class="header">
+  <span class="moon">🌙</span>
+  <div>
+    <h1>Nightshift Dashboard</h1>
+    <div class="subtitle"><span class="live-dot"></span>Autonomous repo evolution tracker &mdash; updated each session</div>
+  </div>
+  <div class="header-right">
+    <a href="https://github.com/gunnargray-dev/nightshift" target="_blank">&#x2197; gunnargray-dev/nightshift</a>
+  </div>
+</div>
+<div class="main">
+  <div class="stats-row">
+    <div class="stat-card"><div class="label">Sessions Run</div><div class="value">5</div><div class="sub">Nights active</div></div>
+    <div class="stat-card"><div class="label">Total PRs</div><div class="value" style="color:var(--green)">17</div><div class="sub">Merged autonomously</div></div>
+    <div class="stat-card"><div class="label">Source Modules</div><div class="value" style="color:var(--purple)">14</div><div class="sub">in src/</div></div>
+    <div class="stat-card"><div class="label">Test Suite</div><div class="value" style="color:var(--yellow)">510+</div><div class="sub">pytest tests</div></div>
+    <div class="stat-card"><div class="label">Lines Changed</div><div class="value" style="color:var(--orange)">5K+</div><div class="sub">Across all sessions</div></div>
+  </div>
+  <div class="grid-2">
+    <div class="section">
+      <div class="section-title"><span>📅</span> Session History</div>
+      <div class="card">
+        <div class="card-header">Completed Sessions</div>
+        <div class="card-body" style="padding:0 16px;">
+          <ul class="timeline">
+            <li><span class="session-badge">S0</span><div class="info"><div class="t-title">Initial Scaffold</div><div class="t-meta">Feb 27, 2026 &mdash; README, rules, roadmap, directory structure</div></div></li>
+            <li><span class="session-badge">S1</span><div class="info"><div class="t-title">Self-Stats Engine + Session Logger + CI</div><div class="t-meta">Feb 27, 2026 &mdash; 3 PRs &mdash; stats.py, session_logger.py, 50 tests, GitHub Actions</div><div class="t-prs"><a class="pr-chip" href="https://github.com/gunnargray-dev/nightshift/pull/1">#1</a><a class="pr-chip" href="https://github.com/gunnargray-dev/nightshift/pull/2">#2</a><a class="pr-chip" href="https://github.com/gunnargray-dev/nightshift/pull/3">#3</a></div></div></li>
+            <li><span class="session-badge">S2</span><div class="info"><div class="t-title">Quality Infrastructure</div><div class="t-meta">Feb 27, 2026 &mdash; 3 PRs &mdash; health.py, changelog.py, coverage_tracker.py</div><div class="t-prs"><a class="pr-chip" href="https://github.com/gunnargray-dev/nightshift/pull/4">#4</a><a class="pr-chip" href="https://github.com/gunnargray-dev/nightshift/pull/5">#5</a><a class="pr-chip" href="https://github.com/gunnargray-dev/nightshift/pull/6">#6</a></div></div></li>
+            <li><span class="session-badge">S3</span><div class="info"><div class="t-title">Self-Awareness + Introspection</div><div class="t-meta">Feb 28, 2026 &mdash; 3 PRs &mdash; readme_updater.py, diff_visualizer.py, pr_scorer.py</div><div class="t-prs"><a class="pr-chip" href="https://github.com/gunnargray-dev/nightshift/pull/7">#7</a><a class="pr-chip" href="https://github.com/gunnargray-dev/nightshift/pull/8">#8</a><a class="pr-chip" href="https://github.com/gunnargray-dev/nightshift/pull/9">#9</a></div></div></li>
+            <li><span class="session-badge">S4</span><div class="info"><div class="t-title">Composability + Self-Improvement</div><div class="t-meta">Feb 28, 2026 &mdash; 4 PRs &mdash; cli.py, refactor.py, arch_generator.py, health_trend.py</div><div class="t-prs"><a class="pr-chip" href="https://github.com/gunnargray-dev/nightshift/pull/10">#10</a><a class="pr-chip" href="https://github.com/gunnargray-dev/nightshift/pull/11">#11</a><a class="pr-chip" href="https://github.com/gunnargray-dev/nightshift/pull/12">#12</a><a class="pr-chip" href="https://github.com/gunnargray-dev/nightshift/pull/13">#13</a></div></div></li>
+            <li><span class="session-badge">S5</span><div class="info"><div class="t-title">Community + Intelligence</div><div class="t-meta">Feb 27, 2026 &mdash; 4 PRs &mdash; issue_triage.py, brain.py, session_replay.py, dashboard</div><div class="t-prs"><a class="pr-chip" href="https://github.com/gunnargray-dev/nightshift/pull/14">#14</a><a class="pr-chip" href="https://github.com/gunnargray-dev/nightshift/pull/15">#15</a><a class="pr-chip" href="https://github.com/gunnargray-dev/nightshift/pull/16">#16</a><a class="pr-chip" href="https://github.com/gunnargray-dev/nightshift/pull/17">#17</a></div></div></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title"><span>📈</span> Cumulative Growth</div>
+      <div class="card">
+        <div class="card-header">PRs per Session (cumulative)</div>
+        <div class="card-body">
+          <div class="bar-row"><div class="bar-label">Session 0</div><div class="bar-track"><div class="bar-fill" style="width:0%;background:var(--muted)"></div></div><div class="bar-val">0 PRs</div></div>
+          <div class="bar-row"><div class="bar-label">Session 1</div><div class="bar-track"><div class="bar-fill" style="width:18%;background:var(--accent)"></div></div><div class="bar-val">3 PRs</div></div>
+          <div class="bar-row"><div class="bar-label">Session 2</div><div class="bar-track"><div class="bar-fill" style="width:35%;background:var(--accent)"></div></div><div class="bar-val">6 PRs</div></div>
+          <div class="bar-row"><div class="bar-label">Session 3</div><div class="bar-track"><div class="bar-fill" style="width:53%;background:var(--accent)"></div></div><div class="bar-val">9 PRs</div></div>
+          <div class="bar-row"><div class="bar-label">Session 4</div><div class="bar-track"><div class="bar-fill" style="width:76%;background:var(--green)"></div></div><div class="bar-val">13 PRs</div></div>
+          <div class="bar-row"><div class="bar-label">Session 5</div><div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--green)"></div></div><div class="bar-val">17 PRs</div></div>
+        </div>
+        <div class="card-header">Test Suite Growth</div>
+        <div class="card-body">
+          <div class="bar-row"><div class="bar-label">After S1</div><div class="bar-track"><div class="bar-fill" style="width:10%;background:var(--purple)"></div></div><div class="bar-val">50</div></div>
+          <div class="bar-row"><div class="bar-label">After S2</div><div class="bar-track"><div class="bar-fill" style="width:34%;background:var(--purple)"></div></div><div class="bar-val">174</div></div>
+          <div class="bar-row"><div class="bar-label">After S3</div><div class="bar-track"><div class="bar-fill" style="width:64%;background:var(--purple)"></div></div><div class="bar-val">325</div></div>
+          <div class="bar-row"><div class="bar-label">After S4</div><div class="bar-track"><div class="bar-fill" style="width:92%;background:var(--yellow)"></div></div><div class="bar-val">469</div></div>
+          <div class="bar-row"><div class="bar-label">After S5</div><div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--green)"></div></div><div class="bar-val">510+</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="section">
+    <div class="section-title"><span>🧩</span> Module Inventory (14 modules)</div>
+    <div class="module-grid">
+      <div class="module-chip"><div class="m-name">Stats Engine</div><div class="m-file">src/stats.py</div><div class="m-desc">Analyzes git history: commits, lines changed, session count, PR totals.</div><div class="m-session">Session 1</div></div>
+      <div class="module-chip"><div class="m-name">Session Logger</div><div class="m-file">src/session_logger.py</div><div class="m-desc">Structured SessionEntry renderer for NIGHTSHIFT_LOG.md + JSON.</div><div class="m-session">Session 1</div></div>
+      <div class="module-chip"><div class="m-name">Health Monitor</div><div class="m-file">src/health.py</div><div class="m-desc">AST-based static analyzer scoring Python files 0–100.</div><div class="m-session">Session 2</div></div>
+      <div class="module-chip"><div class="m-name">Changelog Generator</div><div class="m-file">src/changelog.py</div><div class="m-desc">Auto-generates CHANGELOG.md from [nightshift] commits.</div><div class="m-session">Session 2</div></div>
+      <div class="module-chip"><div class="m-name">Coverage Tracker</div><div class="m-file">src/coverage_tracker.py</div><div class="m-desc">Runs pytest-cov, stores history in JSON, renders trend table.</div><div class="m-session">Session 2</div></div>
+      <div class="module-chip"><div class="m-name">README Updater</div><div class="m-file">src/readme_updater.py</div><div class="m-desc">Generates dynamic README.md from live repo state.</div><div class="m-session">Session 3</div></div>
+      <div class="module-chip"><div class="m-name">Diff Visualizer</div><div class="m-file">src/diff_visualizer.py</div><div class="m-desc">Markdown summary of each night's git changes with heatmap.</div><div class="m-session">Session 3</div></div>
+      <div class="module-chip"><div class="m-name">PR Scorer</div><div class="m-file">src/pr_scorer.py</div><div class="m-desc">Scores PRs 0–100 across 5 dimensions; grades A+ through F.</div><div class="m-session">Session 3</div></div>
+      <div class="module-chip"><div class="m-name">CLI</div><div class="m-file">src/cli.py</div><div class="m-desc">Unified nightshift command with 9+ subcommands.</div><div class="m-session">Session 4</div></div>
+      <div class="module-chip"><div class="m-name">Refactor Engine</div><div class="m-file">src/refactor.py</div><div class="m-desc">AST analysis across 5 defect categories with auto-fix.</div><div class="m-session">Session 4</div></div>
+      <div class="module-chip"><div class="m-name">Arch Generator</div><div class="m-file">src/arch_generator.py</div><div class="m-desc">Auto-generates docs/ARCHITECTURE.md from AST walk.</div><div class="m-session">Session 4</div></div>
+      <div class="module-chip"><div class="m-name">Health Trend</div><div class="m-file">src/health_trend.py</div><div class="m-desc">Tracks health scores across sessions; Unicode sparklines.</div><div class="m-session">Session 4</div></div>
+      <div class="module-chip" style="border-color:var(--accent);border-style:dashed;"><div class="m-name" style="color:var(--green)">Issue Triage</div><div class="m-file">src/issue_triage.py</div><div class="m-desc">Classifies + prioritizes GitHub issues automatically.</div><div class="m-session" style="color:var(--green)">Session 5 ✨</div></div>
+      <div class="module-chip" style="border-color:var(--accent);border-style:dashed;"><div class="m-name" style="color:var(--green)">Brain</div><div class="m-file">src/brain.py</div><div class="m-desc">Task prioritization engine. Decides what to build next.</div><div class="m-session" style="color:var(--green)">Session 5 ✨</div></div>
+      <div class="module-chip" style="border-color:var(--accent);border-style:dashed;"><div class="m-name" style="color:var(--green)">Session Replay</div><div class="m-file">src/session_replay.py</div><div class="m-desc">Reconstructs what any past session did from the log.</div><div class="m-session" style="color:var(--green)">Session 5 ✨</div></div>
+    </div>
+  </div>
+  <div class="section">
+    <div class="section-title"><span>❤️</span> Code Health Snapshot</div>
+    <div class="card"><div class="card-body">
+      <table>
+        <thead><tr><th>Module</th><th>Health Score</th><th>Status</th><th>Session Added</th></tr></thead>
+        <tbody>
+          <tr><td><code>src/session_logger.py</code></td><td>96/100</td><td><span class="badge badge-green">Excellent</span></td><td>1</td></tr>
+          <tr><td><code>src/health.py</code></td><td>94/100</td><td><span class="badge badge-green">Excellent</span></td><td>2</td></tr>
+          <tr><td><code>src/changelog.py</code></td><td>92/100</td><td><span class="badge badge-green">Excellent</span></td><td>2</td></tr>
+          <tr><td><code>src/stats.py</code></td><td>90/100</td><td><span class="badge badge-green">Excellent</span></td><td>1</td></tr>
+          <tr><td><code>src/pr_scorer.py</code></td><td>88/100</td><td><span class="badge badge-green">Good</span></td><td>3</td></tr>
+          <tr><td><code>src/arch_generator.py</code></td><td>87/100</td><td><span class="badge badge-green">Good</span></td><td>4</td></tr>
+          <tr><td><code>src/refactor.py</code></td><td>85/100</td><td><span class="badge badge-green">Good</span></td><td>4</td></tr>
+          <tr><td><code>src/diff_visualizer.py</code></td><td>84/100</td><td><span class="badge badge-green">Good</span></td><td>3</td></tr>
+          <tr><td><code>src/cli.py</code></td><td>83/100</td><td><span class="badge badge-green">Good</span></td><td>4</td></tr>
+          <tr><td><code>src/coverage_tracker.py</code></td><td>82/100</td><td><span class="badge badge-green">Good</span></td><td>2</td></tr>
+          <tr><td><code>src/readme_updater.py</code></td><td>81/100</td><td><span class="badge badge-green">Good</span></td><td>3</td></tr>
+          <tr><td><code>src/health_trend.py</code></td><td>80/100</td><td><span class="badge badge-green">Good</span></td><td>4</td></tr>
+        </tbody>
+      </table>
+    </div></div>
+  </div>
+</div>
+<footer>
+  <p>Built autonomously by <a href="https://perplexity.ai" target="_blank">Perplexity Computer</a> &mdash; Session 5 &mdash;
+  <a href="https://github.com/gunnargray-dev/nightshift" target="_blank">Source on GitHub</a></p>
+</footer>
+</body>
+</html>
