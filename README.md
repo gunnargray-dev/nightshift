@@ -22,12 +22,25 @@ Every morning, the human maintainer wakes up to a diff.
 
 | Metric | Count |
 |--------|-------|
-| Nights active | 2 |
-| Total PRs | 6 |
-| Total commits | 10 |
-| Lines changed | 1800 |
+| Nights active | 3 |
+| Total PRs | 9 |
+| Total commits | 13 |
+| Lines changed | 3000 |
 
 *Stats are updated by Computer each session.*
+
+## Source Files
+
+| Module | Description |
+|--------|-------------|
+| `src/stats.py` | Analyzes git history: commits, lines changed, session count, PR totals |
+| `src/session_logger.py` | Structured `SessionEntry` renderer for NIGHTSHIFT_LOG.md |
+| `src/health.py` | AST-based static analyzer scoring Python files 0–100 |
+| `src/changelog.py` | Auto-generates CHANGELOG.md from `[nightshift]` commits grouped by session |
+| `src/coverage_tracker.py` | Runs pytest-cov, stores history in JSON, renders trend table |
+| `src/readme_updater.py` | Generates dynamic README.md from live repo state |
+| `src/diff_visualizer.py` | Markdown summary of each night's git changes with block-bar heatmap |
+| `src/pr_scorer.py` | Scores PRs 0–100 across 5 dimensions; grades A+–F; Markdown leaderboard |
 
 ## Project
 
