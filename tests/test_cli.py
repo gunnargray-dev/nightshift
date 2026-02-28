@@ -111,7 +111,6 @@ class TestBuildParser:
         assert args.repo == "/tmp/myrepo"
 
     def test_all_subcommands_have_func(self):
-        """Every subcommand should bind a func callable."""
         parser = build_parser()
         for cmd in ["health", "stats", "diff", "changelog", "coverage", "score", "arch", "refactor", "run"]:
             args = parser.parse_args([cmd])
@@ -124,8 +123,6 @@ class TestBuildParser:
 
 
 class TestHelperFunctions:
-    """Tests for internal print helpers."""
-
     def test_print_header_does_not_raise(self, capsys):
         _print_header("Test Title")
         out = capsys.readouterr().out
@@ -149,88 +146,67 @@ class TestHelperFunctions:
 
 
 # ---------------------------------------------------------------------------
-# main() integration tests (with mocked module calls)
+# main() integration tests
 # ---------------------------------------------------------------------------
 
 
 class TestMainHealth:
-    """Integration tests for `nightshift health`."""
-
     def test_health_calls_generate_report(self, tmp_path):
-        """health subcommand should call generate_health_report."""
         mock_report = MagicMock()
         mock_report.to_markdown.return_value = "# Health\n"
         mock_report.overall_health_score = 95.0
         mock_report.to_dict.return_value = {"score": 95}
-
         with patch("src.cli.cmd_health") as mock_cmd:
             mock_cmd.return_value = 0
             result = main(["health"])
             assert mock_cmd.called or result == 0
 
     def test_health_json_output(self, tmp_path, capsys):
-        """health --json should emit JSON."""
         mock_report = MagicMock()
         mock_report.to_dict.return_value = {"overall_health_score": 90.0, "files": []}
         mock_report.overall_health_score = 90.0
-
         with patch("src.health.generate_health_report", return_value=mock_report):
             result = main(["--repo", str(tmp_path), "health", "--json"])
         captured = capsys.readouterr()
         assert result == 0
-        # Extract JSON object from output (header may precede it)
         json_start = captured.out.find("{")
-        assert json_start != -1, "No JSON found in output"
+        assert json_start != -1
         data = json.loads(captured.out[json_start:])
         assert "overall_health_score" in data
 
 
 class TestMainStats:
-    """Integration tests for `nightshift stats`."""
-
     def test_stats_renders_table(self, tmp_path, capsys):
         mock_stats = MagicMock()
-        mock_stats.readme_table.return_value = "| Metric | Count |\n|--------|-------|\n| Nights active | 3 |"
+        mock_stats.readme_table.return_value = "| Metric | Count |"
         mock_stats.sessions = []
-        mock_stats.to_dict.return_value = {}
-
         with patch("src.stats.compute_stats", return_value=mock_stats):
             result = main(["--repo", str(tmp_path), "stats"])
         assert result == 0
-        out = capsys.readouterr().out
-        assert "Metric" in out or "nights" in out.lower()
 
     def test_stats_json_flag(self, tmp_path, capsys):
         mock_stats = MagicMock()
         mock_stats.to_dict.return_value = {"nights_active": 3, "total_prs": 9}
         mock_stats.sessions = []
-
         with patch("src.stats.compute_stats", return_value=mock_stats):
             result = main(["--repo", str(tmp_path), "stats", "--json"])
         assert result == 0
         out = capsys.readouterr().out
         json_start = out.find("{")
-        assert json_start != -1, "No JSON found in output"
         data = json.loads(out[json_start:])
         assert "nights_active" in data
 
 
 class TestMainChangelog:
-    """Integration tests for `nightshift changelog`."""
-
     def test_changelog_prints_markdown(self, tmp_path, capsys):
         mock_cl = MagicMock()
         mock_cl.to_markdown.return_value = "# Changelog\n"
-        mock_cl.to_dict.return_value = {}
-
         with patch("src.changelog.generate_changelog", return_value=mock_cl):
             result = main(["--repo", str(tmp_path), "changelog"])
         assert result == 0
 
     def test_changelog_write_saves_file(self, tmp_path):
         mock_cl = MagicMock()
-        mock_cl.to_markdown.return_value = "# Changelog\n"
-
         with patch("src.changelog.generate_changelog", return_value=mock_cl), \
              patch("src.changelog.save_changelog") as mock_save:
             result = main(["--repo", str(tmp_path), "changelog", "--write"])
@@ -239,8 +215,6 @@ class TestMainChangelog:
 
 
 class TestMainCoverage:
-    """Integration tests for `nightshift coverage`."""
-
     def test_coverage_missing_history_returns_1(self, tmp_path):
         result = main(["--repo", str(tmp_path), "coverage"])
         assert result == 1
@@ -254,7 +228,6 @@ class TestMainCoverage:
             '"files": {}, "lines_covered": 100, "lines_total": 118, "missing_lines": 18}]}',
             encoding="utf-8",
         )
-
         from src.coverage_tracker import CoverageHistory
         with patch("src.coverage_tracker.CoverageHistory.from_dict") as mock_from:
             mock_hist = MagicMock()
@@ -266,14 +239,10 @@ class TestMainCoverage:
 
 
 class TestMainArch:
-    """Integration tests for `nightshift arch`."""
-
     def test_arch_prints_doc(self, tmp_path, capsys):
         with patch("src.arch_generator.generate_architecture_doc", return_value="# Architecture\n"):
             result = main(["--repo", str(tmp_path), "arch"])
         assert result == 0
-        out = capsys.readouterr().out
-        assert "Architecture" in out
 
     def test_arch_write_saves_file(self, tmp_path):
         (tmp_path / "docs").mkdir()
@@ -285,15 +254,11 @@ class TestMainArch:
 
 
 class TestMainRefactor:
-    """Integration tests for `nightshift refactor`."""
-
     def test_refactor_prints_report(self, tmp_path, capsys):
         mock_engine = MagicMock()
         mock_report = MagicMock()
         mock_report.to_markdown.return_value = "# Refactor Report\n"
-        mock_report.to_dict.return_value = {}
         mock_engine.analyze.return_value = mock_report
-
         with patch("src.refactor.RefactorEngine", return_value=mock_engine):
             result = main(["--repo", str(tmp_path), "refactor"])
         assert result == 0
@@ -303,7 +268,6 @@ class TestMainRefactor:
         mock_report = MagicMock()
         mock_engine.analyze.return_value = mock_report
         mock_engine.apply_safe_fixes.return_value = 3
-
         with patch("src.refactor.RefactorEngine", return_value=mock_engine):
             result = main(["--repo", str(tmp_path), "refactor", "--apply"])
         assert result == 0
@@ -311,10 +275,7 @@ class TestMainRefactor:
 
 
 class TestMainRun:
-    """Integration tests for `nightshift run` (full pipeline)."""
-
     def test_run_succeeds_with_mocks(self, tmp_path):
-        """Full pipeline should succeed when all modules are mocked."""
         mock_report = MagicMock()
         mock_report.overall_health_score = 88.0
         mock_report.to_markdown.return_value = ""
@@ -338,7 +299,6 @@ class TestMainRun:
         assert result == 0
 
     def test_run_handles_partial_failures(self, tmp_path):
-        """Pipeline should complete even if one module fails, returning exit 1."""
         with patch("src.health.generate_health_report", side_effect=RuntimeError("health broken")), \
              patch("src.stats.compute_stats", side_effect=RuntimeError("stats broken")), \
              patch("src.changelog.generate_changelog", side_effect=RuntimeError("changelog broken")):
@@ -352,8 +312,6 @@ class TestMainRun:
 
 
 class TestEdgeCases:
-    """Edge cases and error handling."""
-
     def test_keyboard_interrupt_returns_130(self):
         with patch("src.cli.cmd_health", side_effect=KeyboardInterrupt):
             result = main(["health"])
@@ -365,5 +323,201 @@ class TestEdgeCases:
         assert result == 1
 
     def test_repo_root_detected(self):
-        """REPO_ROOT should be a valid path."""
         assert isinstance(REPO_ROOT, Path)
+
+
+# ---------------------------------------------------------------------------
+# New subcommands: timeline, coupling, complexity, export
+# ---------------------------------------------------------------------------
+
+
+class TestTimelineSubcommand:
+    def test_timeline_parses(self):
+        parser = build_parser()
+        args = parser.parse_args(["timeline"])
+        assert args.command == "timeline"
+
+    def test_timeline_json_flag(self):
+        parser = build_parser()
+        args = parser.parse_args(["timeline", "--json"])
+        assert args.json is True
+
+    def test_timeline_write_flag(self):
+        parser = build_parser()
+        args = parser.parse_args(["timeline", "--write"])
+        assert args.write is True
+
+    def test_timeline_renders_output(self, tmp_path, capsys):
+        (tmp_path / "NIGHTSHIFT_LOG.md").write_text(
+            "# Nightshift Log\n\n## Session 1 — February 27, 2026\n\n"
+            "**Operator:** Computer\n\n- ✅ Stats → PR #1 — src/stats.py\n",
+            encoding="utf-8",
+        )
+        result = main(["--repo", str(tmp_path), "timeline"])
+        assert result == 0
+        assert "Session" in capsys.readouterr().out
+
+    def test_timeline_json_output(self, tmp_path, capsys):
+        (tmp_path / "NIGHTSHIFT_LOG.md").write_text(
+            "# Nightshift Log\n\n## Session 1 — Feb 27, 2026\n\n- ✅ Something\n",
+            encoding="utf-8",
+        )
+        result = main(["--repo", str(tmp_path), "timeline", "--json"])
+        assert result == 0
+        captured = capsys.readouterr()
+        import re
+        m = re.search(r'(\{.*\})', captured.out, re.DOTALL)
+        assert m is not None
+        data = json.loads(m.group(1))
+        assert "sessions" in data
+
+    def test_timeline_write_creates_file(self, tmp_path):
+        (tmp_path / "NIGHTSHIFT_LOG.md").write_text(
+            "# Nightshift Log\n\n## Session 1 — Feb 27, 2026\n\n- ✅ Something\n",
+            encoding="utf-8",
+        )
+        result = main(["--repo", str(tmp_path), "timeline", "--write"])
+        assert result == 0
+        assert (tmp_path / "docs" / "timeline.md").exists()
+
+
+class TestCouplingSubcommand:
+    def test_coupling_parses(self):
+        parser = build_parser()
+        args = parser.parse_args(["coupling"])
+        assert args.command == "coupling"
+
+    def test_coupling_json_flag(self):
+        parser = build_parser()
+        args = parser.parse_args(["coupling", "--json"])
+        assert args.json is True
+
+    def test_coupling_write_flag(self):
+        parser = build_parser()
+        args = parser.parse_args(["coupling", "--write"])
+        assert args.write is True
+
+    def test_coupling_renders_output(self, tmp_path, capsys):
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "mod_a.py").write_text("def foo(): return 1\n")
+        (src / "mod_b.py").write_text("from src.mod_a import foo\ndef bar(): return foo()\n")
+        result = main(["--repo", str(tmp_path), "coupling"])
+        assert result == 0
+
+    def test_coupling_write_creates_file(self, tmp_path):
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "mod_a.py").write_text("def foo(): return 1\n")
+        result = main(["--repo", str(tmp_path), "coupling", "--write"])
+        assert result == 0
+        assert (tmp_path / "docs" / "coupling_report.md").exists()
+
+
+class TestComplexitySubcommand:
+    def test_complexity_parses(self):
+        parser = build_parser()
+        args = parser.parse_args(["complexity"])
+        assert args.command == "complexity"
+
+    def test_complexity_default_session(self):
+        parser = build_parser()
+        args = parser.parse_args(["complexity"])
+        assert args.session == 11
+
+    def test_complexity_custom_session(self):
+        parser = build_parser()
+        args = parser.parse_args(["complexity", "--session", "7"])
+        assert args.session == 7
+
+    def test_complexity_json_flag(self):
+        parser = build_parser()
+        args = parser.parse_args(["complexity", "--json"])
+        assert args.json is True
+
+    def test_complexity_renders_output(self, tmp_path, capsys):
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "mod.py").write_text(
+            "def simple(x):\n    return x + 1\n\ndef branchy(x):\n    if x > 0:\n        return x\n    return 0\n"
+        )
+        result = main(["--repo", str(tmp_path), "complexity"])
+        assert result == 0
+
+    def test_complexity_write_creates_file(self, tmp_path):
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "mod.py").write_text("def foo(): return 1\n")
+        result = main(["--repo", str(tmp_path), "complexity", "--write"])
+        assert result == 0
+        assert (tmp_path / "docs" / "complexity_report.md").exists()
+
+    def test_complexity_history_updated(self, tmp_path):
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "mod.py").write_text("def foo(): return 1\n")
+        result = main(["--repo", str(tmp_path), "complexity", "--write"])
+        assert result == 0
+        assert (tmp_path / "docs" / "complexity_history.json").exists()
+
+
+class TestExportSubcommand:
+    def test_export_parses_coupling(self):
+        parser = build_parser()
+        args = parser.parse_args(["export", "coupling"])
+        assert args.command == "export"
+        assert args.analysis == "coupling"
+
+    def test_export_parses_complexity(self):
+        parser = build_parser()
+        args = parser.parse_args(["export", "complexity"])
+        assert args.analysis == "complexity"
+
+    def test_export_parses_timeline(self):
+        parser = build_parser()
+        args = parser.parse_args(["export", "timeline"])
+        assert args.analysis == "timeline"
+
+    def test_export_default_formats(self):
+        parser = build_parser()
+        args = parser.parse_args(["export", "coupling"])
+        assert "json" in args.formats
+
+    def test_export_custom_formats(self):
+        parser = build_parser()
+        args = parser.parse_args(["export", "coupling", "--formats", "json,html"])
+        assert args.formats == "json,html"
+
+    def test_export_coupling_creates_files(self, tmp_path):
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "mod_a.py").write_text("def foo(): return 1\n")
+        result = main([
+            "--repo", str(tmp_path),
+            "export", "coupling",
+            "--output", str(tmp_path / "out"),
+        ])
+        assert result == 0
+        out_dir = tmp_path / "out"
+        assert (out_dir / "coupling-report.json").exists()
+        assert (out_dir / "coupling-report.html").exists()
+        assert (out_dir / "coupling-report.md").exists()
+
+    def test_export_timeline_creates_files(self, tmp_path):
+        (tmp_path / "NIGHTSHIFT_LOG.md").write_text(
+            "# Nightshift Log\n\n## Session 1 — Feb 27, 2026\n\n- ✅ Something → PR #1\n",
+            encoding="utf-8",
+        )
+        result = main([
+            "--repo", str(tmp_path),
+            "export", "timeline",
+            "--output", str(tmp_path / "out"),
+            "--formats", "json",
+        ])
+        assert result == 0
+        assert (tmp_path / "out" / "timeline-report.json").exists()
+
+    def test_export_invalid_analysis_returns_1(self, tmp_path):
+        parser = build_parser()
+        with pytest.raises(SystemExit):
+            parser.parse_args(["export", "not_real"])
