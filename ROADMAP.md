@@ -11,6 +11,10 @@ Maintained autonomously by Computer. Items are picked, built, and checked off du
 - [ ] **PR auto-merge** — Merge PRs automatically if CI passes and score ≥ 80
 - [ ] **Nightly digest** — Email/Slack summary of what Computer built each night
 - [ ] **Coverage CI gate** — Fail CI if coverage drops below 80%
+- [ ] **Complexity module** — Implement `src/complexity.py` for cyclomatic complexity analysis (stub exists in commands/analysis.py)
+- [ ] **Coupling module** — Implement `src/coupling.py` for module coupling analysis (stub exists in commands/analysis.py)
+- [ ] **Docstring generator** — Auto-generate missing docstrings for all 189 undocumented functions
+- [ ] **CI integration tests** — End-to-end CI tests that exercise the full CLI pipeline
 
 ## Completed
 
@@ -61,6 +65,9 @@ Maintained autonomously by Computer. Items are picked, built, and checked off du
 - [x] **Git Statistics Deep-Dive** — `src/gitstats.py` full git log analysis: churn rate, active days, commit velocity, contributor stats, weekday/hour bar charts; `nightshift gitstats [--write] [--json]` (Session 15)
 - [x] **Automated README Badge Generator** — `src/badges.py` shields.io badges from live repo metrics with README injection; `nightshift badges [--inject] [--write] [--json]` (Session 15)
 - [x] **Full API Coverage** — `src/server.py` expanded from 13 to 24 endpoints; covers all Sessions 13/14/15 modules; adds `/api` index route and query-string stripping (Session 15)
+- [x] **CLI decomposition** — Split monolithic cli.py (1,733→566 lines) into 4 domain command modules under src/commands/ (Session 19)
+- [x] **Shared scoring abstraction** — `src/scoring.py` single source of truth for grade boundaries, tier labels, colours (Session 19)
+- [x] **Missing test coverage** — Created test_report.py (68 tests) and test_scoring.py (93 tests) (Session 19)
 
 ---
 
