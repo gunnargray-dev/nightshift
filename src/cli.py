@@ -1114,6 +1114,124 @@ def cmd_badges(args: argparse.Namespace) -> int:
     return 0
 
 
+
+# ---------------------------------------------------------------------------
+# Subcommand: audit (Session 16)
+# ---------------------------------------------------------------------------
+
+
+def cmd_audit(args: argparse.Namespace) -> int:
+    """Run the comprehensive audit combining health, security, dead code, coverage, complexity."""
+    from src.audit import run_audit, save_audit_report
+    _print_header("Comprehensive Repo Audit")
+    repo = _repo(getattr(args, "repo", None))
+    report = run_audit(repo_path=repo)
+    if args.json:
+        print(report.to_json())
+        return 0
+    if args.write:
+        out = repo / "docs" / "audit_report.md"
+        out.parent.mkdir(exist_ok=True)
+        save_audit_report(report, out)
+        _print_ok(f"Audit report written to {out}")
+        _print_ok(f"JSON sidecar → {out.with_suffix('.json')}")
+        return 0
+    print(report.to_markdown())
+    _print_info(
+        f"Overall grade: {report.overall_grade}  ·  "
+        f"Score: {report.overall_score:.1f}/100  ·  "
+        f"Status: {report.overall_status}"
+    )
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: semver (Session 16)
+# ---------------------------------------------------------------------------
+
+
+def cmd_semver(args: argparse.Namespace) -> int:
+    """Analyse commits and recommend a semantic version bump."""
+    from src.semver import analyze_semver, apply_version_bump, prepend_changelog_entry
+    _print_header("Semantic Version Analyzer")
+    repo = _repo(getattr(args, "repo", None))
+    bump = analyze_semver(repo_path=repo)
+    if args.json:
+        print(bump.to_json())
+        return 0
+    if getattr(args, "apply", False):
+        modified = apply_version_bump(bump, repo_path=repo)
+        if modified:
+            _print_ok(f"pyproject.toml updated: {bump.current_version} → {bump.next_version}")
+        else:
+            _print_warn("Could not update pyproject.toml (version string not found)")
+        if getattr(args, "changelog", False):
+            prepend_changelog_entry(bump, repo_path=repo)
+            _print_ok("CHANGELOG.md entry prepended")
+        return 0
+    print(bump.to_markdown())
+    _print_info(
+        f"Current: {bump.current_version}  ·  "
+        f"Recommended bump: {bump.bump_type.upper()}  ·  "
+        f"Next: {bump.next_version}"
+    )
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: init (Session 16)
+# ---------------------------------------------------------------------------
+
+
+def cmd_init(args: argparse.Namespace) -> int:
+    """Bootstrap a new project with nightshift scaffolding."""
+    from src.init_cmd import bootstrap
+    _print_header("Nightshift Init")
+    repo = _repo(getattr(args, "repo", None))
+    force = getattr(args, "force", False)
+    create_src = getattr(args, "src", False)
+    result = bootstrap(repo_path=repo, force=force, create_src=create_src)
+    if args.json:
+        print(result.to_json())
+        return 0
+    print(result.to_markdown())
+    _print_info(
+        f"Created: {result.total_created} files  ·  "
+        f"Skipped: {len(result.skipped)} existing"
+    )
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: predict (Session 16)
+# ---------------------------------------------------------------------------
+
+
+def cmd_predict(args: argparse.Namespace) -> int:
+    """Predict what the next session should focus on based on historical data."""
+    from src.predict import predict_next_session, save_prediction_report
+    _print_header("Predictive Session Planner")
+    repo = _repo(getattr(args, "repo", None))
+    report = predict_next_session(repo_path=repo)
+    if args.json:
+        print(report.to_json())
+        return 0
+    if args.write:
+        out = repo / "docs" / "predict_report.md"
+        out.parent.mkdir(exist_ok=True)
+        save_prediction_report(report, out)
+        _print_ok(f"Prediction report written to {out}")
+        _print_ok(f"JSON sidecar → {out.with_suffix('.json')}")
+        return 0
+    print(report.to_markdown())
+    _print_info(
+        f"Session {report.next_session} forecast  ·  "
+        f"Items ranked: {len(report.items)}  ·  "
+        f"Sessions analysed: {report.session_count}"
+    )
+    return 0
+
+
 # ---------------------------------------------------------------------------
 # Argument parser
 # ---------------------------------------------------------------------------
@@ -1316,8 +1434,31 @@ Examples:
     p_badges.add_argument("--json", action="store_true", help="Output raw JSON")
     p_badges.set_defaults(func=cmd_badges)
 
-    return parser
+    # Session 16 subcommands
+    p_audit = sub.add_parser("audit", help="Comprehensive repo audit (health+security+deadcode+coverage+complexity)")
+    p_audit.add_argument("--write", action="store_true", help="Write to docs/audit_report.md")
+    p_audit.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_audit.set_defaults(func=cmd_audit)
 
+    p_semver = sub.add_parser("semver", help="Analyse commits and recommend semantic version bump")
+    p_semver.add_argument("--apply", action="store_true", help="Apply the version bump to pyproject.toml")
+    p_semver.add_argument("--changelog", action="store_true", help="Prepend release entry to CHANGELOG.md")
+    p_semver.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_semver.set_defaults(func=cmd_semver)
+
+    p_init = sub.add_parser("init", help="Bootstrap a new project with nightshift scaffolding")
+    p_init.add_argument("--force", action="store_true", help="Overwrite existing files")
+    p_init.add_argument("--src", action="store_true", help="Also create src/__init__.py")
+    p_init.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_init.set_defaults(func=cmd_init)
+
+    p_predict = sub.add_parser("predict", help="Predict what the next session should focus on")
+    p_predict.add_argument("--write", action="store_true", help="Write to docs/predict_report.md")
+    p_predict.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_predict.set_defaults(func=cmd_predict)
+
+
+    return parser
 
 
 def main(argv=None) -> int:
