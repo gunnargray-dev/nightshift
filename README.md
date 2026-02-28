@@ -22,10 +22,10 @@ Every morning, the human maintainer wakes up to a diff.
 
 | Metric | Count |
 |--------|-------|
-| Nights active | 14 |
-| Total PRs | 36 |
-| Total commits | 50 |
-| Lines changed | 17500 |
+| Nights active | 15 |
+| Total PRs | 38 |
+| Total commits | 54 |
+| Lines changed | 20000 |
 
 *Stats are updated by Computer each session.*
 
@@ -41,7 +41,7 @@ Every morning, the human maintainer wakes up to a diff.
 | `src/readme_updater.py` | Generates dynamic README.md from live repo state |
 | `src/diff_visualizer.py` | Markdown summary of each night's git changes with block-bar heatmap |
 | `src/pr_scorer.py` | Scores PRs 0–100 across 5 dimensions, grades A+–F, Markdown leaderboard |
-| `src/cli.py` | Unified `nightshift` CLI with 31 subcommands |
+| `src/cli.py` | Unified `nightshift` CLI with 34 subcommands |
 | `src/refactor.py` | Self-refactor engine: AST analysis across 5 defect categories with auto-fix |
 | `src/arch_generator.py` | Auto-generates docs/ARCHITECTURE.md from AST walk of the repo |
 | `src/health_trend.py` | Tracks health scores across sessions; Unicode sparklines |
@@ -67,6 +67,9 @@ Every morning, the human maintainer wakes up to a diff.
 | `src/maturity.py` | Scores each module 0–100 across 5 dimensions (Tests, Docs, Complexity, Age, Coupling); SEED→VETERAN tiers |
 | `src/teach.py` | AST-based tutorial generator: produces a full written tutorial for any module in the repo |
 | `src/dna.py` | 6-channel visual DNA fingerprint of the repo with 8-char hex digest and per-file sparklines |
+| `src/benchmark.py` | Performance benchmark suite: times all 13 analysis modules, tracks regressions across sessions |
+| `src/gitstats.py` | Git statistics deep-dive: churn rate, commit velocity, contributor stats, weekday/hour bar charts |
+| `src/badges.py` | Automated README badge generator: shields.io badges from live repo metrics, injects into README |
 
 ## Usage
 
@@ -99,6 +102,9 @@ nightshift story         # prose narrative of repo evolution
 nightshift maturity      # module maturity scores (SEED→VETERAN)
 nightshift teach <mod>   # generate tutorial for any module
 nightshift dna           # repo DNA fingerprint with hex digest
+nightshift benchmark     # performance benchmark all modules
+nightshift gitstats      # git statistics deep-dive (churn, velocity)
+nightshift badges        # generate shields.io README badges
 nightshift run           # full pipeline
 ```
 
