@@ -813,11 +813,11 @@ def cmd_blame(args: argparse.Namespace) -> int:
 
 
 def cmd_deadcode(args: argparse.Namespace) -> int:
-    """Find unused functions, classes, and imports across src/."""
-    from src.dead_code import find_dead_code, save_dead_code_report
+    """Detect unused functions and imports across src/."""
+    from src.dead_code import detect_dead_code, save_dead_code_report
     _print_header("Dead Code Detector")
     repo = _repo(getattr(args, "repo", None))
-    report = find_dead_code(repo_path=repo)
+    report = detect_dead_code(repo_path=repo)
     if args.json:
         print(report.to_json())
         return 0
@@ -896,6 +896,135 @@ def cmd_coveragemap(args: argparse.Namespace) -> int:
     if missing:
         _print_warn(f"{missing} module(s) have no test file")
     return 0
+
+
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: story
+# ---------------------------------------------------------------------------
+
+
+def cmd_story(args: argparse.Namespace) -> int:
+    """Generate a narrative prose summary of the repository's evolution."""
+    from src.story import generate_story, save_story
+    _print_header("Repo Story")
+    repo = _repo(getattr(args, "repo", None))
+    story = generate_story(repo_path=repo)
+    if args.json:
+        print(story.to_json())
+        return 0
+    if args.write:
+        out = repo / "docs" / "story.md"
+        out.parent.mkdir(exist_ok=True)
+        save_story(story, out)
+        _print_ok(f"Story written to {out}")
+        _print_ok(f"JSON sidecar → {out.with_suffix('.json')}")
+        return 0
+    print(story.to_markdown())
+    _print_info(
+        f"Sessions: {story.total_sessions}  ·  PRs: {story.total_prs}  "
+        f"·  Tests: {story.total_tests:,}"
+    )
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: maturity
+# ---------------------------------------------------------------------------
+
+
+def cmd_maturity(args: argparse.Namespace) -> int:
+    """Score each module's maturity across tests, docs, complexity, age, and coupling."""
+    from src.maturity import assess_maturity, save_maturity_report
+    _print_header("Module Maturity Scorer")
+    repo = _repo(getattr(args, "repo", None))
+    report = assess_maturity(repo_path=repo)
+    if args.json:
+        print(report.to_json())
+        return 0
+    if args.write:
+        out = repo / "docs" / "maturity_report.md"
+        out.parent.mkdir(exist_ok=True)
+        save_maturity_report(report, out)
+        _print_ok(f"Report written to {out}")
+        _print_ok(f"JSON sidecar → {out.with_suffix('.json')}")
+        return 0
+    print(report.to_markdown())
+    _print_info(
+        f"Modules: {len(report.modules)}  ·  Avg score: {report.avg_score}/100  "
+        f"·  Veterans: {len(report.veterans)}  ·  Seeds: {len(report.seeds)}"
+    )
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: teach
+# ---------------------------------------------------------------------------
+
+
+def cmd_teach(args: argparse.Namespace) -> int:
+    """Generate a tutorial explaining how a specific module works."""
+    from src.teach import teach_module, save_tutorial, list_teachable_modules
+    _print_header(f"Module Tutorial — {args.module}")
+    repo = _repo(getattr(args, "repo", None))
+
+    if args.module == "list":
+        modules = list_teachable_modules(repo)
+        _print_info(f"Teachable modules ({len(modules)}):")
+        for name in modules:
+            print(f"    {name}")
+        return 0
+
+    try:
+        tutorial = teach_module(args.module, repo)
+    except FileNotFoundError as e:
+        _print_warn(str(e))
+        return 1
+
+    if args.json:
+        print(tutorial.to_json())
+        return 0
+    if args.write:
+        out = repo / "docs" / "tutorials" / f"{args.module}.md"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        save_tutorial(tutorial, out)
+        _print_ok(f"Tutorial written to {out}")
+        return 0
+    print(tutorial.to_markdown())
+    _print_info(
+        f"Classes: {len(tutorial.classes)}  ·  "
+        f"Public functions: {len([f for f in tutorial.functions if not f.is_method])}  ·  "
+        f"Lines: {tutorial.total_lines}"
+    )
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: dna
+# ---------------------------------------------------------------------------
+
+
+def cmd_dna(args: argparse.Namespace) -> int:
+    """Generate the repo DNA fingerprint — a unique visual signature of the codebase."""
+    from src.dna import fingerprint_repo, save_dna_report
+    _print_header("Repo DNA Fingerprint")
+    repo = _repo(getattr(args, "repo", None))
+    dna = fingerprint_repo(repo_path=repo)
+    if args.json:
+        print(dna.to_json())
+        return 0
+    if args.write:
+        out = repo / "docs" / "dna.md"
+        out.parent.mkdir(exist_ok=True)
+        save_dna_report(dna, out)
+        _print_ok(f"Fingerprint written to {out}")
+        _print_ok(f"JSON sidecar → {out.with_suffix('.json')}")
+        return 0
+    print(dna.to_markdown())
+    _print_info(f"Fingerprint ID: {dna.hex_digest}  ·  Modules: {dna.total_modules}")
+    return 0
+
 
 
 # ---------------------------------------------------------------------------
@@ -1059,7 +1188,30 @@ Examples:
     p_coveragemap.add_argument("--json", action="store_true", help="Output raw JSON")
     p_coveragemap.set_defaults(func=cmd_coveragemap)
 
+    # Session 14 subcommands
+    p_story = sub.add_parser("story", help="Narrative prose summary of the repo's evolution")
+    p_story.add_argument("--write", action="store_true", help="Write to docs/story.md")
+    p_story.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_story.set_defaults(func=cmd_story)
+
+    p_maturity = sub.add_parser("maturity", help="Score each module's maturity (tests/docs/complexity/age/coupling)")
+    p_maturity.add_argument("--write", action="store_true", help="Write to docs/maturity_report.md")
+    p_maturity.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_maturity.set_defaults(func=cmd_maturity)
+
+    p_teach = sub.add_parser("teach", help="Generate a tutorial for a specific module")
+    p_teach.add_argument("module", help="Module name to explain (or 'list' to list all)")
+    p_teach.add_argument("--write", action="store_true", help="Write to docs/tutorials/<module>.md")
+    p_teach.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_teach.set_defaults(func=cmd_teach)
+
+    p_dna = sub.add_parser("dna", help="Repo DNA fingerprint — unique visual signature of codebase")
+    p_dna.add_argument("--write", action="store_true", help="Write to docs/dna.md")
+    p_dna.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_dna.set_defaults(func=cmd_dna)
+
     return parser
+
 
 
 def main(argv=None) -> int:
