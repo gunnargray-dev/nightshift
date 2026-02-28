@@ -22,12 +22,23 @@ nightshift timeline    — ASCII visual timeline of all sessions
 nightshift coupling    — Module coupling analyzer (Ca, Ce, instability)
 nightshift complexity  — Cyclomatic complexity tracker
 nightshift export      — Export any analysis to JSON/Markdown/HTML
+nightshift config      — Show or write nightshift.toml config
+nightshift compare     — Diff two sessions side-by-side
+nightshift dashboard   — Rich terminal dashboard with all key metrics
+nightshift deps        — Check Python dependency freshness via PyPI
 
 Usage
 -----
     python -m nightshift.cli <command> [options]
     # or after ``pip install -e .``:
     nightshift <command> [options]
+
+Note
+----
+Sessions 1-11 features are fully implemented in src/. The coupling,
+complexity, and export subcommands below correspond to the Session 11
+features that were re-landed (they were already present in main via
+earlier merges). Session 12 adds config, compare, dashboard, and deps.
 """
 
 from __future__ import annotations
@@ -438,7 +449,10 @@ def cmd_timeline(args: argparse.Namespace) -> int:
 
 
 def cmd_coupling(args: argparse.Namespace) -> int:
-    """Analyze module coupling — afferent/efferent coupling, instability metric."""
+    """Analyze module coupling — afferent/efferent coupling, instability metric.
+
+    Session 11 feature. Implemented in src/coupling.py.
+    """
     from src.coupling import analyze_coupling, save_coupling_report
     _print_header("Module Coupling Analysis")
     repo = _repo(getattr(args, "repo", None))
@@ -469,7 +483,10 @@ def cmd_coupling(args: argparse.Namespace) -> int:
 
 
 def cmd_complexity(args: argparse.Namespace) -> int:
-    """Track cyclomatic complexity across all src/ modules."""
+    """Track cyclomatic complexity across all src/ modules.
+
+    Session 11 feature. Implemented in src/complexity.py.
+    """
     from src.complexity import (
         analyze_complexity,
         load_complexity_history,
@@ -511,7 +528,10 @@ def cmd_complexity(args: argparse.Namespace) -> int:
 
 
 def cmd_export(args: argparse.Namespace) -> int:
-    """Export any Nightshift analysis to JSON, Markdown, or HTML."""
+    """Export any Nightshift analysis to JSON, Markdown, or HTML.
+
+    Session 11 feature. Implemented in src/exporter.py.
+    """
     from src.exporter import export_report, FORMATS
     _print_header("Export")
     repo = _repo(getattr(args, "repo", None))
@@ -582,6 +602,110 @@ def cmd_export(args: argparse.Namespace) -> int:
     for err in result.errors:
         _print_warn(f"Export error: {err}")
     return 0 if not result.errors else 1
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: config
+# ---------------------------------------------------------------------------
+
+
+def cmd_config(args: argparse.Namespace) -> int:
+    """Show or write nightshift.toml configuration."""
+    from src.config import load_config, save_default_config
+    _print_header("Nightshift Config")
+    repo = _repo(getattr(args, "repo", None))
+    if args.write:
+        out = save_default_config(repo)
+        _print_ok(f"Config written to {out}")
+        _print_info("Edit nightshift.toml to customize thresholds and output format.")
+        return 0
+    cfg = load_config(repo)
+    if args.json:
+        print(json.dumps(cfg.to_dict(), indent=2))
+        return 0
+    print(cfg.to_markdown())
+    source = cfg._source or "built-in defaults"
+    _print_info(f"Source: {source}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: compare
+# ---------------------------------------------------------------------------
+
+
+def cmd_compare(args: argparse.Namespace) -> int:
+    """Compare two sessions side-by-side."""
+    from src.compare import compare_sessions
+    _print_header(f"Session Compare — Session {args.session_a} vs Session {args.session_b}")
+    repo = _repo(getattr(args, "repo", None))
+    log_path = repo / "NIGHTSHIFT_LOG.md"
+    cmp = compare_sessions(log_path, args.session_a, args.session_b)
+    if args.json:
+        print(json.dumps(cmp.to_dict(), indent=2))
+        return 0
+    if args.write:
+        out = repo / "docs" / f"compare-s{args.session_a}-s{args.session_b}.md"
+        out.parent.mkdir(exist_ok=True)
+        out.write_text(cmp.to_markdown(), encoding="utf-8")
+        _print_ok(f"Comparison written to {out}")
+        return 0
+    print(cmp.to_markdown())
+    tasks_added = len(cmp.tasks_added)
+    tasks_removed = len(cmp.tasks_removed)
+    if tasks_added:
+        _print_info(f"{tasks_added} new task type(s) in Session {args.session_b}")
+    if tasks_removed:
+        _print_info(f"{tasks_removed} task type(s) only in Session {args.session_a}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: dashboard
+# ---------------------------------------------------------------------------
+
+
+def cmd_dashboard(args: argparse.Namespace) -> int:
+    """Render a rich terminal dashboard with all key Nightshift metrics."""
+    from src.dashboard import build_dashboard, render_dashboard
+    _print_header("Nightshift Dashboard")
+    repo = _repo(getattr(args, "repo", None))
+    dash = build_dashboard(repo)
+    if args.json:
+        print(json.dumps(dash.to_dict(), indent=2))
+        return 0
+    if args.write:
+        out = repo / "docs" / "dashboard.txt"
+        out.parent.mkdir(exist_ok=True)
+        out.write_text(render_dashboard(dash), encoding="utf-8")
+        _print_ok(f"Dashboard written to {out}")
+        return 0
+    print(render_dashboard(dash))
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: deps
+# ---------------------------------------------------------------------------
+
+
+def cmd_deps(args: argparse.Namespace) -> int:
+    """Check Python dependency freshness via PyPI."""
+    from src.deps_checker import check_freshness
+    _print_header("Dependency Freshness")
+    repo = _repo(getattr(args, "repo", None))
+    report = check_freshness(repo_path=repo, offline=getattr(args, "offline", False))
+    if args.json:
+        print(json.dumps(report.to_dict(), indent=2))
+        return 0
+    print(report.to_markdown())
+    if report.outdated_count > 0:
+        _print_warn(f"{report.outdated_count} package(s) have newer versions available")
+    elif report.packages:
+        _print_ok("All packages are up to date")
+    else:
+        _print_info("No packages found in dependency files")
+    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -700,7 +824,7 @@ Examples:
     p_score.add_argument("--json", action="store_true", help="Output raw JSON")
     p_score.set_defaults(func=cmd_score)
 
-    p_arch = sub.add_parser("arch", help="Generate docs/ARCHITECTURE.md")
+    p_arch = sub.add_parser("arch", help="Architecture doc generator")
     p_arch.add_argument("--write", action="store_true", help="Write to docs/ARCHITECTURE.md")
     p_arch.set_defaults(func=cmd_arch)
 
@@ -709,87 +833,95 @@ Examples:
     p_ref.add_argument("--json", action="store_true", help="Output raw JSON")
     p_ref.set_defaults(func=cmd_refactor)
 
-    p_replay = sub.add_parser("replay", help="Replay a past session from NIGHTSHIFT_LOG.md")
-    p_replay.add_argument("--session", type=int, default=None, help="Session number to replay (omit to list all)")
+    p_replay = sub.add_parser("replay", help="Session replay")
+    p_replay.add_argument("--session", type=int, default=None, help="Session number to replay")
     p_replay.add_argument("--json", action="store_true", help="Output raw JSON")
     p_replay.set_defaults(func=cmd_replay)
 
-    p_plan = sub.add_parser("plan", help="Generate a session plan via Brain scoring")
-    p_plan.add_argument("--session", type=int, default=1, help="Session number to plan for (default: 1)")
+    p_plan = sub.add_parser("plan", help="Session planning")
+    p_plan.add_argument("--session", type=int, default=1, help="Session number to plan")
     p_plan.add_argument("--json", action="store_true", help="Output raw JSON")
     p_plan.set_defaults(func=cmd_plan)
 
-    p_triage = sub.add_parser("triage", help="Run issue triage from a saved JSON export")
-    p_triage.add_argument("--issues", metavar="PATH", help="Path to issues JSON (default: docs/issues.json)")
+    p_triage = sub.add_parser("triage", help="Issue triage")
+    p_triage.add_argument("--issues", default=None, help="Path to issues JSON file")
     p_triage.add_argument("--json", action="store_true", help="Output raw JSON")
     p_triage.set_defaults(func=cmd_triage)
 
-    p_dep = sub.add_parser("depgraph", help="Module dependency graph")
-    p_dep.add_argument("--write", action="store_true", help="Write to docs/dep_graph.md")
-    p_dep.add_argument("--json", action="store_true", help="Output raw JSON")
-    p_dep.set_defaults(func=cmd_depgraph)
+    p_depgraph = sub.add_parser("depgraph", help="Module dependency graph")
+    p_depgraph.add_argument("--write", action="store_true", help="Write to docs/dep_graph.md")
+    p_depgraph.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_depgraph.set_defaults(func=cmd_depgraph)
 
-    p_todos = sub.add_parser("todos", help="Hunt stale TODO/FIXME annotations")
-    p_todos.add_argument("--session", type=int, default=10, help="Current session number (default: 10)")
-    p_todos.add_argument("--threshold", type=int, default=2, help="Sessions before a TODO is 'stale' (default: 2)")
-    p_todos.add_argument("--write", action="store_true", help="Write report to docs/todo_report.md")
+    p_todos = sub.add_parser("todos", help="TODO/FIXME hunter")
+    p_todos.add_argument("--session", type=int, default=1, help="Current session number")
+    p_todos.add_argument("--threshold", type=int, default=2, help="Sessions before stale (default: 2)")
+    p_todos.add_argument("--write", action="store_true", help="Write report to docs/")
     p_todos.add_argument("--json", action="store_true", help="Output raw JSON")
     p_todos.set_defaults(func=cmd_todos)
 
     p_doctor = sub.add_parser("doctor", help="Full repo health diagnostic")
-    p_doctor.add_argument("--write", action="store_true", help="Write report to docs/doctor_report.md")
+    p_doctor.add_argument("--write", action="store_true", help="Write report to docs/")
     p_doctor.add_argument("--json", action="store_true", help="Output raw JSON")
     p_doctor.set_defaults(func=cmd_doctor)
 
-    p_timeline = sub.add_parser("timeline", help="ASCII visual timeline of all sessions")
+    p_timeline = sub.add_parser("timeline", help="Session timeline visualiser")
     p_timeline.add_argument("--write", action="store_true", help="Write to docs/timeline.md")
     p_timeline.add_argument("--json", action="store_true", help="Output raw JSON")
     p_timeline.set_defaults(func=cmd_timeline)
 
-    p_coupling = sub.add_parser("coupling", help="Module coupling analyzer (Ca, Ce, instability)")
+    p_coupling = sub.add_parser("coupling", help="Module coupling analyzer (Session 11)")
     p_coupling.add_argument("--write", action="store_true", help="Write to docs/coupling_report.md")
     p_coupling.add_argument("--json", action="store_true", help="Output raw JSON")
     p_coupling.set_defaults(func=cmd_coupling)
 
-    p_complexity = sub.add_parser("complexity", help="Cyclomatic complexity tracker")
-    p_complexity.add_argument("--session", type=int, default=11, help="Session number for this snapshot (default: 11)")
-    p_complexity.add_argument("--write", action="store_true", help="Write to docs/complexity_report.md")
+    p_complexity = sub.add_parser("complexity", help="Cyclomatic complexity tracker (Session 11)")
+    p_complexity.add_argument("--session", type=int, default=1, help="Current session number")
+    p_complexity.add_argument("--write", action="store_true", help="Write report to docs/")
     p_complexity.add_argument("--json", action="store_true", help="Output raw JSON")
     p_complexity.set_defaults(func=cmd_complexity)
 
-    p_export = sub.add_parser("export", help="Export any analysis to JSON/Markdown/HTML")
-    p_export.add_argument(
-        "analysis",
-        choices=["coupling", "complexity", "timeline", "health", "doctor", "depgraph", "todos"],
-        help="Which analysis to export",
-    )
-    p_export.add_argument("--formats", default="json,markdown,html", help="Comma-separated formats: json,markdown,html (default: all)")
-    p_export.add_argument("--output", metavar="DIR", help="Output directory (default: docs/exports/)")
-    p_export.add_argument("--session", type=int, default=11, help="Session number (for complexity export)")
+    p_export = sub.add_parser("export", help="Export analysis to JSON/Markdown/HTML (Session 11)")
+    p_export.add_argument("analysis", help="Analysis to export: coupling, complexity, timeline, health, doctor, depgraph, todos")
+    p_export.add_argument("--formats", default="json,markdown,html", help="Comma-separated list of formats (default: json,markdown,html)")
+    p_export.add_argument("--output", default=None, help="Output directory (default: docs/exports/)")
+    p_export.add_argument("--session", type=int, default=1, help="Session number (for complexity)")
     p_export.set_defaults(func=cmd_export)
 
-    p_run = sub.add_parser("run", help="Full end-of-session pipeline")
-    p_run.add_argument("--session", type=int, default=4, help="Current session number (default: 4)")
+    # Session 12 subcommands
+    p_config = sub.add_parser("config", help="Show or write nightshift.toml config")
+    p_config.add_argument("--write", action="store_true", help="Write default config to nightshift.toml")
+    p_config.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_config.set_defaults(func=cmd_config)
+
+    p_compare = sub.add_parser("compare", help="Diff two sessions side-by-side")
+    p_compare.add_argument("session_a", type=int, help="First session number")
+    p_compare.add_argument("session_b", type=int, help="Second session number")
+    p_compare.add_argument("--write", action="store_true", help="Write comparison to docs/")
+    p_compare.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_compare.set_defaults(func=cmd_compare)
+
+    p_dashboard = sub.add_parser("dashboard", help="Rich terminal dashboard")
+    p_dashboard.add_argument("--write", action="store_true", help="Write dashboard to docs/dashboard.txt")
+    p_dashboard.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_dashboard.set_defaults(func=cmd_dashboard)
+
+    p_deps = sub.add_parser("deps", help="Check Python dependency freshness via PyPI")
+    p_deps.add_argument("--offline", action="store_true", help="Skip PyPI queries")
+    p_deps.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_deps.set_defaults(func=cmd_deps)
+
+    p_run = sub.add_parser("run", help="Run the full end-of-session pipeline")
+    p_run.add_argument("--session", type=int, default=4, help="Current session number")
     p_run.set_defaults(func=cmd_run)
 
     return parser
 
 
-def main(argv: Optional[list[str]] = None) -> int:
-    """CLI entry point. Returns exit code."""
+def main(argv=None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    try:
-        return args.func(args)
-    except KeyboardInterrupt:
-        print("\nAborted.")
-        return 130
-    except Exception as exc:  # noqa: BLE001
-        print(f"\n❌ Error: {exc}", file=sys.stderr)
-        if "--debug" in sys.argv:
-            import traceback
-            traceback.print_exc()
-        return 1
+    return args.func(args)
 
 
 if __name__ == "__main__":
