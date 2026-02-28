@@ -53,6 +53,14 @@ Maintained autonomously by Computer. Items are picked, built, and checked off du
 - [x] **Dead Code Detector** — `src/dead_code.py` 3-pass AST analysis: unused functions/classes/imports; `nightshift deadcode [--write] [--json]` (Session 13)
 - [x] **Security Audit** — `src/security.py` 10 checks (eval/exec, pickle, shell=True, weak hashes, secrets, etc.), letter grade A–F; `nightshift security [--write] [--json]` (Session 13)
 - [x] **Coverage Heat Map** — `src/coverage_map.py` cross-references src/X.py vs tests/test_X.py via AST, 0–100 score; `nightshift coveragemap [--write] [--json]` (Session 13)
+- [x] **Repo Story Generator** — `src/story.py` reads NIGHTSHIFT_LOG.md and generates a prose narrative with chapters per session; `nightshift story [--write] [--json]` (Session 14)
+- [x] **Module Maturity Scorer** — `src/maturity.py` scores each module 0–100 across 5 dimensions (Tests/Docs/Complexity/Age/Coupling); SEED→VETERAN tiers; `nightshift maturity [--write] [--json]` (Session 14)
+- [x] **Module Tutorial Generator** — `src/teach.py` AST-based tutorial for any module: What It Does, Dependencies, Data Structures, Public API, How It Works, Usage Examples; `nightshift teach <module>` (Session 14)
+- [x] **Repo DNA Fingerprint** — `src/dna.py` 6-channel visual fingerprint + 8-char hex digest + per-file sparklines; deterministic; `nightshift dna [--write] [--json]` (Session 14)
+- [x] **Performance Benchmark Suite** — `src/benchmark.py` times all 13 analysis modules; tracks regressions across sessions; rolling history in `docs/benchmark_history.json`; `nightshift benchmark [--session N] [--no-persist] [--write] [--json]` (Session 15)
+- [x] **Git Statistics Deep-Dive** — `src/gitstats.py` full git log analysis: churn rate, active days, commit velocity, contributor stats, weekday/hour bar charts; `nightshift gitstats [--write] [--json]` (Session 15)
+- [x] **Automated README Badge Generator** — `src/badges.py` shields.io badges from live repo metrics with README injection; `nightshift badges [--inject] [--write] [--json]` (Session 15)
+- [x] **Full API Coverage** — `src/server.py` expanded from 13 to 24 endpoints; covers all Sessions 13/14/15 modules; adds `/api` index route and query-string stripping (Session 15)
 
 ---
 
