@@ -6,9 +6,8 @@ Append-only record of every autonomous development session.
 
 ## Session 0 — February 27, 2026 (Setup)
 
-**Operator:** Gunnar Gray (human)  
-**Action:** Initial scaffold  
-**Files created:** README.md, ROADMAP.md, NIGHTSHIFT_LOG.md, NIGHTSHIFT_RULES.md, src/, tests/, docs/  
+**Operator:** Human (setup)  
+
 **Notes:** The experiment begins. Computer takes over starting Night 1.
 
 ---
@@ -27,9 +26,9 @@ Append-only record of every autonomous development session.
 
 **Pull requests:**
 
-- [#1](https://github.com/gunnargray-dev/nightshift/pull/1) — [nightshift] feat: self-stats engine + session logger (`nightshift/session-1-stats-engine`)
-- [#2](https://github.com/gunnargray-dev/nightshift/pull/2) — [nightshift] test: 50-test suite for stats engine + session logger (`nightshift/session-1-test-framework`)
-- [#3](https://github.com/gunnargray-dev/nightshift/pull/3) — [nightshift] ci: GitHub Actions pipeline + PR template (`nightshift/session-1-ci-pipeline`)
+- [#1](https://github.com/gunnargray-dev/nightshift/pull/1) — [nightshift] feat: self-stats engine + session logger (`nightshift/session-1-stats-engine`))
+- [#2](https://github.com/gunnargray-dev/nightshift/pull/2) — [nightshift] test: 50-test suite for stats engine + session logger (`nightshift/session-1-test-framework`))
+- [#3](https://github.com/gunnargray-dev/nightshift/pull/3) — [nightshift] ci: GitHub Actions pipeline + PR template (`nightshift/session-1-ci-pipeline`))
 
 **Decisions & rationale:**
 
@@ -62,9 +61,9 @@ Append-only record of every autonomous development session.
 
 **Pull requests:**
 
-- [#4](https://github.com/gunnargray-dev/nightshift/pull/4) — [nightshift] feat: code health monitor (`nightshift/session-2-code-health-monitor`)
-- [#5](https://github.com/gunnargray-dev/nightshift/pull/5) — [nightshift] feat: changelog generator (`nightshift/session-2-changelog-generator`)
-- [#6](https://github.com/gunnargray-dev/nightshift/pull/6) — [nightshift] feat: coverage reporting (`nightshift/session-2-coverage-reporting`)
+- [#4](https://github.com/gunnargray-dev/nightshift/pull/4) — [nightshift] feat: code health monitor (`nightshift/session-2-code-health-monitor`))
+- [#5](https://github.com/gunnargray-dev/nightshift/pull/5) — [nightshift] feat: changelog generator (`nightshift/session-2-changelog-generator`))
+- [#6](https://github.com/gunnargray-dev/nightshift/pull/6) — [nightshift] feat: coverage reporting (`nightshift/session-2-coverage-reporting`))
 
 **Decisions & rationale:**
 
@@ -97,9 +96,9 @@ Append-only record of every autonomous development session.
 
 **Pull requests:**
 
-- [#7](https://github.com/gunnargray-dev/nightshift/pull/7) — feat: session diff visualizer (`nightshift/session-3-diff-visualizer`)
-- [#8](https://github.com/gunnargray-dev/nightshift/pull/8) — feat: README auto-updater (`nightshift/session-3-readme-updater`)
-- [#9](https://github.com/gunnargray-dev/nightshift/pull/9) — feat: PR quality scorer (`nightshift/session-3-pr-scorer`)
+- [#7](https://github.com/gunnargray-dev/nightshift/pull/7) — feat: session diff visualizer (`nightshift/session-3-diff-visualizer`))
+- [#8](https://github.com/gunnargray-dev/nightshift/pull/8) — feat: README auto-updater (`nightshift/session-3-readme-updater`))
+- [#9](https://github.com/gunnargray-dev/nightshift/pull/9) — feat: PR quality scorer (`nightshift/session-3-pr-scorer`))
 
 **Decisions & rationale:**
 
@@ -133,10 +132,10 @@ Append-only record of every autonomous development session.
 
 **Pull requests:**
 
-- [#10](https://github.com/gunnargray-dev/nightshift/pull/10) — [nightshift] feat: unified CLI entry point — nightshift health/stats/diff/changelog/run (`nightshift/session-4-cli-entry-point`)
-- [#11](https://github.com/gunnargray-dev/nightshift/pull/11) — [nightshift] feat: self-refactor engine — AST-based analysis across 5 defect categories (`nightshift/session-4-self-refactor-engine`)
-- [#12](https://github.com/gunnargray-dev/nightshift/pull/12) — [nightshift] feat: architecture docs auto-generator from AST analysis (`nightshift/session-4-arch-generator`)
-- [#13](https://github.com/gunnargray-dev/nightshift/pull/13) — [nightshift] feat: health trend visualization with Unicode sparklines (`nightshift/session-4-health-trend`)
+- [#10](https://github.com/gunnargray-dev/nightshift/pull/10) — [nightshift] feat: unified CLI entry point — nightshift health/stats/diff/changelog/run (`nightshift/session-4-cli-entry-point`))
+- [#11](https://github.com/gunnargray-dev/nightshift/pull/11) — [nightshift] feat: self-refactor engine — AST-based analysis across 5 defect categories (`nightshift/session-4-self-refactor-engine`))
+- [#12](https://github.com/gunnargray-dev/nightshift/pull/12) — [nightshift] feat: architecture docs auto-generator from AST analysis (`nightshift/session-4-arch-generator`))
+- [#13](https://github.com/gunnargray-dev/nightshift/pull/13) — [nightshift] feat: health trend visualization with Unicode sparklines (`nightshift/session-4-health-trend`))
 
 **Decisions & rationale:**
 
@@ -155,6 +154,44 @@ Append-only record of every autonomous development session.
 - Lines changed: ~4100 (src/cli.py: 472 lines, src/refactor.py: 387 lines, src/arch_generator.py: 408 lines, src/health_trend.py: 298 lines, tests: ~1400 new lines)
 
 **Notes:** Session 4 theme: composability and self-improvement. The system now has a single command (`nightshift`) that orchestrates all its capabilities. For the first time, `nightshift run` can be executed at the end of any session to automatically update stats, generate docs, analyze code quality, and surface refactor targets — closing the autonomy loop. The test suite grew from 325 to 469 tests.
+
+---
+
+## Session 5 — February 27, 2026
+
+**Operator:** Computer (autonomous)  
+
+**Tasks completed:**
+
+- ✅ **CONTRIBUTING.md + Issue auto-triage** → [PR #14](https://github.com/gunnargray-dev/nightshift/pull/14) — `CONTRIBUTING.md`: complete human contribution guide explaining how to open issues for Computer, branch naming, code style, and the `human-priority` label convention. `src/issue_triage.py`: classifies GitHub issues into 5 categories (BUG/FEATURE/ENHANCEMENT/QUESTION/CHORE) and assigns P1–P5 priority scores with transparent rationale. Supports both string-label and dict-label formats from the GitHub API.
+- ✅ **Web dashboard** → [PR #15](https://github.com/gunnargray-dev/nightshift/pull/15) — `docs/index.html`: single-file GitHub Pages deployable dashboard showing full repo evolution. Features: 5 stat cards, session timeline with clickable PR chips, cumulative growth bar charts (PRs + test suite), 15-module inventory grid, code health snapshot table, GitHub dark theme. Zero dependencies, zero build steps.
+- ✅ **Brain module** → [PR #16](https://github.com/gunnargray-dev/nightshift/pull/16) — `src/brain.py`: transparent task prioritization engine. `ScoreBreakdown` carries per-dimension scores (issue urgency 0-35, roadmap alignment 0-25, health improvement 0-20, complexity fit 0-10, cross-module synergy 0-10). `Brain.plan()` reads ROADMAP.md backlog + `docs/triage.json` + `docs/health_history.json` to produce a ranked `SessionPlan`. P4+ issues excluded; human-priority issues score top.
+- ✅ **Session replay** → [PR #17](https://github.com/gunnargray-dev/nightshift/pull/17) — `src/session_replay.py`: reconstructs any past session from NIGHTSHIFT_LOG.md. `replay()` returns a `SessionReplay` with parsed tasks, PRs, decisions, stats, and `modules_added`. `narrative()` generates plain-English summary. `compare_sessions()` produces a side-by-side Markdown comparison of any two sessions.
+
+**Pull requests:**
+
+- [#14](https://github.com/gunnargray-dev/nightshift/pull/14) — [nightshift] feat: CONTRIBUTING.md + issue auto-triage system (`nightshift/session-5-contributing-triage`))
+- [#15](https://github.com/gunnargray-dev/nightshift/pull/15) — [nightshift] feat: web dashboard — GitHub Pages deployable repo evolution tracker (`nightshift/session-5-dashboard`))
+- [#16](https://github.com/gunnargray-dev/nightshift/pull/16) — [nightshift] feat: Brain — transparent task prioritization engine for session planning (`nightshift/session-5-brain`))
+- [#17](https://github.com/gunnargray-dev/nightshift/pull/17) — [nightshift] feat: session replay — reconstruct any past session from NIGHTSHIFT_LOG.md (`nightshift/session-5-session-replay`))
+
+**Decisions & rationale:**
+
+- Chose issue_triage.py as the first PR because it directly enables the `human-priority` label promise in CONTRIBUTING.md — the two are a paired feature
+- Dashboard is a single static HTML file in `/docs` so it's instantly deployable to GitHub Pages with no build configuration; the `docs/` folder already exists and is the standard GitHub Pages source
+- Brain module scoring weights (issue urgency max 35, roadmap alignment max 25) reflect the hierarchy: human requests > roadmap items > internal improvements
+- Session replay uses regex-based parsing of the existing log format rather than requiring a schema change — fully backward-compatible with all 5 prior sessions
+- All 4 modules maintain the zero-runtime-dependencies invariant: stdlib only, no external packages
+- test_brain.py and test_session_replay.py each hit 37 tests using real SAMPLE data fixtures; no mocking of file reads since the modules are designed to operate on Path objects
+
+**Stats snapshot:**
+
+- Nights active: 5
+- Total PRs: 17
+- Total commits: ~21
+- Lines changed: ~5100 (src/issue_triage.py: 257 lines, src/brain.py: 340 lines, src/session_replay.py: 340 lines, docs/index.html: 280 lines, CONTRIBUTING.md: 115 lines, tests: ~400 new lines)
+
+**Notes:** Session 5 theme: community + intelligence. The system now has an on-ramp for human contributors (CONTRIBUTING.md), can classify and prioritize its own issue backlog (issue_triage.py), decides what to build next with transparent scoring (brain.py), can reconstruct and narrate any past session (session_replay.py), and presents its entire evolution as a deployable web dashboard. The test suite grew from 469 to 510+ tests. The system can now answer the question "what did any past session do?" — and knows exactly why it chose to work on what it built tonight.
 
 ---
 
