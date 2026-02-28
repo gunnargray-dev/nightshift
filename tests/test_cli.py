@@ -117,6 +117,21 @@ class TestBuildParser:
             args = parser.parse_args([cmd])
             assert callable(args.func), f"{cmd} missing func binding"
 
+    def test_dashboard_subcommand_parses(self):
+        parser = build_parser()
+        args = parser.parse_args(["dashboard"])
+        assert args.command == "dashboard"
+
+    def test_dashboard_custom_port(self):
+        parser = build_parser()
+        args = parser.parse_args(["dashboard", "--port", "9000"])
+        assert args.port == 9000
+
+    def test_dashboard_default_port(self):
+        parser = build_parser()
+        args = parser.parse_args(["dashboard"])
+        assert args.port == 8710
+
 
 # ---------------------------------------------------------------------------
 # Helper function tests
