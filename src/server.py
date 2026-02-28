@@ -1,4 +1,4 @@
-"""HTTP API server for the Nightshift dashboard.
+"""HTTP API server for the Nightshift dashboard — Session 17 update.
 
 Wraps CLI commands as JSON HTTP endpoints.  Uses only stdlib
 (http.server + subprocess) to maintain the zero-dependency principle.
@@ -32,6 +32,14 @@ GET /api/teach/<module>  -- Tutorial for a specific module
 GET /api/audit           -- Comprehensive repo audit (Session 16)
 GET /api/semver          -- Semantic version analysis (Session 16)
 GET /api/predict         -- Predictive session planner (Session 16)
+GET /api/openapi         -- OpenAPI 3.1 spec for this server (Session 17)
+GET /api/report          -- Executive HTML summary report (Session 17)
+GET /api/modules         -- Module interconnection Mermaid graph (Session 17)
+GET /api/trends          -- Historical session-over-session trend data (Session 17)
+GET /api/commits         -- Commit message quality analysis (Session 17)
+GET /api/diff-sessions/<a>/<b> -- Compare sessions A and B (Session 17)
+GET /api/test-quality    -- Test quality grader (Session 17)
+GET /api/plugins         -- Plugin registry listing (Session 17)
 GET /api                 -- List all available endpoints
 """
 
@@ -75,12 +83,19 @@ ROUTE_MAP: dict[str, list[str]] = {
     "/api/audit": ["audit", "--json"],
     "/api/semver": ["semver", "--json"],
     "/api/predict": ["predict", "--json"],
+    # Session 17
+    "/api/modules": ["modules", "--json"],
+    "/api/trends": ["trends", "--json"],
+    "/api/commits": ["commits", "--json"],
+    "/api/test-quality": ["test-quality", "--json"],
 }
 
 PARAMETERIZED_ROUTES: dict[str, tuple[str, list[str]]] = {
     r"/api/replay/(\d+)": ("replay", ["--json", "--session"]),
     r"/api/diff/(\d+)": ("diff", ["--json", "--session"]),
     r"/api/teach/([a-zA-Z0-9_]+)": ("teach", ["--json"]),
+    # Session 17
+    r"/api/diff-sessions/(\d+)/(\d+)": ("diff-sessions", ["--json"]),
 }
 
 
@@ -134,16 +149,49 @@ class NightshiftHandler(BaseHTTPRequestHandler):
         for pattern, (cmd, base_args) in PARAMETERIZED_ROUTES.items():
             match = re.match(pattern, path)
             if match:
-                param = match.group(1)
                 try:
                     if cmd == "teach":
+                        param = match.group(1)
                         output = self._run_command([cmd, param] + base_args)
+                    elif cmd == "diff-sessions":
+                        # Two parameters: session_a and session_b
+                        a, b = match.group(1), match.group(2)
+                        output = self._run_command([cmd, a, b] + base_args)
                     else:
+                        param = match.group(1)
                         output = self._run_command([cmd] + base_args + [param])
                     self._send_json(200, output)
                 except Exception as exc:
                     self._send_json(500, json.dumps({"error": str(exc)}))
                 return
+
+        # OpenAPI spec — generated inline without subprocess
+        if path == "/api/openapi":
+            try:
+                from src.openapi import generate_openapi_spec
+                import json as _json
+                repo = getattr(self.server, "repo_path", Path("."))
+                spec = generate_openapi_spec(repo)
+                self._send_json(200, _json.dumps(spec.to_dict(), indent=2))
+            except Exception as exc:
+                import json as _json
+                self._send_json(500, _json.dumps({"error": str(exc)}))
+            return
+
+        # Plugins listing
+        if path == "/api/plugins":
+            try:
+                from src.plugins import load_plugin_definitions
+                import json as _json
+                repo = getattr(self.server, "repo_path", Path("."))
+                definitions = load_plugin_definitions(repo)
+                self._send_json(200, _json.dumps(
+                    {"plugins": [d.to_dict() for d in definitions], "total": len(definitions)}
+                ))
+            except Exception as exc:
+                import json as _json
+                self._send_json(500, _json.dumps({"error": str(exc)}))
+            return
 
         # Sessions list
         if path == "/api/sessions":
@@ -161,10 +209,15 @@ class NightshiftHandler(BaseHTTPRequestHandler):
 
         # API index
         if path in ("/api", "/api/"):
-            endpoints = sorted(list(ROUTE_MAP.keys()) + ["/api/sessions",
-                                                          "/api/replay/<n>",
-                                                          "/api/diff/<n>",
-                                                          "/api/teach/<module>"])
+            endpoints = sorted(list(ROUTE_MAP.keys()) + [
+                "/api/sessions",
+                "/api/replay/<n>",
+                "/api/diff/<n>",
+                "/api/teach/<module>",
+                "/api/openapi",
+                "/api/plugins",
+                "/api/diff-sessions/<a>/<b>",
+            ])
             self._send_json(200, json.dumps({"endpoints": endpoints, "total": len(endpoints)}))
             return
 
