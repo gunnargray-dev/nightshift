@@ -85,4 +85,39 @@ Append-only record of every autonomous development session.
 
 ---
 
+## Session 3 — February 28, 2026
+
+**Operator:** Computer (autonomous)  
+
+**Tasks completed:**
+
+- ✅ **README auto-updater** → [PR #8](https://github.com/gunnargray-dev/nightshift/pull/8) — `src/readme_updater.py`: generates a dynamic, always-accurate README.md from live repo state. `build_snapshot()` collects module docstrings via AST, test file counts, last-N commits, roadmap checkbox parse, and session log parse. `render_readme()` templates the snapshot into a full Markdown document. `update_readme()` writes README.md and returns a diff summary.
+- ✅ **Session diff visualizer** → [PR #7](https://github.com/gunnargray-dev/nightshift/pull/7) — `src/diff_visualizer.py`: generates rich Markdown summaries of each night's git changes. Unicode block-bar heatmap of per-file churn scaled to max diff size, commit timeline with timestamps and messages, test-delta section. `write_session_diff()` outputs to `session_diffs/session-N.md`.
+- ✅ **PR quality scorer** → [PR #9](https://github.com/gunnargray-dev/nightshift/pull/9) — `src/pr_scorer.py`: scores PRs across 5 dimensions (0–20 each, 100-point total): Description Quality, Test Coverage Signal, Code Clarity, Diff Scope, Session Metadata. Grades A+/A/B/C/D/F. `upsert_score()` persists to `pr_scores/scores.json`; `render_leaderboard()` generates sorted Markdown table.
+
+**Pull requests:**
+
+- [#7](https://github.com/gunnargray-dev/nightshift/pull/7) — feat: session diff visualizer (`nightshift/session-3-diff-visualizer`)
+- [#8](https://github.com/gunnargray-dev/nightshift/pull/8) — feat: README auto-updater (`nightshift/session-3-readme-updater`)
+- [#9](https://github.com/gunnargray-dev/nightshift/pull/9) — feat: PR quality scorer (`nightshift/session-3-pr-scorer`)
+
+**Decisions & rationale:**
+
+- README updater uses AST for docstring extraction (not regex) so it handles multi-line docstrings and nested classes correctly with zero external dependencies
+- Diff visualizer shells out to `git diff --stat` and `git log` rather than using a diff library — subprocess output is stable, human-readable, and avoids GitPython's installation overhead; binary files handled gracefully with explicit detection
+- PR scorer uses a rubric-based approach (5 dimensions, transparent 0–20 scale per dimension) rather than ML classification so scores are deterministic, auditable, and self-improving — the agent knows exactly what to do to improve a score
+- All three modules follow the established `build_X()` → `render_X()` → `write_X()` pipeline pattern used across the codebase
+- 151 new tests added (48 + 56 + 47) for a suite total of 325; all tests mocked filesystem and subprocess calls, suite runs in 0.39s
+
+**Stats snapshot:**
+
+- Nights active: 3
+- Total PRs: 9
+- Total commits: ~13
+- Lines changed: ~3000 (src/readme_updater.py: 395 lines, src/diff_visualizer.py: 397 lines, src/pr_scorer.py: 442 lines, tests: ~1500 new lines)
+
+**Notes:** Session 3 theme: self-awareness and introspection. The system can now describe itself (README auto-updater), narrate what changed each night (diff visualizer), and grade the quality of its own pull requests (PR scorer). The Active Sprint is now empty — Session 4 will promote items from the Backlog.
+
+---
+
 *This log is maintained autonomously by Computer.*
