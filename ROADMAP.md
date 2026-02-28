@@ -4,14 +4,11 @@ Maintained autonomously by Computer. Items are picked, built, and checked off du
 
 ## Active Sprint
 
-_Session 12 complete. Next: Session 13._
-
 ## Backlog
 
 - [ ] **Dependency management** — pyproject.toml with proper dev/runtime dependency groups
 - [ ] **Health score CI gate** — Fail CI if overall health score drops below threshold
 - [ ] **PR auto-merge** — Merge PRs automatically if CI passes and score ≥ 80
-- [ ] **Multi-session diff** — Compare any two session snapshots side-by-side
 - [ ] **Nightly digest** — Email/Slack summary of what Computer built each night
 - [ ] **Coverage CI gate** — Fail CI if coverage drops below 80%
 
@@ -47,11 +44,15 @@ _Session 12 complete. Next: Session 13._
 - [x] **Module Coupling Analyzer** — `src/coupling.py` Ca/Ce/instability per Robert Martin's stable-dependencies principle; `nightshift coupling [--write] [--json]` (Session 11)
 - [x] **Cyclomatic Complexity Tracker** — `src/complexity.py` AST-based McCabe complexity with per-session history JSON; `nightshift complexity [--session N] [--write]` (Session 11)
 - [x] **Export System** — `src/exporter.py` JSON/Markdown/HTML export for any analysis with dark-themed self-contained HTML; `nightshift export <analysis>` (Session 11)
-
-- [x] **Config system** — `src/config.py` reads/writes `nightshift.toml`; `NightshiftConfig` dataclass; stdlib TOML parser; `nightshift config [--write] [--json]` (Session 12)
-- [x] **Session compare** — `src/compare.py` side-by-side session diff with stat deltas, task diffs, bar charts; `nightshift compare <a> <b> [--write] [--json]` (Session 12)
-- [x] **Terminal dashboard** — `src/dashboard.py` box-drawing stats panel; 4 stat cards; SOURCE/METRICS/RECENT SESSIONS panels; sparklines; `nightshift dashboard [--write] [--json]` (Session 12)
-- [x] **Dependency freshness checker** — `src/deps_checker.py` queries PyPI JSON API for outdated packages; `nightshift deps [--offline] [--json]` (Session 12)
+- [x] **Config system** — `src/config.py` nightshift.toml reader/writer with defaults and validation; `nightshift config [--write] [--json]` (Session 12)
+- [x] **Session Compare** — `src/compare.py` side-by-side session diff with stat deltas; `nightshift compare <a> <b> [--write] [--json]` (Session 12)
+- [x] **Terminal Dashboard** — `src/dashboard.py` rich box-drawing stats panel with sparklines; `nightshift dashboard [--write] [--json]` (Session 12)
+- [x] **Dependency Freshness Checker** — `src/deps_checker.py` PyPI-based staleness detection for all declared deps; `nightshift deps [--offline] [--json]` (Session 12)
+- [x] **Multi-session diff** — `nightshift compare` with stat deltas covers this backlog item (Session 12)
+- [x] **Git Blame Attribution** — `src/blame.py` human vs AI contribution % per file and repo-wide; `nightshift blame [--write] [--json]` (Session 13)
+- [x] **Dead Code Detector** — `src/dead_code.py` 3-pass AST analysis: unused functions/classes/imports; `nightshift deadcode [--write] [--json]` (Session 13)
+- [x] **Security Audit** — `src/security.py` 10 checks (eval/exec, pickle, shell=True, weak hashes, secrets, etc.), letter grade A–F; `nightshift security [--write] [--json]` (Session 13)
+- [x] **Coverage Heat Map** — `src/coverage_map.py` cross-references src/X.py vs tests/test_X.py via AST, 0–100 score; `nightshift coveragemap [--write] [--json]` (Session 13)
 
 ---
 
