@@ -40,6 +40,11 @@ GET /api/commits         -- Commit message quality analysis (Session 17)
 GET /api/diff-sessions/<a>/<b> -- Compare sessions A and B (Session 17)
 GET /api/test-quality    -- Test quality grader (Session 17)
 GET /api/plugins         -- Plugin registry listing (Session 17)
+GET /api/reflect         -- Session meta-analysis: quality scores and patterns (Session 18)
+GET /api/evolve          -- Gap analysis and evolution proposals (Session 18)
+GET /api/status          -- Comprehensive at-a-glance status dashboard (Session 18)
+GET /api/session-score   -- All session quality scores (Session 18)
+GET /api/session-score/<N> -- Quality score for a specific session (Session 18)
 GET /api                 -- List all available endpoints
 """
 
@@ -88,6 +93,10 @@ ROUTE_MAP: dict[str, list[str]] = {
     "/api/trends": ["trends", "--json"],
     "/api/commits": ["commits", "--json"],
     "/api/test-quality": ["test-quality", "--json"],
+    # Session 18
+    "/api/reflect": ["reflect", "--json"],
+    "/api/evolve": ["evolve", "--json"],
+    "/api/status": ["status", "--json"],
 }
 
 PARAMETERIZED_ROUTES: dict[str, tuple[str, list[str]]] = {
@@ -193,6 +202,33 @@ class NightshiftHandler(BaseHTTPRequestHandler):
                 self._send_json(500, _json.dumps({"error": str(exc)}))
             return
 
+        # Session 18 metacognition endpoints
+        if path in ("/api/session-score",) or path.startswith("/api/session-score/"):
+            try:
+                import sys as _sys
+                _sys.path.insert(0, str(Path(__file__).resolve().parent))
+                from session_scorer import score_session, score_all_sessions, session_score_to_json, SESSION_DATA
+                import json as _json
+                parts = path.split("/")
+                if len(parts) >= 4 and parts[3].isdigit():
+                    session_num = int(parts[3])
+                    row = next((r for r in SESSION_DATA if r[0] == session_num), None)
+                    if row:
+                        _, features, tests, cli, api, health = row
+                        score = score_session(session_num, features, tests, cli, api, health)
+                        self._send_json(200, session_score_to_json(score))
+                    else:
+                        self._send_json(404, _json.dumps({"error": f"No data for session {session_num}"}))
+                else:
+                    scores = score_all_sessions()
+                    data = [{"session": s.session, "total": s.total, "grade": s.grade,
+                             "verdict": s.verdict} for s in scores]
+                    self._send_json(200, _json.dumps({"scores": data}, indent=2))
+            except Exception as exc:
+                import json as _json
+                self._send_json(500, _json.dumps({"error": str(exc)}))
+            return
+
         # Sessions list
         if path == "/api/sessions":
             try:
@@ -211,6 +247,8 @@ class NightshiftHandler(BaseHTTPRequestHandler):
         if path in ("/api", "/api/"):
             endpoints = sorted(list(ROUTE_MAP.keys()) + [
                 "/api/sessions",
+                "/api/session-score",
+                "/api/session-score/<N>",
                 "/api/replay/<n>",
                 "/api/diff/<n>",
                 "/api/teach/<module>",
