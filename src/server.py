@@ -29,6 +29,9 @@ GET /api/benchmark       -- Performance benchmark suite
 GET /api/gitstats        -- Git statistics deep-dive
 GET /api/badges          -- Shields.io badge metadata
 GET /api/teach/<module>  -- Tutorial for a specific module
+GET /api/audit           -- Comprehensive repo audit (Session 16)
+GET /api/semver          -- Semantic version analysis (Session 16)
+GET /api/predict         -- Predictive session planner (Session 16)
 GET /api                 -- List all available endpoints
 """
 
@@ -68,6 +71,10 @@ ROUTE_MAP: dict[str, list[str]] = {
     "/api/benchmark": ["benchmark", "--json"],
     "/api/gitstats": ["gitstats", "--json"],
     "/api/badges": ["badges", "--json"],
+    # Session 16
+    "/api/audit": ["audit", "--json"],
+    "/api/semver": ["semver", "--json"],
+    "/api/predict": ["predict", "--json"],
 }
 
 PARAMETERIZED_ROUTES: dict[str, tuple[str, list[str]]] = {
