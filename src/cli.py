@@ -18,6 +18,10 @@ nightshift run         — Run the full end-of-session pipeline
 nightshift depgraph    — Visualise module dependency graph
 nightshift todos       — Hunt stale TODO/FIXME annotations
 nightshift doctor      — Run full repo health diagnostic
+nightshift timeline    — ASCII visual timeline of all sessions
+nightshift coupling    — Module coupling analyzer (Ca, Ce, instability)
+nightshift complexity  — Cyclomatic complexity tracker
+nightshift export      — Export any analysis to JSON/Markdown/HTML
 
 Usage
 -----
@@ -471,6 +475,216 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Subcommand: timeline
+# ---------------------------------------------------------------------------
+
+
+def cmd_timeline(args: argparse.Namespace) -> int:
+    """Render an ASCII visual timeline of all Nightshift sessions."""
+    from src.timeline import build_timeline, save_timeline
+
+    _print_header("Session Timeline")
+    repo = _repo(getattr(args, "repo", None))
+    log_path = repo / "NIGHTSHIFT_LOG.md"
+    timeline = build_timeline(log_path=log_path, repo_path=repo)
+
+    if args.json:
+        print(timeline.to_json())
+        return 0
+
+    if args.write:
+        out = repo / "docs" / "timeline.md"
+        save_timeline(timeline, out)
+        _print_ok(f"Timeline written to {out}")
+        _print_ok(f"JSON sidecar → {out.with_suffix('.json')}")
+        return 0
+
+    print(timeline.to_markdown())
+    _print_info(
+        f"Sessions: {timeline.total_sessions}  ·  Total PRs: {timeline.total_prs}"
+    )
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: coupling
+# ---------------------------------------------------------------------------
+
+
+def cmd_coupling(args: argparse.Namespace) -> int:
+    """Analyze module coupling — afferent/efferent coupling, instability metric."""
+    from src.coupling import analyze_coupling, save_coupling_report
+
+    _print_header("Module Coupling Analysis")
+    repo = _repo(getattr(args, "repo", None))
+    report = analyze_coupling(repo_path=repo)
+
+    if args.json:
+        print(report.to_json())
+        return 0
+
+    if args.write:
+        out = repo / "docs" / "coupling_report.md"
+        save_coupling_report(report, out)
+        _print_ok(f"Report written to {out}")
+        _print_ok(f"JSON sidecar → {out.with_suffix('.json')}")
+        return 0
+
+    print(report.to_markdown())
+    _print_info(
+        f"Modules: {len(report.modules)}  ·  "
+        f"Avg instability: {report.avg_instability:.2f}  ·  "
+        f"Circular deps: {len(report.circular_groups)}"
+    )
+    if report.circular_groups:
+        _print_warn("Circular dependency chains detected — see report for details")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: complexity
+# ---------------------------------------------------------------------------
+
+
+def cmd_complexity(args: argparse.Namespace) -> int:
+    """Track cyclomatic complexity across all src/ modules."""
+    from src.complexity import (
+        analyze_complexity,
+        load_complexity_history,
+        save_complexity_report,
+        save_complexity_history,
+    )
+
+    _print_header("Cyclomatic Complexity")
+    repo = _repo(getattr(args, "repo", None))
+    report = analyze_complexity(repo_path=repo, session_number=args.session)
+
+    history_path = repo / "docs" / "complexity_history.json"
+    history = load_complexity_history(history_path)
+    history.add(report)
+
+    if args.json:
+        print(report.to_json())
+        return 0
+
+    if args.write:
+        out = repo / "docs" / "complexity_report.md"
+        save_complexity_report(report, out)
+        save_complexity_history(history, history_path)
+        _print_ok(f"Report written to {out}")
+        _print_ok(f"History updated → {history_path}")
+        return 0
+
+    print(report.to_markdown())
+    print(history.to_markdown())
+    _print_info(
+        f"Functions: {report.total_functions}  ·  "
+        f"Avg CC: {report.global_avg:.1f}  ·  "
+        f"Max CC: {report.global_max}  ·  "
+        f"Hot spots: {len(report.hot_spots)}"
+    )
+    if report.critical_count > 0:
+        _print_warn(f"{report.critical_count} critical functions (CC > 20) need attention")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: export
+# ---------------------------------------------------------------------------
+
+
+def cmd_export(args: argparse.Namespace) -> int:
+    """Export any Nightshift analysis to JSON, Markdown, or HTML."""
+    from src.exporter import export_report, FORMATS
+
+    _print_header("Export")
+    repo = _repo(getattr(args, "repo", None))
+    out_dir = repo / "docs" / "exports"
+    if args.output:
+        out_dir = Path(args.output)
+
+    formats = [f.strip() for f in args.formats.split(",") if f.strip()]
+    if not formats:
+        formats = list(FORMATS)
+
+    # Import and run the requested analysis
+    command = args.analysis
+
+    if command == "coupling":
+        from src.coupling import analyze_coupling
+        report = analyze_coupling(repo_path=repo)
+        name = "coupling-report"
+        title = "Module Coupling Analysis"
+    elif command == "complexity":
+        from src.complexity import analyze_complexity
+        report = analyze_complexity(repo_path=repo, session_number=args.session)
+        name = "complexity-report"
+        title = "Cyclomatic Complexity Report"
+    elif command == "timeline":
+        from src.timeline import build_timeline
+        report = build_timeline(repo_path=repo)
+        name = "timeline-report"
+        title = "Session Timeline"
+    elif command == "health":
+        from src.health import generate_health_report
+        report = generate_health_report(repo_path=repo)
+        name = "health-report"
+        title = "Code Health Report"
+    elif command == "doctor":
+        from src.doctor import diagnose
+        report = diagnose(repo)
+        name = "doctor-report"
+        title = "Nightshift Doctor"
+    elif command == "depgraph":
+        from src.dep_graph import build_dep_graph
+        report = build_dep_graph(repo_path=repo)
+        name = "dep-graph"
+        title = "Module Dependency Graph"
+    elif command == "todos":
+        from src.todo_hunter import hunt
+        items = hunt(repo_path=repo)
+        class TodoWrapper:
+            def __init__(self, items):
+                self._items = items
+            def to_markdown(self):
+                from src.todo_hunter import render_todo_report
+                return render_todo_report(self._items)
+            def to_dict(self):
+                return {"todos": [i.to_dict() for i in self._items]}
+            def to_json(self):
+                import json
+                return json.dumps(self.to_dict(), indent=2)
+        report = TodoWrapper(items)
+        name = "todos-report"
+        title = "Stale TODO Report"
+    else:
+        _print_warn(f"Unknown analysis: {command!r}")
+        _print_info("Available: coupling, complexity, timeline, health, doctor, depgraph, todos")
+        return 1
+
+    metadata = {
+        "Analysis": command,
+        "Repo": str(repo),
+    }
+
+    result = export_report(
+        report,
+        out_dir=out_dir,
+        name=name,
+        formats=formats,
+        title=title,
+        metadata=metadata,
+    )
+
+    for fmt, path in result.files.items():
+        _print_ok(f"{fmt.upper():10} → {path}")
+    for err in result.errors:
+        _print_warn(f"Export error: {err}")
+
+    return 0 if not result.errors else 1
+
+
+# ---------------------------------------------------------------------------
 # Subcommand: run (full pipeline)
 # ---------------------------------------------------------------------------
 
@@ -669,6 +883,49 @@ Examples:
     p_doctor.add_argument("--write", action="store_true", help="Write report to docs/doctor_report.md")
     p_doctor.add_argument("--json", action="store_true", help="Output raw JSON")
     p_doctor.set_defaults(func=cmd_doctor)
+
+    # timeline
+    p_timeline = sub.add_parser("timeline", help="ASCII visual timeline of all sessions")
+    p_timeline.add_argument("--write", action="store_true", help="Write to docs/timeline.md")
+    p_timeline.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_timeline.set_defaults(func=cmd_timeline)
+
+    # coupling
+    p_coupling = sub.add_parser("coupling", help="Module coupling analyzer (Ca, Ce, instability)")
+    p_coupling.add_argument("--write", action="store_true", help="Write to docs/coupling_report.md")
+    p_coupling.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_coupling.set_defaults(func=cmd_coupling)
+
+    # complexity
+    p_complexity = sub.add_parser("complexity", help="Cyclomatic complexity tracker")
+    p_complexity.add_argument(
+        "--session", type=int, default=11, help="Session number for this snapshot (default: 11)"
+    )
+    p_complexity.add_argument("--write", action="store_true", help="Write to docs/complexity_report.md")
+    p_complexity.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_complexity.set_defaults(func=cmd_complexity)
+
+    # export
+    p_export = sub.add_parser("export", help="Export any analysis to JSON/Markdown/HTML")
+    p_export.add_argument(
+        "analysis",
+        choices=["coupling", "complexity", "timeline", "health", "doctor", "depgraph", "todos"],
+        help="Which analysis to export",
+    )
+    p_export.add_argument(
+        "--formats",
+        default="json,markdown,html",
+        help="Comma-separated formats: json,markdown,html (default: all)",
+    )
+    p_export.add_argument(
+        "--output",
+        metavar="DIR",
+        help="Output directory (default: docs/exports/)",
+    )
+    p_export.add_argument(
+        "--session", type=int, default=11, help="Session number (for complexity export)"
+    )
+    p_export.set_defaults(func=cmd_export)
 
     # run
     p_run = sub.add_parser("run", help="Full end-of-session pipeline")
