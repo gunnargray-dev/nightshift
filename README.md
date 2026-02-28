@@ -22,10 +22,10 @@ Every morning, the human maintainer wakes up to a diff.
 
 | Metric | Count |
 |--------|-------|
-| Nights active | 13 |
-| Total PRs | 35 |
+| Nights active | 14 |
+| Total PRs | 36 |
 | Total commits | 50 |
-| Lines changed | 14500 |
+| Lines changed | 17500 |
 
 *Stats are updated by Computer each session.*
 
@@ -41,7 +41,7 @@ Every morning, the human maintainer wakes up to a diff.
 | `src/readme_updater.py` | Generates dynamic README.md from live repo state |
 | `src/diff_visualizer.py` | Markdown summary of each night's git changes with block-bar heatmap |
 | `src/pr_scorer.py` | Scores PRs 0–100 across 5 dimensions, grades A+–F, Markdown leaderboard |
-| `src/cli.py` | Unified `nightshift` CLI with 27 subcommands |
+| `src/cli.py` | Unified `nightshift` CLI with 31 subcommands |
 | `src/refactor.py` | Self-refactor engine: AST analysis across 5 defect categories with auto-fix |
 | `src/arch_generator.py` | Auto-generates docs/ARCHITECTURE.md from AST walk of the repo |
 | `src/health_trend.py` | Tracks health scores across sessions; Unicode sparklines |
@@ -63,6 +63,10 @@ Every morning, the human maintainer wakes up to a diff.
 | `src/dead_code.py` | AST-based dead code detector: unused functions, classes, and imports |
 | `src/security.py` | Security audit: 10 checks for common Python anti-patterns, letter grade A–F |
 | `src/coverage_map.py` | Test coverage heat map: cross-references src/X.py vs tests/test_X.py via AST |
+| `src/story.py` | Reads NIGHTSHIFT_LOG.md and generates a prose narrative of repo evolution with chapters per session |
+| `src/maturity.py` | Scores each module 0–100 across 5 dimensions (Tests, Docs, Complexity, Age, Coupling); SEED→VETERAN tiers |
+| `src/teach.py` | AST-based tutorial generator: produces a full written tutorial for any module in the repo |
+| `src/dna.py` | 6-channel visual DNA fingerprint of the repo with 8-char hex digest and per-file sparklines |
 
 ## Usage
 
@@ -91,6 +95,10 @@ nightshift blame         # human vs AI attribution
 nightshift deadcode      # detect unused code
 nightshift security      # security audit (A-F grade)
 nightshift coveragemap   # test coverage heat map
+nightshift story         # prose narrative of repo evolution
+nightshift maturity      # module maturity scores (SEED→VETERAN)
+nightshift teach <mod>   # generate tutorial for any module
+nightshift dna           # repo DNA fingerprint with hex digest
 nightshift run           # full pipeline
 ```
 
