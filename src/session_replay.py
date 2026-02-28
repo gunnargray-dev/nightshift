@@ -163,8 +163,8 @@ class SessionReplay:
         if self.tasks:
             lines += ["## Tasks", ""]
             for task in self.tasks:
-                icon = {"completed": "✅", "partial": "⚠️", "skipped": "⏭️"}.get(
-                    task.status, "❓"
+                icon = {"completed": "[completed]", "partial": "[partial]", "skipped": "[skipped]"}.get(
+                    task.status, "[unknown]"
                 )
                 pr_ref = ""
                 if task.pr_number:
@@ -313,7 +313,10 @@ def _parse_session_section(session_number: int, section_text: str) -> SessionRep
             title_match = re.search(r"\u2014\s*(.+?)(?:\s*\(`.+`\))?$", line)
             pr_title = title_match.group(1).strip() if title_match else line[:60]
 
-            branch_match = re.search(r"`([^`]+)`\)?$", line)
+            # Branch is usually recorded as (`nightshift/session-x-foo`), but
+            # historical log entries sometimes ended with an extra closing paren.
+            # Example: ... (`nightshift/session-1-stats-engine`))
+            branch_match = re.search(r"\(`([^`]+)`\)\)*$", line)
             branch = branch_match.group(1).strip() if branch_match else ""
 
             if pr_num:
