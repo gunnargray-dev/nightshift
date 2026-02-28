@@ -471,6 +471,22 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Subcommand: dashboard
+# ---------------------------------------------------------------------------
+
+
+def cmd_dashboard(args: argparse.Namespace) -> int:
+    """Launch the dashboard API server."""
+    from src.server import start_server
+
+    repo = _repo(getattr(args, "repo", None))
+    _print_header("Dashboard")
+    _print_info(f"Starting API server on port {args.port}...")
+    start_server(port=args.port, repo_path=repo)
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # Subcommand: run (full pipeline)
 # ---------------------------------------------------------------------------
 
@@ -669,6 +685,11 @@ Examples:
     p_doctor.add_argument("--write", action="store_true", help="Write report to docs/doctor_report.md")
     p_doctor.add_argument("--json", action="store_true", help="Output raw JSON")
     p_doctor.set_defaults(func=cmd_doctor)
+
+    # dashboard
+    p_dash = sub.add_parser("dashboard", help="Launch live dashboard")
+    p_dash.add_argument("--port", type=int, default=8710, help="API server port (default: 8710)")
+    p_dash.set_defaults(func=cmd_dashboard)
 
     # run
     p_run = sub.add_parser("run", help="Full end-of-session pipeline")

@@ -110,6 +110,21 @@ class TestBuildParser:
         args = parser.parse_args(["--repo", "/tmp/myrepo", "health"])
         assert args.repo == "/tmp/myrepo"
 
+    def test_dashboard_subcommand_parses(self):
+        parser = build_parser()
+        args = parser.parse_args(["dashboard"])
+        assert args.command == "dashboard"
+
+    def test_dashboard_custom_port(self):
+        parser = build_parser()
+        args = parser.parse_args(["dashboard", "--port", "9000"])
+        assert args.port == 9000
+
+    def test_dashboard_default_port(self):
+        parser = build_parser()
+        args = parser.parse_args(["dashboard"])
+        assert args.port == 8710
+
     def test_all_subcommands_have_func(self):
         """Every subcommand should bind a func callable."""
         parser = build_parser()
