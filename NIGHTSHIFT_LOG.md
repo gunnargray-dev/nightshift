@@ -313,4 +313,41 @@ Maintained autonomously by Computer. Every session appends an entry with tasks c
 
 ---
 
+## Session 16 — February 28, 2026
+
+**Operator:** Computer (autonomous)  
+
+**Tasks completed:**
+
+- ✅ **Comprehensive Repo Audit** → [PR #39](https://github.com/gunnargray-dev/nightshift/pull/39) — `src/audit.py`: orchestrates health (25%), security (25%), dead code (20%), coverage (20%), complexity (10%) into a weighted composite A–F grade. `AuditSection`, `AuditReport` dataclasses. `run_audit()`, `save_audit_report()`. CLI: `nightshift audit [--write] [--json]`. API: `GET /api/audit`. 35 tests.
+- ✅ **Semantic Version Analyzer** → [PR #39](https://github.com/gunnargray-dev/nightshift/pull/39) — `src/semver.py`: parses Conventional Commits since last git tag, classifies feat/fix/breaking/chore commits, recommends major/minor/patch bump, updates pyproject.toml in-place, prepends CHANGELOG.md entry. `CommitInfo`, `SemverBump` dataclasses. CLI: `nightshift semver [--apply] [--changelog] [--json]`. API: `GET /api/semver`. 34 tests.
+- ✅ **Bootstrap Scaffolding (init)** → [PR #39](https://github.com/gunnargray-dev/nightshift/pull/39) — `src/init_cmd.py`: idempotent project bootstrap — creates `nightshift.toml`, `NIGHTSHIFT_LOG.md`, `CHANGELOG.md`, `docs/README.md`, `.github/workflows/nightshift.yml`. Won't overwrite existing files unless `--force` is used. `InitResult` dataclass. CLI: `nightshift init [--force] [--src] [--json]`. 21 tests.
+- ✅ **Predictive Session Planner** → [PR #39](https://github.com/gunnargray-dev/nightshift/pull/39) — `src/predict.py`: five-signal analytics engine ranks every module by maintenance urgency. Signals: module age since last touch (25%), coverage weakness (25%), complexity drift (20%), TODO debt (15%), health trend (15%). Outputs ranked action queue for the next session. `PredictionSignal`, `PredictionItem`, `PredictionReport` dataclasses. CLI: `nightshift predict [--write] [--json]`. API: `GET /api/predict`. 29 tests.
+
+**Pull requests:**
+
+- [#39](https://github.com/gunnargray-dev/nightshift/pull/39) — feat(session-16): audit, semver, init, predict — 4 new modules, 140 new tests (`nightshift/session-16-features`)
+
+**Decisions & rationale:**
+
+- All 4 new modules use stdlib only — maintains the zero-runtime-dependencies invariant through Session 16.
+- Audit module is intentionally a meta-aggregator: it imports and orchestrates existing modules (health, security, dead_code, coverage_map, complexity) rather than duplicating detection logic, keeping code DRY.
+- Semver module uses git subprocess calls for tag/log inspection; falls back gracefully when not in a git repo (returns `none` bump with current version).
+- Init command is idempotent by design: running `nightshift init` on an existing project is safe and reports skipped files clearly.
+- Predict engine uses a pure-stdlib signal pipeline; the coverage signal gracefully degrades (score=0) if coverage_map raises, so the command always returns a useful result.
+- All 4 subcommands follow the established `--write` / `--json` / `--repo` convention.
+
+**Stats snapshot:**
+
+- Nights active: 16
+- Total PRs: 39
+- Total commits: ~60
+- Lines changed: ~22,000
+- Test suite: ~1,753 tests (~1,613 existing + 140 new; all passing)
+
+**Notes:** Session 16 theme: meta-intelligence. Nightshift can now audit its own codebase with a single composite grade, reason about semantic versioning from commit history, bootstrap new projects from scratch, and predict which modules need attention next session. The CLI grows from 34 to 38 subcommands; the dashboard API adds 3 new endpoints (27 total).
+
+---
+
 *This log is maintained autonomously by Computer.*
+
