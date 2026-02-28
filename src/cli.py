@@ -26,6 +26,10 @@ nightshift config      — Show or write nightshift.toml config
 nightshift compare     — Diff two sessions side-by-side
 nightshift dashboard   — Rich terminal dashboard with all key metrics
 nightshift deps        — Check Python dependency freshness via PyPI
+nightshift blame       — Human vs AI contribution attribution (git blame)
+nightshift deadcode    — Dead code detector: unused functions/imports
+nightshift security    — Security audit: common Python anti-patterns
+nightshift coveragemap — Test coverage heat map ranked by weakness
 
 Usage
 -----
@@ -776,6 +780,125 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Subcommand: blame
+# ---------------------------------------------------------------------------
+
+
+def cmd_blame(args: argparse.Namespace) -> int:
+    """Report human vs AI contribution attribution via git blame."""
+    from src.blame import analyze_blame, save_blame_report
+    _print_header("Git Blame Attribution")
+    repo = _repo(getattr(args, "repo", None))
+    report = analyze_blame(repo_path=repo)
+    if args.json:
+        print(report.to_json())
+        return 0
+    if args.write:
+        out = repo / "docs" / "blame_report.md"
+        save_blame_report(report, out)
+        _print_ok(f"Report written to {out}")
+        _print_ok(f"JSON sidecar → {out.with_suffix('.json')}")
+        return 0
+    print(report.to_markdown())
+    _print_info(
+        f"AI: {report.repo_ai_pct}%  ·  Human: {report.repo_human_pct}%  "
+        f"·  Files: {len(report.files)}"
+    )
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: deadcode
+# ---------------------------------------------------------------------------
+
+
+def cmd_deadcode(args: argparse.Namespace) -> int:
+    """Find unused functions, classes, and imports across src/."""
+    from src.dead_code import find_dead_code, save_dead_code_report
+    _print_header("Dead Code Detector")
+    repo = _repo(getattr(args, "repo", None))
+    report = find_dead_code(repo_path=repo)
+    if args.json:
+        print(report.to_json())
+        return 0
+    if args.write:
+        out = repo / "docs" / "dead_code_report.md"
+        save_dead_code_report(report, out)
+        _print_ok(f"Report written to {out}")
+        return 0
+    print(report.to_markdown())
+    hi = len(report.high_confidence)
+    if hi:
+        _print_warn(f"{hi} HIGH-confidence dead-code candidate(s) found")
+    else:
+        _print_ok("No high-confidence dead-code candidates")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: security
+# ---------------------------------------------------------------------------
+
+
+def cmd_security(args: argparse.Namespace) -> int:
+    """Run a security audit across src/ for common Python anti-patterns."""
+    from src.security import audit_security, save_security_report
+    _print_header("Security Audit")
+    repo = _repo(getattr(args, "repo", None))
+    report = audit_security(repo_path=repo)
+    if args.json:
+        print(report.to_json())
+        return 0
+    if args.write:
+        out = repo / "docs" / "security_report.md"
+        save_security_report(report, out)
+        _print_ok(f"Report written to {out}")
+        _print_ok(f"JSON sidecar → {out.with_suffix('.json')}")
+        return 0
+    print(report.to_markdown())
+    grade = report.grade
+    if grade in ("A", "B"):
+        _print_ok(f"Grade: {grade} — no critical issues")
+    else:
+        _print_warn(
+            f"Grade: {grade}  ·  HIGH: {report.high_count}  "
+            f"MEDIUM: {report.medium_count}  LOW: {report.low_count}"
+        )
+    return 0 if report.high_count == 0 else 1
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: coveragemap
+# ---------------------------------------------------------------------------
+
+
+def cmd_coveragemap(args: argparse.Namespace) -> int:
+    """Render a test coverage heat map ranked by coverage weakness."""
+    from src.coverage_map import build_coverage_map, save_coverage_map
+    _print_header("Test Coverage Heat Map")
+    repo = _repo(getattr(args, "repo", None))
+    report = build_coverage_map(repo_path=repo)
+    if args.json:
+        print(report.to_json())
+        return 0
+    if args.write:
+        out = repo / "docs" / "coverage_map.md"
+        save_coverage_map(report, out)
+        _print_ok(f"Report written to {out}")
+        _print_ok(f"JSON sidecar → {out.with_suffix('.json')}")
+        return 0
+    print(report.to_markdown())
+    missing = len(report.modules_without_tests)
+    _print_info(
+        f"Modules: {len(report.entries)}  ·  Avg score: {report.avg_score}/100  "
+        f"·  Missing test files: {missing}"
+    )
+    if missing:
+        _print_warn(f"{missing} module(s) have no test file")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # Argument parser
 # ---------------------------------------------------------------------------
 
@@ -914,6 +1037,27 @@ Examples:
     p_run = sub.add_parser("run", help="Run the full end-of-session pipeline")
     p_run.add_argument("--session", type=int, default=4, help="Current session number")
     p_run.set_defaults(func=cmd_run)
+
+    # Session 13 subcommands
+    p_blame = sub.add_parser("blame", help="Human vs AI contribution attribution")
+    p_blame.add_argument("--write", action="store_true", help="Write to docs/blame_report.md")
+    p_blame.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_blame.set_defaults(func=cmd_blame)
+
+    p_deadcode = sub.add_parser("deadcode", help="Dead code detector (unused functions/imports)")
+    p_deadcode.add_argument("--write", action="store_true", help="Write to docs/dead_code_report.md")
+    p_deadcode.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_deadcode.set_defaults(func=cmd_deadcode)
+
+    p_security = sub.add_parser("security", help="Security audit — common Python anti-patterns")
+    p_security.add_argument("--write", action="store_true", help="Write to docs/security_report.md")
+    p_security.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_security.set_defaults(func=cmd_security)
+
+    p_coveragemap = sub.add_parser("coveragemap", help="Test coverage heat map by module")
+    p_coveragemap.add_argument("--write", action="store_true", help="Write to docs/coverage_map.md")
+    p_coveragemap.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_coveragemap.set_defaults(func=cmd_coveragemap)
 
     return parser
 
