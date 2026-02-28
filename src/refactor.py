@@ -7,12 +7,12 @@ automatically; more complex changes are left as recommendations.
 
 Refactoring categories
 ----------------------
-- MISSING_DOCSTRING  — public function or class has no docstring
-- LONG_LINE          — line exceeds 88 characters
-- TODO_DEBT          — TODO / FIXME marker present in source
-- MAGIC_NUMBER       — bare numeric literal used outside assignment
-- BARE_EXCEPT        — ``except:`` without an exception type
-- DEAD_IMPORT        — imported name not referenced in the file body
+- MISSING_DOCSTRING  -- public function or class has no docstring
+- LONG_LINE          -- line exceeds 88 characters
+- TODO_DEBT          -- TODO / FIXME marker present in source
+- MAGIC_NUMBER       -- bare numeric literal used outside assignment
+- BARE_EXCEPT        -- ``except:`` without an exception type
+- DEAD_IMPORT        -- imported name not referenced in the file body
 
 Each suggestion carries a ``severity`` (low / medium / high) and a
 ``fix_strategy`` (auto / manual / review).  Only ``fix_strategy='auto'``
@@ -135,7 +135,7 @@ class RefactorReport:
         ]
 
         if not self.all_suggestions:
-            lines.append("✅ No refactor suggestions — codebase is clean.")
+            lines.append("No refactor suggestions -- codebase is clean.")
             lines += ["", "---", ""]
             return "\n".join(lines)
 
@@ -146,8 +146,8 @@ class RefactorReport:
             "|------|------|----------|----------|-----|---------|" ,
         ]
         for s in self.all_suggestions:
-            badge = {"high": "🔴", "medium": "🟡", "low": "🔵"}.get(s.severity, "⚪")
-            fix_badge = {"auto": "🤖", "manual": "✍️", "review": "👀"}.get(s.fix_strategy, "❓")
+            badge = {"high": "[high]", "medium": "[medium]", "low": "[low]"}.get(s.severity, "[?]")
+            fix_badge = {"auto": "[auto]", "manual": "[manual]", "review": "[review]"}.get(s.fix_strategy, "[?]")
             short_file = Path(s.file).name
             lines.append(
                 f"| `{short_file}` | {s.line} | {s.category} | {badge} {s.severity} | {fix_badge} {s.fix_strategy} | {s.message} |"
@@ -217,7 +217,7 @@ def _analyse_long_lines(
                     severity="low",
                     fix_strategy="manual",
                     message=f"Line is {len(line.rstrip())} chars (exceeds {max_len} by {excess})",
-                    original=line.rstrip()[:100] + "…" if len(line) > 100 else line.rstrip(),
+                    original=line.rstrip()[:100] + "..." if len(line) > 100 else line.rstrip(),
                 )
             )
     return suggestions
@@ -236,7 +236,7 @@ def _analyse_todos(source_lines: list[str], path: str) -> list[RefactorSuggestio
                     category="TODO_DEBT",
                     severity="medium",
                     fix_strategy="review",
-                    message=f"{m.group(1)} marker — resolve or file an issue",
+                    message=f"{m.group(1)} marker -- resolve or file an issue",
                     original=line.strip(),
                 )
             )
@@ -396,3 +396,14 @@ class RefactorEngine:
                         applied += 1
                         file_result.fixes_applied += 1
         return applied
+
+
+def find_refactor_candidates(repo_path: Path | None = None) -> list[RefactorSuggestion]:
+    """Convenience wrapper: return flat list of all refactor suggestions.
+
+    Used by ``src.audit`` and other modules that only need the candidate list
+    without the full engine/report machinery.
+    """
+    engine = RefactorEngine(repo_path=repo_path)
+    report = engine.analyze()
+    return report.all_suggestions
