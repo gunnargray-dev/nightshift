@@ -24,7 +24,7 @@ nightshift complexity  — Cyclomatic complexity tracker
 nightshift export      — Export any analysis to JSON/Markdown/HTML
 nightshift config      — Show or write nightshift.toml config
 nightshift compare     — Diff two sessions side-by-side
-nightshift dashboard   — Rich terminal dashboard with all key metrics
+nightshift dashboard   — Launch live React dashboard (web server)
 nightshift deps        — Check Python dependency freshness via PyPI
 nightshift blame       — Human vs AI contribution attribution (git blame)
 nightshift deadcode    — Dead code detector: unused functions/imports
@@ -670,21 +670,13 @@ def cmd_compare(args: argparse.Namespace) -> int:
 
 
 def cmd_dashboard(args: argparse.Namespace) -> int:
-    """Render a rich terminal dashboard with all key Nightshift metrics."""
-    from src.dashboard import build_dashboard, render_dashboard
-    _print_header("Nightshift Dashboard")
+    """Launch the live React dashboard API server."""
+    from src.server import start_server
+
     repo = _repo(getattr(args, "repo", None))
-    dash = build_dashboard(repo)
-    if args.json:
-        print(json.dumps(dash.to_dict(), indent=2))
-        return 0
-    if args.write:
-        out = repo / "docs" / "dashboard.txt"
-        out.parent.mkdir(exist_ok=True)
-        out.write_text(render_dashboard(dash), encoding="utf-8")
-        _print_ok(f"Dashboard written to {out}")
-        return 0
-    print(render_dashboard(dash))
+    _print_header("Dashboard")
+    _print_info(f"Starting API server on port {args.port}...")
+    start_server(port=args.port, repo_path=repo)
     return 0
 
 
@@ -1153,9 +1145,8 @@ Examples:
     p_compare.add_argument("--json", action="store_true", help="Output raw JSON")
     p_compare.set_defaults(func=cmd_compare)
 
-    p_dashboard = sub.add_parser("dashboard", help="Rich terminal dashboard")
-    p_dashboard.add_argument("--write", action="store_true", help="Write dashboard to docs/dashboard.txt")
-    p_dashboard.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_dashboard = sub.add_parser("dashboard", help="Launch live React dashboard")
+    p_dashboard.add_argument("--port", type=int, default=8710, help="API server port (default: 8710)")
     p_dashboard.set_defaults(func=cmd_dashboard)
 
     p_deps = sub.add_parser("deps", help="Check Python dependency freshness via PyPI")
