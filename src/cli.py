@@ -1224,6 +1224,125 @@ def cmd_plugins(args: argparse.Namespace) -> int:
     return 0
 
 
+
+
+# ---------------------------------------------------------------------------
+# Session 18 — Metacognition commands
+# ---------------------------------------------------------------------------
+
+
+def cmd_reflect(args: argparse.Namespace) -> int:
+    """Analyze all past sessions and produce meta-insights."""
+    import sys
+    import os
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from reflect import generate_reflection, format_reflection, reflect_to_json, save_reflection
+
+    report = generate_reflection()
+
+    if args.json:
+        print(reflect_to_json(report))
+        return 0
+
+    print(format_reflection(report))
+
+    if getattr(args, "write", False):
+        out = _repo(getattr(args, "repo", None)) / "docs" / "reflect.md"
+        save_reflection(report, out)
+        print(f"\nSaved to {out}")
+    return 0
+
+
+def cmd_evolve(args: argparse.Namespace) -> int:
+    """Generate gap analysis and evolution proposals."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from evolve import generate_evolution, format_evolution, evolve_to_json, save_evolution
+
+    report = generate_evolution()
+
+    if args.json:
+        print(evolve_to_json(report))
+        return 0
+
+    tier = getattr(args, "tier", None)
+    if tier:
+        tier_map = {1: report.tier1, 2: report.tier2, 3: report.tier3}
+        proposals = tier_map.get(tier, report.proposals)
+        print(f"TIER {tier} PROPOSALS")
+        print("=" * 60)
+        for p in proposals:
+            print(f"\n  [{p.category}] {p.title}")
+            print(f"  {p.description[:200]}")
+            print(f"  Command: {p.example_command}")
+        return 0
+
+    print(format_evolution(report))
+
+    if getattr(args, "write", False):
+        out = _repo(getattr(args, "repo", None)) / "docs" / "evolve.md"
+        save_evolution(report, out)
+        print(f"\nSaved to {out}")
+    return 0
+
+
+def cmd_status(args: argparse.Namespace) -> int:
+    """Show comprehensive at-a-glance status of the repo."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from status import generate_status, format_status, status_to_json
+
+    report = generate_status(_repo(getattr(args, "repo", None)))
+
+    if args.json:
+        print(status_to_json(report))
+        return 0
+
+    if getattr(args, "brief", False):
+        print(report.summary)
+        return 0
+
+    print(format_status(report))
+    return 0
+
+
+def cmd_session_score(args: argparse.Namespace) -> int:
+    """Score a session on five quality dimensions."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from session_scorer import (
+        score_session, score_all_sessions,
+        format_session_score, session_score_to_json, SESSION_DATA,
+    )
+
+    if getattr(args, "all", False):
+        scores = score_all_sessions()
+        if args.json:
+            print(json.dumps(
+                [{"session": s.session, "total": s.total, "grade": s.grade} for s in scores],
+                indent=2,
+            ))
+            return 0
+        for s in sorted(scores, key=lambda x: x.total, reverse=True):
+            print(f"  S{s.session:>2}  {s.grade:>3}  {s.total:>5.1f}/100")
+        return 0
+
+    session_num = getattr(args, "session", None) or 18
+    row = next((r for r in SESSION_DATA if r[0] == session_num), None)
+    if row is None:
+        print(f"No data for session {session_num}. Use --all to see all sessions.")
+        return 1
+
+    _, features, tests, cli, api, health = row
+    score = score_session(session_num, features, tests, cli, api, health)
+
+    if args.json:
+        print(session_score_to_json(score))
+        return 0
+
+    print(format_session_score(score))
+    return 0
+
 # ---------------------------------------------------------------------------
 # Argument parser
 # ---------------------------------------------------------------------------
@@ -1568,6 +1687,38 @@ def build_parser() -> argparse.ArgumentParser:
     _add_json(p_prscore)
     _add_repo(p_prscore)
     p_prscore.set_defaults(func=cmd_score)
+
+    # reflect  (Session 18)
+    p_reflect = sub.add_parser("reflect", help="Session meta-analysis: quality scores, patterns, and insights")
+    p_reflect.add_argument("--write", action="store_true", help="Save report to docs/reflect.md")
+    _add_json(p_reflect)
+    _add_repo(p_reflect)
+    p_reflect.set_defaults(func=cmd_reflect)
+
+    # evolve  (Session 18)
+    p_evolve = sub.add_parser("evolve", help="Gap analysis and tiered evolution proposals")
+    p_evolve.add_argument("--write", action="store_true", help="Save report to docs/evolve.md")
+    p_evolve.add_argument("--tier", type=int, choices=[1, 2, 3],
+                          help="Show only proposals from a specific tier (1=quick, 2=medium, 3=exploratory)")
+    _add_json(p_evolve)
+    _add_repo(p_evolve)
+    p_evolve.set_defaults(func=cmd_evolve)
+
+    # status  (Session 18)
+    p_status = sub.add_parser("status", help="One-command comprehensive status: health, tests, modules, next action")
+    p_status.add_argument("--brief", action="store_true", help="One-line summary")
+    _add_json(p_status)
+    _add_repo(p_status)
+    p_status.set_defaults(func=cmd_status)
+
+    # session-score  (Session 18)
+    p_session_score = sub.add_parser("session-score", help="Score a session on 5 quality dimensions")
+    p_session_score.add_argument("--session", type=int, help="Session number to score (default: current)")
+    p_session_score.add_argument("--all", action="store_true", help="Score all historical sessions")
+    _add_json(p_session_score)
+    _add_repo(p_session_score)
+    p_session_score.set_defaults(func=cmd_session_score)
+
 
     return parser
 
