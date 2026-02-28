@@ -120,4 +120,42 @@ Append-only record of every autonomous development session.
 
 ---
 
+## Session 4 — February 28, 2026
+
+**Operator:** Computer (autonomous)  
+
+**Tasks completed:**
+
+- ✅ **CLI entry point** → [PR #10](https://github.com/gunnargray-dev/nightshift/pull/10) — `src/cli.py`: unified `nightshift` command with 9 subcommands tying all 8 existing modules together. `nightshift run --session 4` executes the full end-of-session pipeline (health analysis → stats update → changelog → architecture doc → refactor report). Every subcommand supports `--json` for machine-readable output and `--repo PATH` for non-default roots. `cmd_run()` uses per-step error isolation — a failing module doesn't stop the rest of the pipeline.
+- ✅ **Self-refactor engine** → [PR #11](https://github.com/gunnargray-dev/nightshift/pull/11) — `src/refactor.py`: AST-based analysis across 5 defect categories: MISSING_DOCSTRING, LONG_LINE, TODO_DEBT, BARE_EXCEPT, DEAD_IMPORT. Each suggestion carries severity (high/medium/low) and fix_strategy (auto/manual/review). `RefactorEngine.apply_safe_fixes()` auto-inserts stub docstrings for short public functions. `RefactorReport.to_markdown()` renders a severity-sorted table with color-coded emoji badges. Integrated into `nightshift refactor` and `nightshift run`.
+- ✅ **Architecture docs auto-generator** → [PR #12](https://github.com/gunnargray-dev/nightshift/pull/12) — `src/arch_generator.py`: AST-walks `src/` to produce a rich, always-accurate `docs/ARCHITECTURE.md`. Sections: directory tree, codebase stats, design principles, module inventory (per-file public API with signatures), internal dependency graph (which modules import each other), dataclass inventory. `save_architecture_doc()` writes the result; `nightshift arch --write` triggers it on demand.
+- ✅ **Health trend visualization** → [PR #13](https://github.com/gunnargray-dev/nightshift/pull/13) — `src/health_trend.py`: tracks health scores across sessions with Unicode sparklines (▁▂▃▄▅▆▇█). `HealthTrendHistory` stores snapshots in `docs/health_history.json` using the same JSON-history pattern as `coverage_tracker.py`. `to_markdown()` renders session-over-session trend table with delta column. `to_per_file_markdown()` shows per-file score evolution. `record_session_health()` is a one-call end-of-session integration.
+
+**Pull requests:**
+
+- [#10](https://github.com/gunnargray-dev/nightshift/pull/10) — [nightshift] feat: unified CLI entry point — nightshift health/stats/diff/changelog/run (`nightshift/session-4-cli-entry-point`)
+- [#11](https://github.com/gunnargray-dev/nightshift/pull/11) — [nightshift] feat: self-refactor engine — AST-based analysis across 5 defect categories (`nightshift/session-4-self-refactor-engine`)
+- [#12](https://github.com/gunnargray-dev/nightshift/pull/12) — [nightshift] feat: architecture docs auto-generator from AST analysis (`nightshift/session-4-arch-generator`)
+- [#13](https://github.com/gunnargray-dev/nightshift/pull/13) — [nightshift] feat: health trend visualization with Unicode sparklines (`nightshift/session-4-health-trend`)
+
+**Decisions & rationale:**
+
+- CLI uses lazy imports in each `cmd_*` function so newly-added modules don't break existing subcommands if they fail to import — `nightshift health` still works even if `arch_generator.py` isn't present
+- Self-refactor engine uses AST-only analysis (no external linters) to maintain the zero-runtime-dependency invariant that has held since Session 1; `ast.walk()` is fast enough to scan all 12 source files in <20ms
+- Architecture doc generator regenerates the full document on each call rather than diff-patching — regeneration is idempotent, auditable, and eliminates stale-section bugs that plague incremental approaches
+- Health trend sparkline uses min-max normalization per render call (not global normalization) so the sparkline always spans the full character range for the visible data window
+- Chose to promote 4 Backlog items (CLI, self-refactor, arch docs, health trend) rather than building the Overnight Dashboard — the dashboard requires an external hosting decision that a human should make; the other 4 items are pure in-repo improvements
+- 144 new tests added (39 CLI + 35 refactor + 33 arch + 37 health_trend) for a suite total of **469 tests**; full suite runs in 0.64s
+
+**Stats snapshot:**
+
+- Nights active: 4
+- Total PRs: 13
+- Total commits: ~17
+- Lines changed: ~4100 (src/cli.py: 472 lines, src/refactor.py: 387 lines, src/arch_generator.py: 408 lines, src/health_trend.py: 298 lines, tests: ~1400 new lines)
+
+**Notes:** Session 4 theme: composability and self-improvement. The system now has a single command (`nightshift`) that orchestrates all its capabilities. For the first time, `nightshift run` can be executed at the end of any session to automatically update stats, generate docs, analyze code quality, and surface refactor targets — closing the autonomy loop. The test suite grew from 325 to 469 tests.
+
+---
+
 *This log is maintained autonomously by Computer.*
