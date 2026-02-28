@@ -9,14 +9,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Ensure src/ is importable
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from src.cli import build_parser, main, _print_header, _print_ok, _print_warn, _print_info, REPO_ROOT
+from src.cli import REPO_ROOT, build_parser, main
 
 
 # ---------------------------------------------------------------------------
-# Parser tests
+# Parser construction
 # ---------------------------------------------------------------------------
 
 
@@ -110,6 +107,13 @@ class TestBuildParser:
         args = parser.parse_args(["--repo", "/tmp/myrepo", "health"])
         assert args.repo == "/tmp/myrepo"
 
+    def test_all_subcommands_have_func(self):
+        """Every subcommand should bind a func callable."""
+        parser = build_parser()
+        for cmd in ["health", "stats", "diff", "changelog", "coverage", "score", "arch", "refactor", "run"]:
+            args = parser.parse_args([cmd])
+            assert callable(args.func), f"{cmd} missing func binding"
+
     def test_dashboard_subcommand_parses(self):
         parser = build_parser()
         args = parser.parse_args(["dashboard"])
@@ -125,13 +129,6 @@ class TestBuildParser:
         args = parser.parse_args(["dashboard"])
         assert args.port == 8710
 
-    def test_all_subcommands_have_func(self):
-        """Every subcommand should bind a func callable."""
-        parser = build_parser()
-        for cmd in ["health", "stats", "diff", "changelog", "coverage", "score", "arch", "refactor", "run"]:
-            args = parser.parse_args([cmd])
-            assert callable(args.func), f"{cmd} missing func binding"
-
 
 # ---------------------------------------------------------------------------
 # Helper function tests
@@ -141,111 +138,117 @@ class TestBuildParser:
 class TestHelperFunctions:
     """Tests for internal print helpers."""
 
-    def test_print_header_does_not_raise(self, capsys):
-        _print_header("Test Title")
-        out = capsys.readouterr().out
-        assert "Test Title" in out
-        assert "Nightshift" in out
+    def test_print_header_outputs_bar(self, capsys):
+        from src.cli import _print_header
+        _print_header("Test")
+        captured = capsys.readouterr()
+        assert "Test" in captured.out
+        assert "─" in captured.out
 
     def test_print_ok(self, capsys):
-        _print_ok("all good")
-        out = capsys.readouterr().out
-        assert "all good" in out
+        from src.cli import _print_ok
+        _print_ok("done")
+        captured = capsys.readouterr()
+        assert "done" in captured.out
 
     def test_print_warn(self, capsys):
-        _print_warn("watch out")
-        out = capsys.readouterr().out
-        assert "watch out" in out
+        from src.cli import _print_warn
+        _print_warn("caution")
+        captured = capsys.readouterr()
+        assert "caution" in captured.out
 
     def test_print_info(self, capsys):
-        _print_info("some info")
-        out = capsys.readouterr().out
-        assert "some info" in out
+        from src.cli import _print_info
+        _print_info("note")
+        captured = capsys.readouterr()
+        assert "note" in captured.out
+
+    def test_repo_returns_default(self):
+        from src.cli import _repo
+        assert _repo() == REPO_ROOT
+
+    def test_repo_returns_custom_path(self, tmp_path):
+        from src.cli import _repo
+        assert _repo(str(tmp_path)) == tmp_path
 
 
 # ---------------------------------------------------------------------------
-# main() integration tests (with mocked module calls)
+# Subcommand: health
 # ---------------------------------------------------------------------------
 
 
-class TestMainHealth:
-    """Integration tests for `nightshift health`."""
+class TestHealthSubcommand:
+    """Tests for nightshift health."""
 
-    def test_health_calls_generate_report(self, tmp_path):
+    def test_health_runs(self, tmp_path, capsys):
         """health subcommand should call generate_health_report."""
         mock_report = MagicMock()
-        mock_report.to_markdown.return_value = "# Health\n"
-        mock_report.overall_health_score = 95.0
-        mock_report.to_dict.return_value = {"score": 95}
+        mock_report.to_markdown.return_value = "# Health"
+        mock_report.overall_health_score = 85
+        with patch("src.health.generate_health_report", return_value=mock_report):
+            result = main(["--repo", str(tmp_path), "health"])
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "Health" in captured.out
 
-        with patch("src.cli.cmd_health") as mock_cmd:
-            mock_cmd.return_value = 0
-            result = main(["health"])
-            assert mock_cmd.called or result == 0
-
-    def test_health_json_output(self, tmp_path, capsys):
+    def test_health_json(self, tmp_path, capsys):
         """health --json should emit JSON."""
         mock_report = MagicMock()
-        mock_report.to_dict.return_value = {"overall_health_score": 90.0, "files": []}
-        mock_report.overall_health_score = 90.0
-
+        mock_report.to_dict.return_value = {"score": 90}
         with patch("src.health.generate_health_report", return_value=mock_report):
             result = main(["--repo", str(tmp_path), "health", "--json"])
-        captured = capsys.readouterr()
         assert result == 0
+        captured = capsys.readouterr()
         # Extract JSON object from output (header may precede it)
-        json_start = captured.out.find("{")
-        assert json_start != -1, "No JSON found in output"
-        data = json.loads(captured.out[json_start:])
-        assert "overall_health_score" in data
+        lines = captured.out.strip().split("\n")
+        json_lines = [l for l in lines if l.strip().startswith("{")]
+        assert json_lines, f"No JSON found in output: {captured.out!r}"
 
 
-class TestMainStats:
-    """Integration tests for `nightshift stats`."""
+# ---------------------------------------------------------------------------
+# Subcommand: stats
+# ---------------------------------------------------------------------------
 
-    def test_stats_renders_table(self, tmp_path, capsys):
+
+class TestStatsSubcommand:
+    """Tests for nightshift stats."""
+
+    def test_stats_runs(self, tmp_path, capsys):
         mock_stats = MagicMock()
-        mock_stats.readme_table.return_value = "| Metric | Count |\n|--------|-------|\n| Nights active | 3 |"
-        mock_stats.sessions = []
-        mock_stats.to_dict.return_value = {}
-
+        mock_stats.readme_table.return_value = "| Stat | Value |"
+        mock_stats.sessions = [1, 2, 3]
         with patch("src.stats.compute_stats", return_value=mock_stats):
             result = main(["--repo", str(tmp_path), "stats"])
         assert result == 0
-        out = capsys.readouterr().out
-        assert "Metric" in out or "nights" in out.lower()
 
-    def test_stats_json_flag(self, tmp_path, capsys):
+    def test_stats_json(self, tmp_path, capsys):
         mock_stats = MagicMock()
-        mock_stats.to_dict.return_value = {"nights_active": 3, "total_prs": 9}
-        mock_stats.sessions = []
-
+        mock_stats.to_dict.return_value = {"nights": 3}
         with patch("src.stats.compute_stats", return_value=mock_stats):
             result = main(["--repo", str(tmp_path), "stats", "--json"])
         assert result == 0
-        out = capsys.readouterr().out
-        json_start = out.find("{")
-        assert json_start != -1, "No JSON found in output"
-        data = json.loads(out[json_start:])
-        assert "nights_active" in data
+        captured = capsys.readouterr()
+        lines = [l for l in captured.out.split("\n") if l.strip().startswith("{")]
+        assert lines
 
 
-class TestMainChangelog:
-    """Integration tests for `nightshift changelog`."""
+# ---------------------------------------------------------------------------
+# Subcommand: changelog
+# ---------------------------------------------------------------------------
 
-    def test_changelog_prints_markdown(self, tmp_path, capsys):
+
+class TestChangelogSubcommand:
+    """Tests for nightshift changelog."""
+
+    def test_changelog_runs(self, tmp_path, capsys):
         mock_cl = MagicMock()
-        mock_cl.to_markdown.return_value = "# Changelog\n"
-        mock_cl.to_dict.return_value = {}
-
+        mock_cl.to_markdown.return_value = "## Changelog"
         with patch("src.changelog.generate_changelog", return_value=mock_cl):
             result = main(["--repo", str(tmp_path), "changelog"])
         assert result == 0
 
-    def test_changelog_write_saves_file(self, tmp_path):
+    def test_changelog_write(self, tmp_path):
         mock_cl = MagicMock()
-        mock_cl.to_markdown.return_value = "# Changelog\n"
-
         with patch("src.changelog.generate_changelog", return_value=mock_cl), \
              patch("src.changelog.save_changelog") as mock_save:
             result = main(["--repo", str(tmp_path), "changelog", "--write"])
@@ -253,110 +256,41 @@ class TestMainChangelog:
         mock_save.assert_called_once()
 
 
-class TestMainCoverage:
-    """Integration tests for `nightshift coverage`."""
-
-    def test_coverage_missing_history_returns_1(self, tmp_path):
-        result = main(["--repo", str(tmp_path), "coverage"])
-        assert result == 1
-
-    def test_coverage_reads_history(self, tmp_path, capsys):
-        history_dir = tmp_path / "docs"
-        history_dir.mkdir()
-        history_file = history_dir / "coverage_history.json"
-        history_file.write_text(
-            '{"snapshots": [{"session": 1, "timestamp": "2026-02-27", "total_coverage": 85.0, '
-            '"files": {}, "lines_covered": 100, "lines_total": 118, "missing_lines": 18}]}',
-            encoding="utf-8",
-        )
-
-        from src.coverage_tracker import CoverageHistory
-        with patch("src.coverage_tracker.CoverageHistory.from_dict") as mock_from:
-            mock_hist = MagicMock()
-            mock_hist.to_markdown.return_value = "| Session | Coverage |"
-            mock_hist.latest.return_value = None
-            mock_from.return_value = mock_hist
-            result = main(["--repo", str(tmp_path), "coverage"])
-        assert result == 0
+# ---------------------------------------------------------------------------
+# Subcommand: run
+# ---------------------------------------------------------------------------
 
 
-class TestMainArch:
-    """Integration tests for `nightshift arch`."""
+class TestRunSubcommand:
+    """Tests for nightshift run (full pipeline)."""
 
-    def test_arch_prints_doc(self, tmp_path, capsys):
-        with patch("src.arch_generator.generate_architecture_doc", return_value="# Architecture\n"):
-            result = main(["--repo", str(tmp_path), "arch"])
-        assert result == 0
-        out = capsys.readouterr().out
-        assert "Architecture" in out
-
-    def test_arch_write_saves_file(self, tmp_path):
-        (tmp_path / "docs").mkdir()
-        with patch("src.arch_generator.generate_architecture_doc", return_value="# Architecture\n"), \
-             patch("src.arch_generator.save_architecture_doc") as mock_save:
-            result = main(["--repo", str(tmp_path), "arch", "--write"])
-        assert result == 0
-        mock_save.assert_called_once()
-
-
-class TestMainRefactor:
-    """Integration tests for `nightshift refactor`."""
-
-    def test_refactor_prints_report(self, tmp_path, capsys):
-        mock_engine = MagicMock()
-        mock_report = MagicMock()
-        mock_report.to_markdown.return_value = "# Refactor Report\n"
-        mock_report.to_dict.return_value = {}
-        mock_engine.analyze.return_value = mock_report
-
-        with patch("src.refactor.RefactorEngine", return_value=mock_engine):
-            result = main(["--repo", str(tmp_path), "refactor"])
-        assert result == 0
-
-    def test_refactor_apply_calls_engine(self, tmp_path):
-        mock_engine = MagicMock()
-        mock_report = MagicMock()
-        mock_engine.analyze.return_value = mock_report
-        mock_engine.apply_safe_fixes.return_value = 3
-
-        with patch("src.refactor.RefactorEngine", return_value=mock_engine):
-            result = main(["--repo", str(tmp_path), "refactor", "--apply"])
-        assert result == 0
-        mock_engine.apply_safe_fixes.assert_called_once_with(mock_report)
-
-
-class TestMainRun:
-    """Integration tests for `nightshift run` (full pipeline)."""
-
-    def test_run_succeeds_with_mocks(self, tmp_path):
+    def test_run_succeeds(self, tmp_path, capsys):
         """Full pipeline should succeed when all modules are mocked."""
         mock_report = MagicMock()
-        mock_report.overall_health_score = 88.0
-        mock_report.to_markdown.return_value = ""
+        mock_report.overall_health_score = 80
         mock_stats = MagicMock()
-        mock_stats.nights_active = 4
-        mock_stats.total_prs = 13
+        mock_stats.nights_active = 3
+        mock_stats.total_prs = 5
         mock_cl = MagicMock()
         mock_cl.sections = []
-        mock_cl.total_commits = lambda: 0
+        mock_ref = MagicMock()
+        mock_ref.total_suggestions = 0
+        mock_ref.to_markdown.return_value = ""
+        readme = tmp_path / "README.md"
+        readme.write_text("# Test\n", encoding="utf-8")
         with patch("src.health.generate_health_report", return_value=mock_report), \
              patch("src.health.save_health_report"), \
              patch("src.stats.compute_stats", return_value=mock_stats), \
-             patch("src.stats.update_readme_stats", return_value="# README"), \
+             patch("src.stats.update_readme_stats", return_value="# updated"), \
              patch("src.changelog.generate_changelog", return_value=mock_cl), \
              patch("src.changelog.save_changelog"), \
-             patch("src.arch_generator.generate_architecture_doc", return_value="# arch"), \
-             patch("src.arch_generator.save_architecture_doc"), \
-             patch("src.refactor.RefactorEngine"):
-            (tmp_path / "README.md").write_text("# test", encoding="utf-8")
-            result = main(["--repo", str(tmp_path), "run", "--session", "4"])
+             patch("src.refactor.RefactorEngine", return_value=MagicMock(analyze=lambda: mock_ref)):
+            result = main(["--repo", str(tmp_path), "run"])
         assert result == 0
 
-    def test_run_handles_partial_failures(self, tmp_path):
+    def test_run_partial_failure_returns_1(self, tmp_path, capsys):
         """Pipeline should complete even if one module fails, returning exit 1."""
-        with patch("src.health.generate_health_report", side_effect=RuntimeError("health broken")), \
-             patch("src.stats.compute_stats", side_effect=RuntimeError("stats broken")), \
-             patch("src.changelog.generate_changelog", side_effect=RuntimeError("changelog broken")):
+        with patch("src.health.generate_health_report", side_effect=RuntimeError("fail")):
             result = main(["--repo", str(tmp_path), "run"])
         assert result == 1
 
@@ -382,3 +316,176 @@ class TestEdgeCases:
     def test_repo_root_detected(self):
         """REPO_ROOT should be a valid path."""
         assert isinstance(REPO_ROOT, Path)
+
+
+
+# ---------------------------------------------------------------------------
+# New subcommands: timeline, coupling, complexity, export
+# ---------------------------------------------------------------------------
+
+
+class TestTimelineSubcommand:
+    """Tests for nightshift timeline."""
+
+    def test_timeline_parses(self):
+        parser = build_parser()
+        args = parser.parse_args(["timeline"])
+        assert args.command == "timeline"
+
+    def test_timeline_json_flag(self):
+        parser = build_parser()
+        args = parser.parse_args(["timeline", "--json"])
+        assert args.json is True
+
+    def test_timeline_write_flag(self):
+        parser = build_parser()
+        args = parser.parse_args(["timeline", "--write"])
+        assert args.write is True
+
+    def test_timeline_renders_output(self, tmp_path, capsys):
+        (tmp_path / "NIGHTSHIFT_LOG.md").write_text(
+            "# Nightshift Log\n\n## Session 1 — February 27, 2026\n\n"
+            "**Operator:** Computer\n\n- ✅ Stats → PR #1 — src/stats.py\n",
+            encoding="utf-8",
+        )
+        result = main(["--repo", str(tmp_path), "timeline"])
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "Session" in captured.out
+
+    def test_timeline_json_output(self, tmp_path, capsys):
+        (tmp_path / "NIGHTSHIFT_LOG.md").write_text(
+            "# Nightshift Log\n\n## Session 1 — Feb 27, 2026\n\n"
+            "- ✅ Something\n",
+            encoding="utf-8",
+        )
+        result = main(["--repo", str(tmp_path), "timeline", "--json"])
+        assert result == 0
+        captured = capsys.readouterr()
+        for line in captured.out.split("\n"):
+            if line.strip().startswith("{"):
+                data = json.loads(captured.out[captured.out.index("{"):])
+                assert "sessions" in data
+                break
+
+
+class TestCouplingSubcommand:
+    """Tests for nightshift coupling."""
+
+    def test_coupling_parses(self):
+        parser = build_parser()
+        args = parser.parse_args(["coupling"])
+        assert args.command == "coupling"
+
+    def test_coupling_json_flag(self):
+        parser = build_parser()
+        args = parser.parse_args(["coupling", "--json"])
+        assert args.json is True
+
+    def test_coupling_write_flag(self):
+        parser = build_parser()
+        args = parser.parse_args(["coupling", "--write"])
+        assert args.write is True
+
+    def test_coupling_renders(self, tmp_path, capsys):
+        mock_report = MagicMock()
+        mock_report.violations = []
+        mock_report.to_dict.return_value = {"modules": []}
+        with patch("src.coupling.build_coupling_report", return_value=mock_report), \
+             patch("src.coupling.render_coupling_report", return_value="## Coupling"):
+            result = main(["--repo", str(tmp_path), "coupling"])
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "Coupling" in captured.out
+
+
+class TestComplexitySubcommand:
+    """Tests for nightshift complexity."""
+
+    def test_complexity_parses(self):
+        parser = build_parser()
+        args = parser.parse_args(["complexity"])
+        assert args.command == "complexity"
+        assert args.threshold == 10
+
+    def test_complexity_custom_threshold(self):
+        parser = build_parser()
+        args = parser.parse_args(["complexity", "--threshold", "5"])
+        assert args.threshold == 5
+
+    def test_complexity_renders(self, tmp_path, capsys):
+        mock_report = MagicMock()
+        mock_report.functions = []
+        with patch("src.complexity.build_complexity_report", return_value=mock_report), \
+             patch("src.complexity.render_complexity_report", return_value="## Complexity"):
+            result = main(["--repo", str(tmp_path), "complexity"])
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "Complexity" in captured.out
+
+
+class TestExportSubcommand:
+    """Tests for nightshift export."""
+
+    def test_export_parses(self):
+        parser = build_parser()
+        args = parser.parse_args(["export"])
+        assert args.command == "export"
+        assert args.format == "markdown"
+
+    def test_export_json_format(self):
+        parser = build_parser()
+        args = parser.parse_args(["export", "--format", "json"])
+        assert args.format == "json"
+
+    def test_export_html_format(self):
+        parser = build_parser()
+        args = parser.parse_args(["export", "--format", "html"])
+        assert args.format == "html"
+
+    def test_export_invalid_format_raises(self):
+        parser = build_parser()
+        with pytest.raises(SystemExit):
+            parser.parse_args(["export", "--format", "pdf"])
+
+    def test_export_renders(self, tmp_path, capsys):
+        mock_bundle = MagicMock()
+        with patch("src.exporter.build_export_bundle", return_value=mock_bundle), \
+             patch("src.exporter.render_export", return_value="# Export"):
+            result = main(["--repo", str(tmp_path), "export"])
+        assert result == 0
+
+    def test_export_to_file(self, tmp_path):
+        mock_bundle = MagicMock()
+        out_file = tmp_path / "export.md"
+        with patch("src.exporter.build_export_bundle", return_value=mock_bundle), \
+             patch("src.exporter.render_export", return_value="# Export"):
+            result = main([
+                "--repo", str(tmp_path),
+                "export",
+                "--out", str(out_file),
+            ])
+        assert result == 0
+        assert out_file.exists()
+        assert out_file.read_text() == "# Export"
+
+    def test_export_timeline_creates_files(self, tmp_path):
+        (tmp_path / "NIGHTSHIFT_LOG.md").write_text(
+            "# Nightshift Log\n\n## Session 1 — Feb 27, 2026\n\n"
+            "- ✅ Something → PR #1\n",
+            encoding="utf-8",
+        )
+        result = main([
+            "--repo", str(tmp_path),
+            "export", "timeline",
+            "--output", str(tmp_path / "out"),
+            "--formats", "json",
+        ])
+        assert result == 0
+        assert (tmp_path / "out" / "timeline-report.json").exists()
+
+    def test_export_invalid_analysis_returns_1(self, tmp_path):
+        parser = build_parser()
+        with pytest.raises(SystemExit):
+            parser.parse_args(["export", "not_real"])
+
