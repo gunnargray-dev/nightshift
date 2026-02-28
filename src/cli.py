@@ -15,6 +15,9 @@ nightshift score       — Score the most recent PR
 nightshift arch        — Generate / refresh docs/ARCHITECTURE.md
 nightshift refactor    — Identify refactor candidates in src/
 nightshift run         — Run the full end-of-session pipeline
+nightshift triage      — Run issue triage (from docs/issues.json)
+nightshift plan        — Rank roadmap tasks for next session (Brain)
+nightshift replay      — Reconstruct a past session from NIGHTSHIFT_LOG.md
 
 Usage
 -----
@@ -282,6 +285,84 @@ def cmd_refactor(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Subcommand: triage
+# ---------------------------------------------------------------------------
+
+
+def cmd_triage(args: argparse.Namespace) -> int:
+    """Run issue triage from a JSON export and print a ranked list."""
+    from src.issue_triage import load_issues_from_file, triage_issues
+
+    _print_header("Issue Triage")
+    repo = _repo(getattr(args, "repo", None))
+    issues_path = (repo / "docs" / "issues.json") if not args.issues else Path(args.issues)
+
+    if not issues_path.exists():
+        _print_warn(f"No issues file found at {issues_path}")
+        _print_info("Export GitHub issues to JSON and pass --issues PATH (or commit docs/issues.json).")
+        return 1
+
+    raw = load_issues_from_file(issues_path)
+    report = triage_issues(raw)
+
+    if args.json:
+        print(json.dumps(report.to_dict(), indent=2))
+        return 0
+
+    print(report.to_markdown())
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: plan
+# ---------------------------------------------------------------------------
+
+
+def cmd_plan(args: argparse.Namespace) -> int:
+    """Plan a future session by ranking candidate tasks."""
+    from src.brain import Brain
+
+    _print_header(f"Session Plan — Session {args.session}")
+    repo = _repo(getattr(args, "repo", None))
+    brain = Brain(repo_path=repo)
+    plan = brain.plan(session_number=args.session)
+
+    if args.json:
+        print(json.dumps(plan.to_dict(), indent=2))
+        return 0
+
+    print(plan.to_markdown())
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: replay
+# ---------------------------------------------------------------------------
+
+
+def cmd_replay(args: argparse.Namespace) -> int:
+    """Reconstruct a past session from NIGHTSHIFT_LOG.md."""
+    from src.session_replay import replay
+
+    repo = _repo(getattr(args, "repo", None))
+    log_path = repo / "NIGHTSHIFT_LOG.md"
+
+    _print_header(f"Session Replay — Session {args.session}")
+
+    r = replay(log_path=log_path, session_number=args.session)
+    if not r:
+        _print_warn(f"Session {args.session} not found in {log_path}")
+        return 1
+
+    if args.json:
+        print(json.dumps(r.to_dict(), indent=2))
+        return 0
+
+    print(r.to_markdown())
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # Subcommand: run (full pipeline)
 # ---------------------------------------------------------------------------
 
@@ -385,6 +466,8 @@ Examples:
   nightshift health              # health score for src/
   nightshift stats               # repo stats table
   nightshift changelog --write   # regenerate CHANGELOG.md
+a  nightshift replay --session 3 # reconstruct a past session
+  nightshift plan --session 6    # rank tasks for an upcoming session
   nightshift run --session 4     # full end-of-session pipeline
   nightshift refactor --apply    # apply safe auto-fixes
         """,
@@ -442,6 +525,24 @@ Examples:
     p_ref.add_argument("--apply", action="store_true", help="Apply safe auto-fixes")
     p_ref.add_argument("--json", action="store_true", help="Output raw JSON")
     p_ref.set_defaults(func=cmd_refactor)
+
+    # triage
+    p_triage = sub.add_parser("triage", help="Issue triage (from docs/issues.json)")
+    p_triage.add_argument("--issues", help="Path to issues JSON export (default: docs/issues.json)")
+    p_triage.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_triage.set_defaults(func=cmd_triage)
+
+    # plan
+    p_plan = sub.add_parser("plan", help="Plan a session by ranking tasks (Brain)")
+    p_plan.add_argument("--session", type=int, default=6, help="Future session number (default: 6)")
+    p_plan.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_plan.set_defaults(func=cmd_plan)
+
+    # replay
+    p_replay = sub.add_parser("replay", help="Replay a past session from NIGHTSHIFT_LOG.md")
+    p_replay.add_argument("--session", type=int, required=True, help="Session number to replay")
+    p_replay.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_replay.set_defaults(func=cmd_replay)
 
     # run
     p_run = sub.add_parser("run", help="Full end-of-session pipeline")
