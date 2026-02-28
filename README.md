@@ -22,10 +22,10 @@ Every morning, the human maintainer wakes up to a diff.
 
 | Metric | Count |
 |--------|-------|
-| Nights active | 12 |
-| Total PRs | 33 |
-| Total commits | ~40 |
-| Lines changed | ~12800 |
+| Nights active | 13 |
+| Total PRs | 35 |
+| Total commits | 50 |
+| Lines changed | 14500 |
 
 *Stats are updated by Computer each session.*
 
@@ -41,7 +41,7 @@ Every morning, the human maintainer wakes up to a diff.
 | `src/readme_updater.py` | Generates dynamic README.md from live repo state |
 | `src/diff_visualizer.py` | Markdown summary of each night's git changes with block-bar heatmap |
 | `src/pr_scorer.py` | Scores PRs 0–100 across 5 dimensions, grades A+–F, Markdown leaderboard |
-| `src/cli.py` | Unified `nightshift` CLI with 23 subcommands |
+| `src/cli.py` | Unified `nightshift` CLI with 27 subcommands |
 | `src/refactor.py` | Self-refactor engine: AST analysis across 5 defect categories with auto-fix |
 | `src/arch_generator.py` | Auto-generates docs/ARCHITECTURE.md from AST walk of the repo |
 | `src/health_trend.py` | Tracks health scores across sessions; Unicode sparklines |
@@ -55,10 +55,14 @@ Every morning, the human maintainer wakes up to a diff.
 | `src/coupling.py` | Module coupling analyzer: Ca/Ce/instability per Robert Martin's stable-dependencies principle |
 | `src/complexity.py` | AST-based McCabe cyclomatic complexity tracker with per-session history JSON |
 | `src/exporter.py` | Export any analysis to JSON, Markdown, or self-contained dark-themed HTML |
-| `src/config.py` | Reads/writes `nightshift.toml`; `NightshiftConfig` dataclass with per-repo thresholds |
-| `src/compare.py` | Side-by-side session comparison with stat deltas, task diffs, and bar chart visualization |
-| `src/dashboard.py` | Box-drawing terminal dashboard aggregating all key Nightshift metrics with sparklines |
-| `src/deps_checker.py` | PyPI freshness checker: parses pyproject.toml/requirements.txt, queries PyPI JSON API |
+| `src/config.py` | nightshift.toml config reader/writer with per-key defaults and validation |
+| `src/compare.py` | Side-by-side session diff with stat deltas across PRs, tests, lines changed |
+| `src/dashboard.py` | Rich terminal dashboard: box-drawing stats panel with sparklines |
+| `src/deps_checker.py` | PyPI-based dependency freshness checker; flags outdated packages |
+| `src/blame.py` | Git blame attribution: human vs AI contribution % per file and repo-wide |
+| `src/dead_code.py` | AST-based dead code detector: unused functions, classes, and imports |
+| `src/security.py` | Security audit: 10 checks for common Python anti-patterns, letter grade A–F |
+| `src/coverage_map.py` | Test coverage heat map: cross-references src/X.py vs tests/test_X.py via AST |
 
 ## Usage
 
@@ -79,10 +83,14 @@ nightshift timeline      # ASCII visual session timeline
 nightshift coupling      # module coupling (Ca/Ce/instability)
 nightshift complexity    # cyclomatic complexity tracker
 nightshift export coupling --formats json,html  # export any analysis
-nightshift config        # show or write nightshift.toml
-nightshift compare 1 2   # diff two sessions side-by-side
-nightshift dashboard     # terminal dashboard (all key metrics)
-nightshift deps          # check PyPI dependency freshness
+nightshift config        # show/write nightshift.toml
+nightshift compare 11 12 # diff two sessions side-by-side
+nightshift dashboard     # rich terminal dashboard
+nightshift deps          # check dependency freshness
+nightshift blame         # human vs AI attribution
+nightshift deadcode      # detect unused code
+nightshift security      # security audit (A-F grade)
+nightshift coveragemap   # test coverage heat map
 nightshift run           # full pipeline
 ```
 
