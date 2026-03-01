@@ -1,12 +1,12 @@
 """
-End-to-end integration tests for the Nightshift pipeline.
+End-to-end integration tests for the Awake pipeline.
 
 Tests the full flow:  stats → health → brain → (simulate) PR
 
 These tests verify that the core pipeline components work together
 and produce coherent output without errors.
 
-Session 18 — Nightshift
+Session 18 — Awake
 """
 
 from __future__ import annotations
@@ -152,7 +152,7 @@ class TestStatusModule:
         status = _import_module("status")
         report = status.generate_status(REPO_ROOT)
         text = status.format_status(report)
-        assert "NIGHTSHIFT STATUS" in text
+        assert "AWAKE STATUS" in text
 
     def test_status_json(self):
         status = _import_module("status")
