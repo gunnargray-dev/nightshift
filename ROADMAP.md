@@ -1,4 +1,4 @@
-# Nightshift Roadmap
+# Awake Roadmap
 
 Maintained autonomously by Computer. Items are picked, built, and checked off during overnight sessions.
 
@@ -21,7 +21,7 @@ Maintained autonomously by Computer. Items are picked, built, and checked off du
 
 - [x] **Initial scaffold** -- README, rules, roadmap, log, directory structure (Session 0)
 - [x] **Self-stats engine** -- `src/stats.py` analyzes git history and computes PR/commit/lines stats (Session 1)
-- [x] **Session logger** -- `src/session_logger.py` structured NIGHTSHIFT_LOG.md entry generation (Session 1)
+- [x] **Session logger** -- `src/session_logger.py` structured AWAKE_LOG.md entry generation (Session 1)
 - [x] **Test framework setup** -- 50 pytest tests covering all src/ modules (Session 1)
 - [x] **CI pipeline** -- GitHub Actions workflow runs tests on every PR across Python 3.10/3.11/3.12 (Session 1)
 - [x] **PR template system** -- `.github/pull_request_template.md` standardizes PR descriptions (Session 1)
@@ -31,7 +31,7 @@ Maintained autonomously by Computer. Items are picked, built, and checked off du
 - [x] **README auto-updater** -- `src/readme_updater.py` generates dynamic README.md from live repo state (Session 3)
 - [x] **Session diff visualizer** -- `src/diff_visualizer.py` generates Markdown summary of each night's git changes with Unicode block-bar heatmap (Session 3)
 - [x] **PR quality scorer** -- `src/pr_scorer.py` scores PRs 0-100 across 5 dimensions, grades A+-F, JSON persistence, Markdown leaderboard (Session 3)
-- [x] **CLI entry point** -- `src/cli.py` unified `nightshift` command with 9 subcommands (Session 4)
+- [x] **CLI entry point** -- `src/cli.py` unified `awake` command with 9 subcommands (Session 4)
 - [x] **Self-refactor engine** -- `src/refactor.py` AST-based analysis across 5 defect categories with auto-fix (Session 4)
 - [x] **Architecture docs** -- `src/arch_generator.py` auto-generates docs/ARCHITECTURE.md from AST walk (Session 4)
 - [x] **Health trend visualization** -- `src/health_trend.py` tracks health scores across sessions, Unicode sparklines (Session 4)
@@ -39,21 +39,21 @@ Maintained autonomously by Computer. Items are picked, built, and checked off du
 - [x] **Issue auto-triage** -- `src/issue_triage.py` classifies + prioritizes GitHub issues across 5 categories with P1-P5 scoring (Session 5)
 - [x] **Overnight dashboard** -- `docs/index.html` single-file GitHub Pages dashboard showing repo evolution, session history, module inventory, health scores (Session 5)
 - [x] **Brain module** -- `src/brain.py` transparent task prioritization engine with 5-dimension scoring (Session 5)
-- [x] **Session replay** -- `src/session_replay.py` reconstructs any past session from NIGHTSHIFT_LOG.md with full narrative (Session 5)
+- [x] **Session replay** -- `src/session_replay.py` reconstructs any past session from AWAKE_LOG.md with full narrative (Session 5)
 - [x] **CI fix + session_replay regex** -- Fixed branch-parsing regex; all 584 tests pass on Python 3.10/3.11/3.12 (Session 10)
 - [x] **Module dependency graph** -- `src/dep_graph.py` AST-based directed graph of src/ imports; detects circular deps (Session 10)
 - [x] **Stale TODO hunter** -- `src/todo_hunter.py` scans TODO/FIXME/HACK/XXX, parses session annotations, flags stale items (Session 10)
-- [x] **Nightshift Doctor** -- `src/doctor.py` 13-check repo health diagnostic with A-F grade (Session 10)
-- [x] **CLI expanded to 12 subcommands** -- `nightshift depgraph`, `nightshift todos`, `nightshift doctor` added (Session 10)
+- [x] **Awake Doctor** -- `src/doctor.py` 13-check repo health diagnostic with A-F grade (Session 10)
+- [x] **CLI expanded to 12 subcommands** -- `awake depgraph`, `awake todos`, `awake doctor` added (Session 10)
 - [x] **Session Timeline** -- `src/timeline.py` ASCII visual timeline of all sessions (Session 11)
 - [x] **Module Coupling Analyzer** -- `src/coupling.py` Ca/Ce/instability per Robert Martin's stable-dependencies principle (Session 11)
 - [x] **Cyclomatic Complexity Tracker** -- `src/complexity.py` AST-based McCabe complexity with per-session history (Session 11)
 - [x] **Export System** -- `src/exporter.py` JSON/Markdown/HTML export for any analysis (Session 11)
-- [x] **Config system** -- `src/config.py` nightshift.toml reader/writer with defaults and validation (Session 12)
+- [x] **Config system** -- `src/config.py` awake.toml reader/writer with defaults and validation (Session 12)
 - [x] **Session Compare** -- `src/compare.py` side-by-side session diff with stat deltas (Session 12)
 - [x] **Terminal Dashboard** -- `src/dashboard.py` rich box-drawing stats panel with sparklines (Session 12)
 - [x] **Dependency Freshness Checker** -- `src/deps_checker.py` PyPI-based staleness detection (Session 12)
-- [x] **Multi-session diff** -- `nightshift compare` with stat deltas (Session 12)
+- [x] **Multi-session diff** -- `awake compare` with stat deltas (Session 12)
 - [x] **Git Blame Attribution** -- `src/blame.py` human vs AI contribution % per file and repo-wide (Session 13)
 - [x] **Dead Code Detector** -- `src/dead_code.py` 3-pass AST analysis: unused functions/classes/imports (Session 13)
 - [x] **Security Audit** -- `src/security.py` 10 checks, letter grade A-F (Session 13)

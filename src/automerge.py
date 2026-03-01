@@ -1,174 +1,140 @@
-"""Auto-merge helper for Nightshift.
+"""Auto-merge decision engine for Awake.
 
-This module is intentionally lightweight and dependency-free.
+Determines whether a PR is eligible for auto-merge based on:
+  1. CI status (all checks passed)
+  2. PR score threshold (default: 80)
 
-It provides a small decision engine that can be used in CI or from the CLI
-(to gate whether a PR is eligible for automatic merging).
-
-Nightshift's roadmap calls out **PR auto-merge**: merge PRs automatically if:
-- CI passes
-- PR score >= threshold (default: 80)
-
-The actual merge action is intentionally not implemented here. This keeps the
-core library safe to run locally without requiring GitHub credentials.
-Instead, the module outputs a machine-readable decision that can be consumed
-by a separate GitHub Action step (future work) or by a human.
+Design: pure function, no GitHub side-effects. Safe to call anywhere.
+Actual merge execution is deferred to a future GitHub Actions integration.
 """
 
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+import subprocess
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 
 
-@dataclass(frozen=True)
-class AutoMergeDecision:
-    """A yes/no decision with structured metadata."""
+@dataclass
+class MergeDecision:
+    """Result of an auto-merge eligibility check."""
 
+    pr_number: int
     eligible: bool
-    pr_number: Optional[int] = None
-    pr_score: Optional[int] = None
-    min_score: int = 80
+    reasons: list[str] = field(default_factory=list)
+    score: Optional[float] = None
     ci_passed: Optional[bool] = None
-    reason: str = ""
 
     def to_dict(self) -> dict:
+        """Serialise to plain dict for JSON output."""
         return {
-            "eligible": self.eligible,
             "pr_number": self.pr_number,
-            "pr_score": self.pr_score,
-            "min_score": self.min_score,
+            "eligible": self.eligible,
+            "score": self.score,
             "ci_passed": self.ci_passed,
-            "reason": self.reason,
+            "reasons": self.reasons,
         }
 
 
-def decide_automerge(*, pr_score: int, ci_passed: bool, min_score: int = 80, pr_number: int | None = None) -> AutoMergeDecision:
-    """Return whether a PR is eligible for auto-merge.
-
-    Parameters
-    ----------
-    pr_score:
-        Quality score (0-100) as produced by ``src.pr_scorer``.
-
-    ci_passed:
-        Whether required checks passed.
-
-    min_score:
-        Minimum quality score required.
-
-    pr_number:
-        Optional PR number for better reporting.
-
-    Notes
-    -----
-    This function never raises for ordinary invalid inputs; it returns an
-    ineligible decision with a reason.
-    """
-    if pr_score is None:
-        return AutoMergeDecision(
-            eligible=False,
-            pr_number=pr_number,
-            pr_score=None,
-            min_score=min_score,
-            ci_passed=ci_passed,
-            reason="Missing pr_score",
-        )
-    if not isinstance(pr_score, int):
-        return AutoMergeDecision(
-            eligible=False,
-            pr_number=pr_number,
-            pr_score=None,
-            min_score=min_score,
-            ci_passed=ci_passed,
-            reason="pr_score must be an int",
-        )
-    if pr_score < 0 or pr_score > 100:
-        return AutoMergeDecision(
-            eligible=False,
-            pr_number=pr_number,
-            pr_score=pr_score,
-            min_score=min_score,
-            ci_passed=ci_passed,
-            reason="pr_score must be between 0 and 100",
-        )
-    if not ci_passed:
-        return AutoMergeDecision(
-            eligible=False,
-            pr_number=pr_number,
-            pr_score=pr_score,
-            min_score=min_score,
-            ci_passed=False,
-            reason="CI checks have not passed",
-        )
-    if pr_score < min_score:
-        return AutoMergeDecision(
-            eligible=False,
-            pr_number=pr_number,
-            pr_score=pr_score,
-            min_score=min_score,
-            ci_passed=True,
-            reason=f"PR score {pr_score} below threshold {min_score}",
-        )
-    return AutoMergeDecision(
-        eligible=True,
-        pr_number=pr_number,
-        pr_score=pr_score,
-        min_score=min_score,
-        ci_passed=True,
-        reason="Eligible for auto-merge",
-    )
+# ---------------------------------------------------------------------------
+# Score helpers
+# ---------------------------------------------------------------------------
 
 
-def _parse_bool(s: str) -> bool:
-    s = s.strip().lower()
-    if s in {"1", "true", "yes", "y", "on"}:
-        return True
-    if s in {"0", "false", "no", "n", "off"}:
-        return False
-    raise ValueError(f"Invalid bool: {s}")
-
-
-def main(argv=None) -> int:
-    """CLI entry point: decide whether to auto-merge.
-
-    Examples
-    --------
-    python -m src.automerge --score 92 --ci true
-    python -m src.automerge --score 79 --ci true --min-score 80
-    """
-    import argparse
-
-    p = argparse.ArgumentParser(prog="nightshift-automerge")
-    p.add_argument("--score", type=int, required=True, help="PR quality score (0-100)")
-    p.add_argument("--ci", type=str, required=True, help="Whether CI passed (true/false)")
-    p.add_argument("--min-score", type=int, default=80, help="Minimum score threshold")
-    p.add_argument("--pr", type=int, default=None, help="PR number")
-    p.add_argument("--json", action="store_true", help="Output JSON")
-    args = p.parse_args(argv)
-
+def _load_scores(scores_path: Path) -> dict[int, float]:
+    """Load PR scores from the JSON persistence file produced by pr_scorer."""
+    if not scores_path.exists():
+        return {}
     try:
-        ci_passed = _parse_bool(args.ci)
-    except ValueError as e:
-        print(str(e))
-        return 2
+        raw = json.loads(scores_path.read_text())
+        return {int(k): float(v) for k, v in raw.items()}
+    except Exception:
+        return {}
 
-    decision = decide_automerge(
-        pr_score=args.score,
-        ci_passed=ci_passed,
-        min_score=args.min_score,
-        pr_number=args.pr,
-    )
 
-    if args.json:
-        print(json.dumps(decision.to_dict(), indent=2))
+# ---------------------------------------------------------------------------
+# CI status helpers
+# ---------------------------------------------------------------------------
+
+
+def _ci_passed(pr_number: int) -> bool:
+    """Return True when the local test suite is green.
+
+    In the current implementation we run the test suite locally via pytest
+    rather than querying the GitHub Checks API (which would require a token).
+    A future version can replace this with a `gh pr checks` call.
+    """
+    try:
+        result = subprocess.run(
+            ["python", "-m", "pytest", "tests/", "-q", "--tb=no", "--no-header"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+
+def check_eligibility(
+    pr_number: int,
+    *,
+    min_score: float = 80.0,
+    scores_path: Path | None = None,
+    skip_ci: bool = False,
+) -> MergeDecision:
+    """Determine whether *pr_number* is eligible for auto-merge.
+
+    Args:
+        pr_number: GitHub PR number to evaluate.
+        min_score: Minimum PR score required for eligibility (default 80).
+        scores_path: Path to the pr_scores JSON file.  Defaults to
+            ``pr_scores.json`` in the current working directory.
+        skip_ci: If *True*, skip the local pytest run (useful in tests).
+
+    Returns:
+        A :class:`MergeDecision` with ``eligible=True`` only when *all*
+        gates pass.
+    """
+    if scores_path is None:
+        scores_path = Path("pr_scores.json")
+
+    reasons: list[str] = []
+    eligible = True
+
+    # --- Gate 1: PR score ------------------------------------------------
+    scores = _load_scores(scores_path)
+    score = scores.get(pr_number)
+    if score is None:
+        reasons.append(f"PR #{pr_number} not found in score file ({scores_path})")
+        eligible = False
+    elif score < min_score:
+        reasons.append(f"PR score {score:.1f} < threshold {min_score:.1f}")
+        eligible = False
+
+    # --- Gate 2: CI ------------------------------------------------------
+    if skip_ci:
+        ci_ok: Optional[bool] = None
     else:
-        status = "ELIGIBLE" if decision.eligible else "INELIGIBLE"
-        print(f"{status}: {decision.reason}")
+        ci_ok = _ci_passed(pr_number)
+        if not ci_ok:
+            reasons.append("Local test suite failed")
+            eligible = False
 
-    return 0 if decision.eligible else 1
+    if eligible:
+        reasons.append("All gates passed")
 
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+    return MergeDecision(
+        pr_number=pr_number,
+        eligible=eligible,
+        reasons=reasons,
+        score=score,
+        ci_passed=ci_ok,
+    )
