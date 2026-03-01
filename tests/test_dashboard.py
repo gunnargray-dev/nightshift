@@ -190,7 +190,7 @@ class TestRenderDashboard:
     def test_render_contains_title(self):
         dash = self._make_dash()
         result = render_dashboard(dash)
-        assert "NIGHTSHIFT DASHBOARD" in result
+        assert "AWAKE DASHBOARD" in result
 
     def test_render_contains_panel_titles(self):
         dash = self._make_dash()
