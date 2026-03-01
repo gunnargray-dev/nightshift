@@ -1,4 +1,4 @@
-"""Module Maturity Scorer for Nightshift.
+"""Module Maturity Scorer for Awake.
 
 Rates each module in src/ on a 0–100 maturity scale across five dimensions:
 
@@ -22,7 +22,7 @@ Output formats:
 - JSON (--json)
 
 CLI:
-    nightshift maturity [--write] [--json]
+    awake maturity [--write] [--json]
 """
 
 from __future__ import annotations
@@ -318,7 +318,7 @@ def _analyze_src_file(path: Path) -> tuple[int, float, float]:
 def _estimate_session_age(name: str, log_path: Path) -> int:
     """Estimate how many sessions ago a module was introduced.
 
-    Scans NIGHTSHIFT_LOG.md for the earliest session that mentions src/<name>.py.
+    Scans AWAKE_LOG.md for the earliest session that mentions src/<name>.py.
     Returns 0 if the log doesn't exist or no mention is found.
     """
     if not log_path.exists():
@@ -482,7 +482,7 @@ def score_module_maturity(
         name: Module name (without .py).
         src_dir: Path to src/ directory.
         tests_dir: Path to tests/ directory.
-        log_path: Path to NIGHTSHIFT_LOG.md.
+        log_path: Path to AWAKE_LOG.md.
         max_sessions: Total number of sessions (for age normalisation).
 
     Returns:
@@ -540,7 +540,7 @@ def assess_maturity(
 
     src_dir = repo_path / "src"
     tests_dir = repo_path / "tests"
-    log_path = repo_path / "NIGHTSHIFT_LOG.md"
+    log_path = repo_path / "AWAKE_LOG.md"
 
     if not src_dir.exists():
         return MaturityReport(
