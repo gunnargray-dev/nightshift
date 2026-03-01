@@ -1,184 +1,252 @@
-"""Historical trend data aggregator for the React dashboard.
+"""Trend data tracker for Awake.
 
-Parses NIGHTSHIFT_LOG.md and available analysis artefacts to produce
-session-over-session metrics for dashboard trend charts.
+Persists per-session metrics to a local JSON store (trend_data.json) and
+provides analysis utilities:
+- Append a new data point after each session
+- Compute rolling averages and deltas
+- Detect regressions (metric drops below threshold)
+- Export trend tables for the README / reports
+- Plot ASCII sparklines for terminal display
 
-CLI
----
-    nightshift trends                   # Print JSON to stdout
-    nightshift trends --write           # Write docs/trend_data.json
+The JSON store schema:
+  {"sessions": [{"session": N, "date": ..., "metrics": {...}}, ...]}
 """
 
 from __future__ import annotations
 
 import json
+import math
 import re
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any
+
+
+# ---------------------------------------------------------------------------
+# Schema
+# ---------------------------------------------------------------------------
 
 
 @dataclass
-class SessionMetrics:
-    """Snapshot of metrics for a single session."""
+class MetricPoint:
+    """One session's worth of key metrics."""
+
     session: int
-    date: str = ""
-    prs: int = 0
-    tests: int = 0
-    modules: int = 0
-    lines_changed: int = 0
-    health_score: Optional[float] = None
-    coverage_pct: Optional[float] = None
-    security_score: Optional[float] = None
-    complexity_avg: Optional[float] = None
-    maturity_avg: Optional[float] = None
-    dead_code_count: Optional[int] = None
-
-    def to_dict(self) -> dict:
-        """Return a dictionary representation of the session metrics"""
-        return asdict(self)
+    date: str
+    health_score: float
+    test_count: int
+    tests_passing: bool
+    smell_count: int
+    quality_score: float
+    open_prs: int
+    total_lines: int
+    roadmap_percent: float
 
 
-@dataclass
-class TrendData:
-    """Full historical trend dataset for all sessions."""
-    sessions: list[SessionMetrics] = field(default_factory=list)
-    total_sessions: int = 0
-    latest_session: int = 0
-
-    def to_dict(self) -> dict:
-        """Return a dictionary representation including chart-ready series data"""
-        return {
-            "sessions": [s.to_dict() for s in self.sessions],
-            "total_sessions": self.total_sessions,
-            "latest_session": self.latest_session,
-            "series": self._build_series(),
-        }
-
-    def _build_series(self) -> dict:
-        labels = [f"S{s.session}" for s in self.sessions]
-        def _values(attr: str) -> list:
-            return [getattr(s, attr) for s in self.sessions]
-        return {
-            "labels": labels,
-            "prs": _values("prs"),
-            "tests": _values("tests"),
-            "modules": _values("modules"),
-            "lines_changed": _values("lines_changed"),
-            "health_score": _values("health_score"),
-            "coverage_pct": _values("coverage_pct"),
-            "security_score": _values("security_score"),
-            "maturity_avg": _values("maturity_avg"),
-            "dead_code_count": _values("dead_code_count"),
-        }
-
-    def to_markdown(self) -> str:
-        """Render the trend data as a Markdown table"""
-        lines = [
-            "# Historical Trend Data", "",
-            "| Session | Date | PRs | Tests | Modules | Health | Coverage | Security |",
-            "|---------|------|-----|-------|---------|--------|----------|----------|",
-        ]
-        for s in self.sessions:
-            health = f"{s.health_score:.0f}" if s.health_score is not None else "-"
-            cov = f"{s.coverage_pct:.1f}%" if s.coverage_pct is not None else "-"
-            sec = f"{s.security_score:.0f}" if s.security_score is not None else "-"
-            lines.append(f"| {s.session} | {s.date} | {s.prs} | {s.tests} | {s.modules} | {health} | {cov} | {sec} |")
-        return "\n".join(lines)
+# ---------------------------------------------------------------------------
+# Store I/O
+# ---------------------------------------------------------------------------
 
 
-_SEED_DATA: list[dict] = [
-    {"session": 1,  "date": "January 2025",   "prs": 1,  "tests": 12,   "modules": 3,  "lines": 500,   "health": 62.0},
-    {"session": 2,  "date": "January 2025",   "prs": 3,  "tests": 28,   "modules": 6,  "lines": 1100,  "health": 65.0},
-    {"session": 3,  "date": "January 2025",   "prs": 5,  "tests": 55,   "modules": 9,  "lines": 2000,  "health": 67.0},
-    {"session": 4,  "date": "January 2025",   "prs": 7,  "tests": 80,   "modules": 11, "lines": 3200,  "health": 69.0},
-    {"session": 5,  "date": "February 2025",  "prs": 10, "tests": 120,  "modules": 14, "lines": 4800,  "health": 71.0},
-    {"session": 6,  "date": "February 2025",  "prs": 13, "tests": 180,  "modules": 17, "lines": 6500,  "health": 72.0},
-    {"session": 7,  "date": "February 2025",  "prs": 16, "tests": 250,  "modules": 19, "lines": 8000,  "health": 73.5},
-    {"session": 8,  "date": "February 2025",  "prs": 19, "tests": 320,  "modules": 21, "lines": 9800,  "health": 74.0},
-    {"session": 9,  "date": "March 2025",     "prs": 22, "tests": 420,  "modules": 23, "lines": 11500, "health": 75.0},
-    {"session": 10, "date": "March 2025",     "prs": 25, "tests": 550,  "modules": 25, "lines": 13500, "health": 76.0},
-    {"session": 11, "date": "March 2025",     "prs": 28, "tests": 700,  "modules": 28, "lines": 15200, "health": 76.5},
-    {"session": 12, "date": "April 2025",     "prs": 31, "tests": 900,  "modules": 31, "lines": 17000, "health": 77.0},
-    {"session": 13, "date": "April 2025",     "prs": 33, "tests": 1100, "modules": 35, "lines": 18500, "health": 77.5},
-    {"session": 14, "date": "April 2025",     "prs": 35, "tests": 1300, "modules": 37, "lines": 19800, "health": 78.0},
-    {"session": 15, "date": "May 2025",       "prs": 37, "tests": 1550, "modules": 39, "lines": 20800, "health": 78.5},
-    {"session": 16, "date": "May 2025",       "prs": 39, "tests": 1750, "modules": 41, "lines": 22000, "health": 79.0},
-    {"session": 17, "date": "February 2026",  "prs": 40, "tests": 1910, "modules": 48, "lines": 23500, "health": 80.0},
-]
+DEFAULT_STORE = Path("trend_data.json")
 
 
-def _interpolate_cumulative(metrics: list[SessionMetrics]) -> None:
-    """Forward-fill zero values in cumulative metrics.
-
-    For metrics like *tests*, *modules*, and *lines_changed* that only ever
-    increase, a zero likely means the data was missing for that session.  This
-    helper propagates the last non-zero value forward so dashboards display
-    smooth, monotonically increasing trend lines.
-    """
-    cumulative_attrs = ("tests", "modules", "lines_changed", "prs")
-    for attr in cumulative_attrs:
-        last_value = 0
-        for sm in metrics:
-            current = getattr(sm, attr, 0)
-            if current == 0 and last_value > 0:
-                setattr(sm, attr, last_value)
-            else:
-                last_value = current
-
-
-def _parse_log(log_path: Path) -> list[SessionMetrics]:
-    if not log_path.exists():
+def load_store(path: Path = DEFAULT_STORE) -> list[MetricPoint]:
+    """Load all data points from the JSON store."""
+    if not path.exists():
         return []
-    text = log_path.read_text(encoding="utf-8", errors="replace")
-    metrics: list[SessionMetrics] = []
-    session_blocks = re.split(r"(?=## Session \d+)", text)
-    for block in session_blocks:
-        m = re.match(r"## Session (\d+) . (.+?)$", block, re.MULTILINE)
-        if not m:
-            continue
-        session_num = int(m.group(1))
-        date = m.group(2).strip()
-        sm = SessionMetrics(session=session_num, date=date)
-        sm.prs = len(set(re.findall(r"PR #(\d+)", block)))
-        test_match = re.search(r"(?:tests?|test count)[:\s]+(\d+)", block, re.IGNORECASE)
-        if test_match:
-            sm.tests = int(test_match.group(1))
-        mod_match = re.search(r"(?:modules?|source files?)[:\s]+(\d+)", block, re.IGNORECASE)
-        if mod_match:
-            sm.modules = int(mod_match.group(1))
-        lines_match = re.search(r"(?:lines? changed|lines? added)[:\s]+([\d,]+)", block, re.IGNORECASE)
-        if lines_match:
-            sm.lines_changed = int(lines_match.group(1).replace(",", ""))
-        health_match = re.search(r"health[:\s]+(\d+(?:\.\d+)?)", block, re.IGNORECASE)
-        if health_match:
-            sm.health_score = float(health_match.group(1))
-        metrics.append(sm)
-    return metrics
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    points = []
+    for entry in raw.get("sessions", []):
+        m = entry.get("metrics", {})
+        points.append(MetricPoint(
+            session=entry["session"],
+            date=entry.get("date", ""),
+            health_score=m.get("health_score", 0.0),
+            test_count=m.get("test_count", 0),
+            tests_passing=m.get("tests_passing", False),
+            smell_count=m.get("smell_count", 0),
+            quality_score=m.get("quality_score", 0.0),
+            open_prs=m.get("open_prs", 0),
+            total_lines=m.get("total_lines", 0),
+            roadmap_percent=m.get("roadmap_percent", 0.0),
+        ))
+    return points
 
 
-def generate_trend_data(repo_root: Path) -> TrendData:
-    """Build full historical trend data."""
-    log_path = repo_root / "NIGHTSHIFT_LOG.md"
-    metrics_by_session: dict[int, SessionMetrics] = {}
-    for sd in _SEED_DATA:
-        sm = SessionMetrics(
-            session=sd["session"], date=sd["date"], prs=sd["prs"],
-            tests=sd["tests"], modules=sd["modules"], lines_changed=sd["lines"],
-            health_score=sd.get("health"),
+def save_store(points: list[MetricPoint], path: Path = DEFAULT_STORE) -> None:
+    """Persist all data points to the JSON store."""
+    payload = {
+        "sessions": [
+            {
+                "session": p.session,
+                "date": p.date,
+                "metrics": {
+                    "health_score": p.health_score,
+                    "test_count": p.test_count,
+                    "tests_passing": p.tests_passing,
+                    "smell_count": p.smell_count,
+                    "quality_score": p.quality_score,
+                    "open_prs": p.open_prs,
+                    "total_lines": p.total_lines,
+                    "roadmap_percent": p.roadmap_percent,
+                },
+            }
+            for p in points
+        ]
+    }
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def append_point(point: MetricPoint, path: Path = DEFAULT_STORE) -> None:
+    """Add or overwrite the data point for point.session."""
+    points = load_store(path)
+    # Replace if session already exists
+    points = [p for p in points if p.session != point.session]
+    points.append(point)
+    points.sort(key=lambda p: p.session)
+    save_store(points, path)
+
+
+# ---------------------------------------------------------------------------
+# Analysis utilities
+# ---------------------------------------------------------------------------
+
+
+def rolling_average(points: list[MetricPoint], field: str, window: int = 3) -> list[float]:
+    """Return a rolling average of *field* over *window* sessions."""
+    values = [getattr(p, field) for p in points]
+    avgs = []
+    for i in range(len(values)):
+        start = max(0, i - window + 1)
+        chunk = values[start : i + 1]
+        avgs.append(round(sum(chunk) / len(chunk), 2))
+    return avgs
+
+
+def compute_deltas(points: list[MetricPoint], field: str) -> list[float]:
+    """Return session-over-session deltas for *field*."""
+    values = [getattr(p, field) for p in points]
+    deltas = [0.0]
+    for i in range(1, len(values)):
+        deltas.append(round(values[i] - values[i - 1], 2))
+    return deltas
+
+
+def detect_regressions(
+    points: list[MetricPoint],
+    thresholds: dict[str, float] | None = None,
+) -> list[tuple[int, str, float, float]]:
+    """
+    Return (session, field, value, threshold) for each metric that falls
+    below its threshold in the most recent session.
+    """
+    if not points:
+        return []
+    defaults: dict[str, float] = {
+        "health_score": 60.0,
+        "quality_score": 60.0,
+        "roadmap_percent": 0.0,
+    }
+    thresholds = {**defaults, **(thresholds or {})}
+    latest = points[-1]
+    regressions = []
+    for field, threshold in thresholds.items():
+        value = getattr(latest, field, None)
+        if value is not None and value < threshold:
+            regressions.append((latest.session, field, value, threshold))
+    return regressions
+
+
+# ---------------------------------------------------------------------------
+# Sparkline
+# ---------------------------------------------------------------------------
+
+
+_SPARKS = " ▁▂▃▄▅▆▇█"
+
+
+def sparkline(values: list[float]) -> str:
+    """Render a Unicode sparkline for a list of numeric values."""
+    if not values:
+        return ""
+    lo, hi = min(values), max(values)
+    rng = hi - lo or 1
+    chars = []
+    for v in values:
+        idx = int((v - lo) / rng * (len(_SPARKS) - 1))
+        chars.append(_SPARKS[idx])
+    return "".join(chars)
+
+
+# ---------------------------------------------------------------------------
+# Export helpers
+# ---------------------------------------------------------------------------
+
+
+def trend_table(points: list[MetricPoint]) -> str:
+    """Render a Markdown table of all sessions and key metrics."""
+    header = (
+        "| Session | Date | Health | Tests | Smells | Quality | Roadmap % |\n"
+        "|---------|------|--------|-------|--------|---------|-----------|\n"
+    )
+    rows = []
+    for p in points:
+        rows.append(
+            f"| {p.session} | {p.date} | {p.health_score} | "
+            f"{p.test_count} | {p.smell_count} | {p.quality_score} | {p.roadmap_percent}% |"
         )
-        metrics_by_session[sd["session"]] = sm
-    live = _parse_log(log_path)
-    for lm in live:
-        if lm.session in metrics_by_session:
-            existing = metrics_by_session[lm.session]
-            if lm.prs > 0: existing.prs = lm.prs
-            if lm.tests > 0: existing.tests = lm.tests
-            if lm.modules > 0: existing.modules = lm.modules
-            if lm.lines_changed > 0: existing.lines_changed = lm.lines_changed
-            if lm.health_score is not None: existing.health_score = lm.health_score
+    return header + "\n".join(rows)
+
+
+def export_csv(points: list[MetricPoint]) -> str:
+    """Export all data points as CSV."""
+    fields = [
+        "session", "date", "health_score", "test_count",
+        "tests_passing", "smell_count", "quality_score",
+        "open_prs", "total_lines", "roadmap_percent",
+    ]
+    lines = [",".join(fields)]
+    for p in points:
+        lines.append(",".join(str(getattr(p, f)) for f in fields))
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+
+def main() -> None:
+    """CLI: python -m src.trend_data [--table] [--csv] [--sparkline FIELD]"""
+    import sys
+    args = sys.argv[1:]
+    store_path = Path("trend_data.json")
+    points = load_store(store_path)
+    if not points:
+        print("No trend data found. Run a session first.")
+        return
+    if "--table" in args:
+        print(trend_table(points))
+    elif "--csv" in args:
+        print(export_csv(points))
+    elif "--sparkline" in args:
+        idx = args.index("--sparkline")
+        field = args[idx + 1] if idx + 1 < len(args) else "health_score"
+        values = [getattr(p, field, 0.0) for p in points]
+        print(f"{field}: {sparkline(values)}")
+    else:
+        regressions = detect_regressions(points)
+        if regressions:
+            print("Regressions detected:")
+            for session, field, val, threshold in regressions:
+                print(f"  session {session}: {field} = {val} (threshold {threshold})")
         else:
-            metrics_by_session[lm.session] = lm
-    all_metrics = sorted(metrics_by_session.values(), key=lambda s: s.session)
-    latest = max((s.session for s in all_metrics), default=0)
-    return TrendData(sessions=all_metrics, total_sessions=len(all_metrics), latest_session=latest)
+            print("No regressions. Latest session metrics:")
+            p = points[-1]
+            print(f"  Health: {p.health_score}  Tests: {p.test_count}  Smells: {p.smell_count}")
+
+
+if __name__ == "__main__":
+    main()
