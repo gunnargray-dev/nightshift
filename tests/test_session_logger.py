@@ -1,4 +1,4 @@
-"""Tests for the Nightshift session logger (src/session_logger.py)."""
+"""Tests for the Awake session logger (src/session_logger.py)."""
 
 from __future__ import annotations
 
@@ -25,15 +25,15 @@ from src.session_logger import (
 
 class TestPRRecord:
     def test_defaults(self):
-        pr = PRRecord(number=1, title="Add stats", branch="nightshift/session-1-stats")
+        pr = PRRecord(number=1, title="Add stats", branch="awake/session-1-stats")
         assert pr.number == 1
         assert pr.title == "Add stats"
-        assert pr.branch == "nightshift/session-1-stats"
+        assert pr.branch == "awake/session-1-stats"
         assert pr.url == ""
         assert pr.status == "open"
 
     def test_to_dict(self):
-        pr = PRRecord(number=5, title="Fix logger", branch="nightshift/session-1-fix", url="https://github.com/pr/5")
+        pr = PRRecord(number=5, title="Fix logger", branch="awake/session-1-fix", url="https://github.com/pr/5")
         d = pr.to_dict()
         assert d["number"] == 5
         assert d["url"] == "https://github.com/pr/5"
@@ -97,7 +97,7 @@ class TestSessionEntry:
         assert "⚠️" in md
 
     def test_to_markdown_with_prs(self):
-        pr = PRRecord(number=2, title="Add logger", branch="nightshift/session-1-logger", url="https://github.com/pr/2")
+        pr = PRRecord(number=2, title="Add logger", branch="awake/session-1-logger", url="https://github.com/pr/2")
         entry = SessionEntry(session_number=1, date="Feb 28", prs=[pr])
         md = entry.to_markdown()
         assert "[#2](https://github.com/pr/2)" in md
@@ -143,9 +143,9 @@ class TestSessionEntry:
 
 class TestAppendSessionToLog:
     def test_appends_to_existing_log(self, tmp_path):
-        log = tmp_path / "NIGHTSHIFT_LOG.md"
+        log = tmp_path / "AWAKE_LOG.md"
         log.write_text(textwrap.dedent("""\
-            # Nightshift Log
+            # Awake Log
 
             ## Session 0 — February 27, 2026 (Setup)
 
@@ -162,7 +162,7 @@ class TestAppendSessionToLog:
         assert result.count("## Session 1") == 1
 
     def test_creates_log_if_missing(self, tmp_path):
-        log = tmp_path / "NIGHTSHIFT_LOG.md"
+        log = tmp_path / "AWAKE_LOG.md"
         assert not log.exists()
         entry = SessionEntry(session_number=1, date="Feb 28")
         result = append_session_to_log(log, entry)
@@ -170,7 +170,7 @@ class TestAppendSessionToLog:
         assert log.exists()
 
     def test_dry_run_does_not_write(self, tmp_path):
-        log = tmp_path / "NIGHTSHIFT_LOG.md"
+        log = tmp_path / "AWAKE_LOG.md"
         log.write_text("# Log\n\n---\n\n")
         entry = SessionEntry(session_number=1, date="Feb 28")
         result = append_session_to_log(log, entry, dry_run=True)
@@ -178,8 +178,8 @@ class TestAppendSessionToLog:
         assert log.read_text() == "# Log\n\n---\n\n"
 
     def test_appends_without_footer(self, tmp_path):
-        log = tmp_path / "NIGHTSHIFT_LOG.md"
-        log.write_text("# Nightshift Log\n\n---\n\n## Session 0\n\n---\n")
+        log = tmp_path / "AWAKE_LOG.md"
+        log.write_text("# Awake Log\n\n---\n\n## Session 0\n\n---\n")
         entry = SessionEntry(session_number=1, date="Feb 28")
         result = append_session_to_log(log, entry)
         assert "## Session 1" in result
@@ -192,9 +192,9 @@ class TestAppendSessionToLog:
 
 class TestLoadSessionHistory:
     def test_parses_session_headers(self, tmp_path):
-        log = tmp_path / "NIGHTSHIFT_LOG.md"
+        log = tmp_path / "AWAKE_LOG.md"
         log.write_text(textwrap.dedent("""\
-            # Nightshift Log
+            # Awake Log
 
             ## Session 0 — February 27, 2026
 
@@ -215,8 +215,8 @@ class TestLoadSessionHistory:
         assert result == []
 
     def test_handles_empty_log(self, tmp_path):
-        log = tmp_path / "NIGHTSHIFT_LOG.md"
-        log.write_text("# Nightshift Log\n")
+        log = tmp_path / "AWAKE_LOG.md"
+        log.write_text("# Awake Log\n")
         result = load_session_history(log)
         assert result == []
 
