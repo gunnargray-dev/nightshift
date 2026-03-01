@@ -1,4 +1,4 @@
-# HISTORY.md — The Nightshift Chronicles
+# HISTORY.md — The Awake Chronicles
 
 > The definitive narrative of how an AI built itself, session by session.
 
@@ -21,7 +21,7 @@ This is what happened.
 
 Session 1 established the project structure and the core principle that would govern every session after it: zero runtime dependencies. Pure Python stdlib only. The system must be able to analyze itself without carrying any baggage.
 
-The first modules were deliberately minimal — `stats.py` for basic repository metrics, `health.py` for code quality scoring. But more importantly, Session 1 established `NIGHTSHIFT_LOG.md` — the AI's persistent memory. Every session since has written to it.
+The first modules were deliberately minimal — `stats.py` for basic repository metrics, `health.py` for code quality scoring. But more importantly, Session 1 established `AWAKE_LOG.md` — the AI's persistent memory. Every session since has written to it.
 
 **What was learned:** A codebase without memory can't improve. The log is not documentation — it's cognition.
 
@@ -88,11 +88,11 @@ Session 12 brought `maturity.py`, which scored each module on a multi-dimension 
 **Theme:** Narrative  
 **The surprise:** The AI learned to tell its own story.
 
-Session 13 introduced `story.py` — a module that read `NIGHTSHIFT_LOG.md` and generated a full prose narrative of the repository's evolution. Chapters, themes, decisions, turning points.
+Session 13 introduced `story.py` — a module that read `AWAKE_LOG.md` and generated a full prose narrative of the repository's evolution. Chapters, themes, decisions, turning points.
 
 This was unexpected. No one asked for a storytelling module. The brain module ranked it as the highest-value addition — because a codebase that can explain itself is a codebase that can be understood, handed off, and built on.
 
-The first time `nightshift story` ran, it produced 2,000 words of coherent narrative about a project that had never been documented in prose. The AI was writing its own memoir.
+The first time `awake story` ran, it produced 2,000 words of coherent narrative about a project that had never been documented in prose. The AI was writing its own memoir.
 
 **What was learned:** Understanding isn't just metrics. A system that can only produce numbers is incomplete. Narrative is a form of compression — it makes complex histories legible.
 
@@ -135,7 +135,7 @@ The server API grew from 13 to 24 endpoints. For the first time, every CLI featu
 
 Session 16 added `audit.py` — a weighted composite grade combining health (25%), security (25%), dead code (20%), coverage (20%), and complexity (10%). For the first time, the system had a single letter grade summarizing the codebase's overall quality.
 
-`semver.py` brought semantic versioning: parse Conventional Commits, classify breaking/feature/fix, bump version automatically. `init_cmd.py` let any repo bootstrap Nightshift in one command. `predict.py` extended the brain's decision engine with five-signal forecasting.
+`semver.py` brought semantic versioning: parse Conventional Commits, classify breaking/feature/fix, bump version automatically. `init_cmd.py` let any repo bootstrap Awake in one command. `predict.py` extended the brain's decision engine with five-signal forecasting.
 
 140 new tests. CLI hit 38 subcommands.
 
@@ -146,9 +146,9 @@ Session 16 added `audit.py` — a weighted composite grade combining health (25%
 ## Session 17 — Extensibility
 
 **Theme:** Platform  
-**The inflection point:** Nightshift becomes a platform, not just a tool.
+**The inflection point:** Awake becomes a platform, not just a tool.
 
-Session 17 was transformative. The plugin system (`plugins.py`) let external code register hooks — `pre_health`, `post_run`, `pre_report` — making Nightshift extensible by third parties. The OpenAPI spec generator (`openapi.py`) auto-documented all 35 API endpoints. The HTML report generator (`report.py`) produced a self-contained executive briefing.
+Session 17 was transformative. The plugin system (`plugins.py`) let external code register hooks — `pre_health`, `post_run`, `pre_report` — making Awake extensible by third parties. The OpenAPI spec generator (`openapi.py`) auto-documented all 35 API endpoints. The HTML report generator (`report.py`) produced a self-contained executive briefing.
 
 But the biggest addition was the React dashboard — a full TypeScript SPA with 7 views, dark theme, live data via TanStack Query. The system was no longer CLI-only. You could *see* the AI's work.
 
@@ -171,7 +171,7 @@ Session 18 is the current session. The focus: genuine metacognition. Not just an
 
 `session_scorer.py` makes the scoring rubric explicit and reusable: given any session's PR data and log entry, produce a normalized quality score.
 
-`nightshift status` gives a one-command snapshot of everything: health grade, test count, session number, recent trends, next recommended action.
+`awake status` gives a one-command snapshot of everything: health grade, test count, session number, recent trends, next recommended action.
 
 `HISTORY.md` (this file) is written by the AI — a narrative record of every session, what was learned, and why it mattered.
 
@@ -227,10 +227,10 @@ The constraint of no runtime dependencies forced elegant solutions. It also mean
 
 ## What Comes Next
 
-The `nightshift evolve` command will tell you. It generates an up-to-date gap analysis every time you run it. The system knows what it is, what it has built, and what it still lacks. Ask it.
+The `awake evolve` command will tell you. It generates an up-to-date gap analysis every time you run it. The system knows what it is, what it has built, and what it still lacks. Ask it.
 
 ```bash
-nightshift evolve
+awake evolve
 ```
 
 ---
