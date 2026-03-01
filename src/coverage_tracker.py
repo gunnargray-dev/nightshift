@@ -1,9 +1,9 @@
-"""Coverage tracker for Nightshift.
+"""Coverage tracker for Awake.
 
 Runs pytest with --cov and parses coverage output to track test coverage
 percentage over time. Stores per-session snapshots in a lightweight JSON
 file (docs/coverage_history.json) and renders trend data as Markdown for
-embedding in reports or NIGHTSHIFT_LOG.md.
+embedding in reports or AWAKE_LOG.md.
 
 Coverage is collected via pytest-cov (already installed as a dev dependency).
 The module is intentionally subprocess-based so it works with any test runner
