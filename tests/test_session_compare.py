@@ -148,20 +148,20 @@ class TestExtractSession:
 
 class TestCompareSessions:
     def test_compare_produces_result(self, tmp_path):
-        log = tmp_path / "NIGHTSHIFT_LOG.md"
+        log = tmp_path / "AWAKE_LOG.md"
         log.write_text(LOG_CONTENT)
         cmp = compare_sessions(log, 3, 5)
         assert isinstance(cmp, SessionComparison)
 
     def test_session_a_and_b_populated(self, tmp_path):
-        log = tmp_path / "NIGHTSHIFT_LOG.md"
+        log = tmp_path / "AWAKE_LOG.md"
         log.write_text(LOG_CONTENT)
         cmp = compare_sessions(log, 3, 5)
         assert cmp.session_a.session_number == 3
         assert cmp.session_b.session_number == 5
 
     def test_metrics_include_tasks_and_prs(self, tmp_path):
-        log = tmp_path / "NIGHTSHIFT_LOG.md"
+        log = tmp_path / "AWAKE_LOG.md"
         log.write_text(LOG_CONTENT)
         cmp = compare_sessions(log, 3, 5)
         names = [m.name for m in cmp.metrics]
@@ -169,19 +169,19 @@ class TestCompareSessions:
         assert "PRs" in names
 
     def test_tasks_added_detected(self, tmp_path):
-        log = tmp_path / "NIGHTSHIFT_LOG.md"
+        log = tmp_path / "AWAKE_LOG.md"
         log.write_text(LOG_CONTENT)
         cmp = compare_sessions(log, 3, 5)
         assert len(cmp.tasks_added) >= 1
 
     def test_tasks_removed_detected(self, tmp_path):
-        log = tmp_path / "NIGHTSHIFT_LOG.md"
+        log = tmp_path / "AWAKE_LOG.md"
         log.write_text(LOG_CONTENT)
         cmp = compare_sessions(log, 3, 5)
         assert len(cmp.tasks_removed) >= 1
 
     def test_tasks_common_detected(self, tmp_path):
-        log = tmp_path / "NIGHTSHIFT_LOG.md"
+        log = tmp_path / "AWAKE_LOG.md"
         log.write_text(LOG_CONTENT)
         cmp = compare_sessions(log, 3, 5)
         assert "Health analysis" in cmp.tasks_common
@@ -193,7 +193,7 @@ class TestCompareSessions:
         assert cmp.session_b.date == "not found"
 
     def test_to_dict_structure(self, tmp_path):
-        log = tmp_path / "NIGHTSHIFT_LOG.md"
+        log = tmp_path / "AWAKE_LOG.md"
         log.write_text(LOG_CONTENT)
         cmp = compare_sessions(log, 3, 5)
         d = cmp.to_dict()
@@ -202,21 +202,21 @@ class TestCompareSessions:
         assert "metrics" in d
 
     def test_to_markdown_contains_header(self, tmp_path):
-        log = tmp_path / "NIGHTSHIFT_LOG.md"
+        log = tmp_path / "AWAKE_LOG.md"
         log.write_text(LOG_CONTENT)
         cmp = compare_sessions(log, 3, 5)
         md = cmp.to_markdown()
         assert "Session Comparison" in md
 
     def test_to_markdown_contains_delta_symbols(self, tmp_path):
-        log = tmp_path / "NIGHTSHIFT_LOG.md"
+        log = tmp_path / "AWAKE_LOG.md"
         log.write_text(LOG_CONTENT)
         cmp = compare_sessions(log, 3, 5)
         md = cmp.to_markdown()
         assert any(sym in md for sym in ("▲", "▼", "="))
 
     def test_pr_delta_direction(self, tmp_path):
-        log = tmp_path / "NIGHTSHIFT_LOG.md"
+        log = tmp_path / "AWAKE_LOG.md"
         log.write_text(LOG_CONTENT)
         cmp = compare_sessions(log, 3, 5)
         pr_metric = next(m for m in cmp.metrics if m.name == "PRs")
