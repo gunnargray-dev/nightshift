@@ -4,55 +4,57 @@ Provides a single ``nightshift`` command that ties together all analysis
 modules into a coherent developer experience.  Every subcommand corresponds
 to one (or more) modules in ``src/``.
 
-This file is a thin dispatcher — all command implementations live in
+This file is a thin dispatcher -- all command implementations live in
 ``src/commands/``:
 
-  src/commands/analysis.py  — health, complexity, coupling, deadcode, security,
+  src/commands/analysis.py  -- health, complexity, coupling, deadcode, security,
                                coveragemap, blame, maturity
-  src/commands/meta.py      — stats, changelog, story, reflect, evolve, status,
+  src/commands/meta.py      -- stats, changelog, story, reflect, evolve, status,
                                session_score, timeline, replay, compare, diff,
                                diff_sessions
-  src/commands/tools.py     — doctor, todos, benchmark, gitstats, badges, audit,
+  src/commands/tools.py     -- doctor, todos, benchmark, gitstats, badges, audit,
                                predict, teach, dna, report, export, coverage,
                                score, test_quality, refactor, commits, semver,
                                modules, trends, plan (brain), triage, depgraph, arch
-  src/commands/infra.py     — dashboard, init, deps, config, plugins, openapi, run
+  src/commands/infra.py     -- dashboard, init, deps, config, plugins, openapi, run
+  src/commands/tools_docstrings.py -- docstrings
 
 Subcommands
 -----------
-nightshift health      — Run code health analysis across src/
-nightshift stats       — Show repo stats (commits, PRs, lines changed)
-nightshift diff        — Visualise the last session's git changes
-nightshift changelog   — Render CHANGELOG.md from git history
-nightshift coverage    — Show test coverage trend
-nightshift score       — Score the most recent PR
-nightshift arch        — Generate / refresh docs/ARCHITECTURE.md
-nightshift refactor    — Identify refactor candidates in src/
-nightshift run         — Run the full end-of-session pipeline
-nightshift depgraph    — Visualise module dependency graph
-nightshift todos       — Hunt stale TODO/FIXME annotations
-nightshift doctor      — Run full repo health diagnostic
-nightshift timeline    — ASCII visual timeline of all sessions
-nightshift coupling    — Module coupling analyzer (Ca, Ce, instability)
-nightshift complexity  — Cyclomatic complexity tracker
-nightshift export      — Export any analysis to JSON/Markdown/HTML
-nightshift config      — Show or write nightshift.toml config
-nightshift compare     — Diff two sessions side-by-side
-nightshift dashboard   — Launch live React dashboard (web server)
-nightshift deps        — Check Python dependency freshness via PyPI
-nightshift modules     — Module interconnection visualizer (Mermaid/ASCII)
-nightshift trends      — Historical trend data for the React dashboard
-nightshift commits     — Smart commit message quality analyzer
-nightshift diff-sessions — Compare any two sessions with rich delta analysis
-nightshift test-quality — Grade tests by assertion density and edge coverage
-nightshift report      — Generate executive HTML report combining all analyses
-nightshift openapi     — Generate OpenAPI 3.1 spec from all API endpoints
-nightshift plugins     — Manage plugin/hook registry from nightshift.toml
-nightshift changelog --release — Generate polished GitHub Releases notes
-nightshift blame       — Human vs AI contribution attribution (git blame)
-nightshift deadcode    — Dead code detector: unused functions/imports
-nightshift security    — Security audit: common Python anti-patterns
-nightshift coveragemap — Test coverage heat map ranked by weakness
+nightshift health      -- Run code health analysis across src/
+nightshift stats       -- Show repo stats (commits, PRs, lines changed)
+nightshift diff        -- Visualise the last session's git changes
+nightshift changelog   -- Render CHANGELOG.md from git history
+nightshift coverage    -- Show test coverage trend
+nightshift score       -- Score the most recent PR
+nightshift arch        -- Generate / refresh docs/ARCHITECTURE.md
+nightshift refactor    -- Identify refactor candidates in src/
+nightshift run         -- Run the full end-of-session pipeline
+nightshift depgraph    -- Visualise module dependency graph
+nightshift todos       -- Hunt stale TODO/FIXME annotations
+nightshift doctor      -- Run full repo health diagnostic
+nightshift timeline    -- ASCII visual timeline of all sessions
+nightshift coupling    -- Module coupling analyzer (Ca, Ce, instability)
+nightshift complexity  -- Cyclomatic complexity tracker
+nightshift export      -- Export any analysis to JSON/Markdown/HTML
+nightshift config      -- Show or write nightshift.toml config
+nightshift compare     -- Diff two sessions side-by-side
+nightshift dashboard   -- Launch live React dashboard (web server)
+nightshift deps        -- Check Python dependency freshness via PyPI
+nightshift modules     -- Module interconnection visualizer (Mermaid/ASCII)
+nightshift trends      -- Historical trend data for the React dashboard
+nightshift commits     -- Smart commit message quality analyzer
+nightshift diff-sessions -- Compare any two sessions with rich delta analysis
+nightshift test-quality -- Grade tests by assertion density and edge coverage
+nightshift report      -- Generate executive HTML report combining all analyses
+nightshift openapi     -- Generate OpenAPI 3.1 spec from all API endpoints
+nightshift plugins     -- Manage plugin/hook registry from nightshift.toml
+nightshift changelog --release -- Generate polished GitHub Releases notes
+nightshift blame       -- Human vs AI contribution attribution (git blame)
+nightshift deadcode    -- Dead code detector: unused functions/imports
+nightshift security    -- Security audit: common Python anti-patterns
+nightshift coveragemap -- Test coverage heat map ranked by weakness
+nightshift docstrings  -- Auto-generate missing docstrings for undocumented functions
 
 Usage
 -----
@@ -67,7 +69,7 @@ import argparse
 import sys
 
 # ---------------------------------------------------------------------------
-# Command imports — pulled from domain-specific submodules
+# Command imports -- pulled from domain-specific submodules
 # ---------------------------------------------------------------------------
 
 from src.commands import (
@@ -79,6 +81,8 @@ from src.commands import (
     REPO_ROOT,
     cmd_automerge,
 )
+
+from src.commands.tools_docstrings import cmd_docstrings
 
 from src.commands.analysis import (
     cmd_health,
@@ -156,7 +160,7 @@ __all__ = [
     "cmd_refactor", "cmd_commits", "cmd_semver", "cmd_modules", "cmd_trends",
     "cmd_plan", "cmd_triage", "cmd_depgraph", "cmd_arch",
     "cmd_dashboard", "cmd_init", "cmd_deps", "cmd_config", "cmd_plugins",
-    "cmd_openapi", "cmd_automerge", "cmd_run",
+    "cmd_openapi", "cmd_automerge", "cmd_docstrings", "cmd_run",
     "build_parser", "main",
 ]
 
@@ -170,7 +174,7 @@ def build_parser() -> argparse.ArgumentParser:
     """Build and return the top-level argument parser."""
     parser = argparse.ArgumentParser(
         prog="nightshift",
-        description="Nightshift — autonomous repo intelligence",
+        description="Nightshift -- autonomous repo intelligence",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -555,6 +559,15 @@ def build_parser() -> argparse.ArgumentParser:
     _add_repo(p_openapi)
     p_openapi.set_defaults(func=cmd_openapi)
 
+
+    # docstrings
+    p_docstrings = sub.add_parser("docstrings", help="Auto-generate missing docstrings")
+    p_docstrings.add_argument("--apply", action="store_true", help="Insert generated docstrings into source files")
+    p_docstrings.add_argument("--dry-run", action="store_true", help="Show what would change without writing")
+    _add_write(p_docstrings)
+    _add_json(p_docstrings)
+    _add_repo(p_docstrings)
+    p_docstrings.set_defaults(func=cmd_docstrings)
 
     # automerge
     p_automerge = sub.add_parser("automerge", help="Auto-merge eligibility gate")
