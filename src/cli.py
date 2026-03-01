@@ -77,6 +77,7 @@ from src.commands import (
     _print_warn,
     _print_info,
     REPO_ROOT,
+    cmd_automerge,
 )
 
 from src.commands.analysis import (
@@ -155,7 +156,7 @@ __all__ = [
     "cmd_refactor", "cmd_commits", "cmd_semver", "cmd_modules", "cmd_trends",
     "cmd_plan", "cmd_triage", "cmd_depgraph", "cmd_arch",
     "cmd_dashboard", "cmd_init", "cmd_deps", "cmd_config", "cmd_plugins",
-    "cmd_openapi", "cmd_run",
+    "cmd_openapi", "cmd_automerge", "cmd_run",
     "build_parser", "main",
 ]
 
@@ -553,6 +554,18 @@ def build_parser() -> argparse.ArgumentParser:
     _add_json(p_openapi)
     _add_repo(p_openapi)
     p_openapi.set_defaults(func=cmd_openapi)
+
+
+    # automerge
+    p_automerge = sub.add_parser("automerge", help="Auto-merge eligibility gate")
+    p_automerge.add_argument("--score", type=int, required=True, help="PR quality score (0-100)")
+    p_automerge.add_argument("--ci-passed", action="store_true", help="Set if CI passed")
+    p_automerge.add_argument("--min-score", type=int, default=80, help="Minimum score threshold")
+    p_automerge.add_argument("--pr", type=int, default=None, help="PR number (optional)")
+    p_automerge.add_argument("--json", action="store_true", help="Output raw JSON")
+    _add_repo(p_automerge)
+    p_automerge.set_defaults(func=cmd_automerge)
+
 
     # run
     p_run = sub.add_parser("run", help="Full session pipeline")
