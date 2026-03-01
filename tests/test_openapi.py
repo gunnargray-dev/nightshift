@@ -35,7 +35,7 @@ def test_spec_to_dict_structure():
     assert d["openapi"] == "3.1.0"
     assert "info" in d
     assert "paths" in d
-    assert d["info"]["title"] == "Nightshift API"
+    assert d["info"]["title"] == "Awake API"
 
 
 def test_spec_contains_health_endpoint():
@@ -98,7 +98,7 @@ def test_spec_to_yaml_is_string():
 def test_spec_to_markdown():
     spec = generate_openapi_spec()
     md = spec.to_markdown()
-    assert "# Nightshift API" in md
+    assert "# Awake API" in md
     assert "| Endpoint |" in md
     assert "/api/health" in md
 
