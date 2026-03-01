@@ -1,4 +1,4 @@
-"""Dead code detector for Nightshift.
+"""Dead code detector for Awake.
 
 Scans all Python files in src/ using AST analysis to find:
 - Functions that are defined but never called anywhere in the src/ tree
@@ -17,7 +17,7 @@ Public API
 
 CLI
 ---
-    nightshift deadcode [--write] [--json]
+    awake deadcode [--write] [--json]
 """
 
 from __future__ import annotations
