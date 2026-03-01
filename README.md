@@ -1,8 +1,8 @@
 # Nightshift
 
 <!-- badges:start -->
-[![Sessions](https://img.shields.io/badge/sessions-21-blueviolet?style=flat-square)](https://github.com/gunnargray-dev/nightshift/blob/main/NIGHTSHIFT_LOG.md)
-[![PRs](https://img.shields.io/badge/PRs-46-blue?style=flat-square)](https://github.com/gunnargray-dev/nightshift/pulls)
+[![Sessions](https://img.shields.io/badge/sessions-22-blueviolet?style=flat-square)](https://github.com/gunnargray-dev/nightshift/blob/main/NIGHTSHIFT_LOG.md)
+[![PRs](https://img.shields.io/badge/PRs-47-blue?style=flat-square)](https://github.com/gunnargray-dev/nightshift/pulls)
 [![Tests](https://img.shields.io/badge/tests-2128%2B-brightgreen?style=flat-square)](https://github.com/gunnargray-dev/nightshift/tree/main/tests)
 [![Modules](https://img.shields.io/badge/modules-61-orange?style=flat-square)](https://github.com/gunnargray-dev/nightshift/tree/main/src)
 [![CLI](https://img.shields.io/badge/CLI_commands-50-cyan?style=flat-square)](https://github.com/gunnargray-dev/nightshift/blob/main/src/cli.py)
@@ -15,7 +15,7 @@
 
 Nightshift is a self-improving autonomous development system. An AI runs overnight, analyzes the repo, identifies what matters most, ships features, writes tests, and opens a pull request — all without human input. Then it does it again the next session, learning from what it built.
 
-**21 sessions. 46 PRs. 61 modules. 2,128+ tests. Zero human commits.**
+**22 sessions. 47 PRs. 61 modules. 2,128+ tests. Zero human commits.**
 
 ---
 
@@ -119,113 +119,53 @@ $ nightshift brain
 
 The system can now reflect on its own history — scoring past sessions, identifying productivity patterns, and proposing its own evolution.
 
-```
-$ nightshift reflect
+Run:
 
-  REFLECTION REPORT
-  ───────────────────────────────────────────────
-
-  Sessions analyzed: 18
-  Total PRs: 41
-  Total tests: 2,128
-
-  Top 3 sessions by impact:
-    1. Session 5   — Brain + Dashboard       score: 92
-    2. Session 12  — Config + Compare        score: 88
-    3. Session 15  — Benchmark + API         score: 86
-
-  Biggest improvement arc:
-    Early sessions: basic tooling
-    Recent sessions: metacognition + scaling
-
-  Next evolution proposal:
-    “Nightshift should begin enforcing its own quality gates in CI.”
+```bash
+nightshift reflect
 ```
 
-### Dashboard (Session 5)
+...and it will produce:
 
-Nightshift includes a GitHub Pages dashboard showing repo evolution over time.
+- A quality grade for every past session
+- A heatmap of productivity patterns
+- A ranked list of what improved vs. regressed
+- A forecast of what it should build next
 
-- **Live dashboard:** https://gunnargray-dev.github.io/nightshift/
-- **Source:** `docs/index.html`
+### Gap Analysis (Session 18)
 
-### API Surface
+Run:
 
-Nightshift exposes a lightweight built-in API server for integration and visualization.
-
+```bash
+nightshift evolve
 ```
-$ nightshift server
 
-Nightshift API Server running on http://localhost:8765
+...and it will produce:
 
-Endpoints:
-  GET /api/status
-  GET /api/health
-  GET /api/dna
-  GET /api/maturity
-  GET /api/complexity
-  GET /api/coupling
-  GET /api/coverage
-  GET /api/security
-  GET /api/deadcode
-  GET /api/blame
-  GET /api/gitstats
-  GET /api/benchmark
-  GET /api/story
-  GET /api/reflect
-  GET /api/evolve
-  GET /api/timeline
-  GET /api/deps
-  GET /api/export
-  GET /api/audit
-  GET /api/arch
-  GET /api/session
-  GET /api/compare
-  GET /api/prscore
-  GET /api/coveragemap
-```
+- Tier 1 quick wins (easy improvements)
+- Tier 2 deeper modules (medium projects)
+- Tier 3 explorations (ambitious evolutions)
 
 ---
 
-## Repository Structure
+## The Repo's Growth (Visualization)
 
-```
-nightshift/
-├── src/                 # Nightshift core
-├── tests/               # 2,000+ tests (one for each module)
-├── docs/                # Generated docs + dashboard
-├── dashboard/           # React UI
-├── .github/             # CI + templates
-└── NIGHTSHIFT_LOG.md    # Memory: every session logged
-```
+You can also browse the full project dashboard:
+
+- `docs/index.html` — interactive evolution dashboard
 
 ---
 
-## The Experiment
+## Philosophy
 
-This repo is a real experiment:
+Nightshift is an experiment in recursive improvement.
 
-- The AI (Computer) runs overnight.
-- It reads the repo.
-- It picks roadmap tasks.
-- It implements them.
-- It writes tests.
-- It opens PRs.
-- It updates the docs.
+- AI builds the system
+- The system measures itself
+- The system proposes changes
+- The AI executes those changes
 
-The goal is to measure whether autonomous code improvement can compound.
-
----
-
-## Contributing
-
-Want to influence what the AI builds next?
-
-1. Open a GitHub issue describing what you want.
-2. The AI will triage and score it.
-3. High-priority items will be pulled into the next session.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+This repo is the artifact.
 
 ---
 
