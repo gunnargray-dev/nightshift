@@ -35,5 +35,8 @@ jobs:
       - name: Run tests with coverage
         run: python -m pytest tests/ --cov=src --cov-report=term-missing -q
 
+      - name: Health score CI gate
+        run: python -m src.ci_gates health --min-score 80
+
       - name: Verify package imports
         run: python -c "import src; print(f'nightshift v{src.__version__} OK')"
