@@ -496,7 +496,7 @@ class TestGenerateReport:
         assert len(report.generated_at) > 0
 
     def test_session_number_from_log(self, tmp_path):
-        log = tmp_path / "NIGHTSHIFT_LOG.md"
+        log = tmp_path / "AWAKE_LOG.md"
         log.write_text("## Session 7\nsome content\n## Session 8\nmore content")
         with patch("src.report._run_cmd", self._null_run_cmd):
             report = generate_report(tmp_path)
