@@ -22,7 +22,7 @@ from src.session_replay import (
 # ---------------------------------------------------------------------------
 
 SAMPLE_LOG = """\
-# Nightshift Log
+# Awake Log
 
 ---
 
@@ -40,13 +40,13 @@ SAMPLE_LOG = """\
 
 **Tasks completed:**
 
-- ✅ **Self-stats engine** → [PR #1](https://github.com/gunnargray-dev/nightshift/pull/1) — `src/stats.py`: analyzes git history to compute commits and totals.
-- ✅ **Session logger** → [PR #1](https://github.com/gunnargray-dev/nightshift/pull/1) — `src/session_logger.py`: structured SessionEntry dataclass.
+- ✅ **Self-stats engine** → [PR #1](https://github.com/gunnargray-dev/awake/pull/1) — `src/stats.py`: analyzes git history to compute commits and totals.
+- ✅ **Session logger** → [PR #1](https://github.com/gunnargray-dev/awake/pull/1) — `src/session_logger.py`: structured SessionEntry dataclass.
 
 **Pull requests:**
 
-- [#1](https://github.com/gunnargray-dev/nightshift/pull/1) — [nightshift] feat: self-stats engine + session logger (`nightshift/session-1-stats-engine`))
-- [#2](https://github.com/gunnargray-dev/nightshift/pull/2) — [nightshift] test: 50-test suite (`nightshift/session-1-test-framework`))
+- [#1](https://github.com/gunnargray-dev/awake/pull/1) — [awake] feat: self-stats engine + session logger (`awake/session-1-stats-engine`))
+- [#2](https://github.com/gunnargray-dev/awake/pull/2) — [awake] test: 50-test suite (`awake/session-1-test-framework`))
 
 **Decisions & rationale:**
 
@@ -70,11 +70,11 @@ SAMPLE_LOG = """\
 
 **Tasks completed:**
 
-- ✅ **Code health monitor** → [PR #4](https://github.com/gunnargray-dev/nightshift/pull/4) — `src/health.py`: AST-based static analyzer.
+- ✅ **Code health monitor** → [PR #4](https://github.com/gunnargray-dev/awake/pull/4) — `src/health.py`: AST-based static analyzer.
 
 **Pull requests:**
 
-- [#4](https://github.com/gunnargray-dev/nightshift/pull/4) — [nightshift] feat: code health monitor (`nightshift/session-2-code-health-monitor`))
+- [#4](https://github.com/gunnargray-dev/awake/pull/4) — [awake] feat: code health monitor (`awake/session-2-code-health-monitor`))
 
 **Stats snapshot:**
 
@@ -88,7 +88,7 @@ SAMPLE_LOG = """\
 @pytest.fixture
 def log_file(tmp_path) -> Path:
     """Write SAMPLE_LOG to a temp file and return its path."""
-    p = tmp_path / "NIGHTSHIFT_LOG.md"
+    p = tmp_path / "AWAKE_LOG.md"
     p.write_text(SAMPLE_LOG)
     return p
 
