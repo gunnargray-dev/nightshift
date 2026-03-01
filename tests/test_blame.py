@@ -28,8 +28,8 @@ class TestIsAiAuthor:
     def test_computer_lowercase(self):
         assert _is_ai_author("computer") is True
 
-    def test_nightshift_is_ai(self):
-        assert _is_ai_author("nightshift-bot") is True
+    def test_awake_is_ai(self):
+        assert _is_ai_author("awake-bot") is True
 
     def test_perplexity_email_is_ai(self):
         assert _is_ai_author("gunnar@perplexity.ai") is True
