@@ -1,6 +1,6 @@
 """Predictive analytics — Session 16.
 
-``nightshift predict`` analyses historical session data from NIGHTSHIFT_LOG.md
+``awake predict`` analyses historical session data from AWAKE_LOG.md
 and the live codebase to produce a ranked list of focus areas for the *next*
 session.
 
@@ -57,7 +57,7 @@ class PredictionItem:
     priority_score: float     # 0–100 overall
     signals: list[PredictionSignal]
     recommendation: str       # human-readable explanation
-    suggested_command: str    # the nightshift command to run
+    suggested_command: str    # the awake command to run
 
     def to_dict(self) -> dict:
         """Return a dictionary representation of the prediction item"""
@@ -137,7 +137,7 @@ class PredictionReport:
 # ---------------------------------------------------------------------------
 
 def _parse_session_log(log_path: Path) -> list[dict]:
-    """Parse NIGHTSHIFT_LOG.md into a list of session dicts."""
+    """Parse AWAKE_LOG.md into a list of session dicts."""
     if not log_path.exists():
         return []
     text = log_path.read_text(encoding="utf-8")
@@ -276,18 +276,18 @@ def _compute_health_signal(module: str, sessions: list[dict]) -> PredictionSigna
 
 
 def _suggest_command(module: str, signals: list[PredictionSignal]) -> str:
-    """Pick the most useful nightshift command for this module."""
+    """Pick the most useful awake command for this module."""
     # Find the highest-urgency signal
     top_signal = max(signals, key=lambda s: s.weighted_score())
     if "Coverage" in top_signal.name:
-        return f"nightshift coveragemap  # then add tests for {module}.py"
+        return f"awake coveragemap  # then add tests for {module}.py"
     if "Complexity" in top_signal.name:
-        return f"nightshift refactor  # review {module}.py"
+        return f"awake refactor  # review {module}.py"
     if "TODO" in top_signal.name:
-        return f"nightshift todos  # clear TODOs in {module}.py"
+        return f"awake todos  # clear TODOs in {module}.py"
     if "Age" in top_signal.name:
-        return f"nightshift health  # review {module}.py for improvements"
-    return f"nightshift doctor  # general review of {module}.py"
+        return f"awake health  # review {module}.py for improvements"
+    return f"awake doctor  # general review of {module}.py"
 
 
 def _build_recommendation(module: str, signals: list[PredictionSignal], score: float) -> str:
@@ -307,7 +307,7 @@ def predict_next_session(repo_path: Path) -> PredictionReport:
     """Analyse session history and produce a ranked set of next-session actions."""
     import datetime
 
-    log_path = repo_path / "NIGHTSHIFT_LOG.md"
+    log_path = repo_path / "AWAKE_LOG.md"
     sessions = _parse_session_log(log_path)
     latest_session = sessions[-1]["session"] if sessions else 0
     next_session = latest_session + 1
