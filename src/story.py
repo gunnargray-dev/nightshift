@@ -1,6 +1,6 @@
 """Repo Story — narrative prose summary of the entire repository's evolution.
 
-Reads NIGHTSHIFT_LOG.md and generates a compelling long-form narrative that
+Reads AWAKE_LOG.md and generates a compelling long-form narrative that
 describes *how* the project grew: what problems each session solved, what
 architectural decisions were made, and how the codebase matured over time.
 
@@ -14,7 +14,7 @@ Output formats:
 - JSON (metadata only, --json)
 
 CLI:
-    nightshift story [--write] [--json]
+    awake story [--write] [--json]
 """
 
 from __future__ import annotations
@@ -323,7 +323,7 @@ def _generate_chapter_narrative(
 
 def generate_story(
     repo_path: Path,
-    repo_name: str = "Nightshift",
+    repo_name: str = "Awake",
 ) -> RepoStory:
     """Generate the full narrative story of the repository.
 
@@ -334,12 +334,12 @@ def generate_story(
     Returns:
         A RepoStory instance ready for rendering.
     """
-    log_path = repo_path / "NIGHTSHIFT_LOG.md"
+    log_path = repo_path / "AWAKE_LOG.md"
     if not log_path.exists():
         return RepoStory(
             repo_name=repo_name,
             total_sessions=0,
-            prologue="No session history found yet. Run your first nightshift session to start the story.",
+            prologue="No session history found yet. Run your first awake session to start the story.",
         )
 
     content = log_path.read_text(encoding="utf-8")
