@@ -143,7 +143,7 @@ class TestMetricExtractors:
         assert count == 0
 
     def test_get_session_count_from_log(self, tmp_path):
-        log = tmp_path / "NIGHTSHIFT_LOG.md"
+        log = tmp_path / "AWAKE_LOG.md"
         log.write_text("## Session 1\n\n## Session 2\n\n## Session 3\n")
         count = _get_session_count(tmp_path)
         assert count == 3
@@ -185,7 +185,7 @@ class TestGenerateBadges:
         assert len(block.badges) >= 1
 
     def test_session_badge_present_when_log_exists(self, tmp_path):
-        log = tmp_path / "NIGHTSHIFT_LOG.md"
+        log = tmp_path / "AWAKE_LOG.md"
         log.write_text("## Session 1\n\n## Session 2\n")
         block = generate_badges(repo_path=tmp_path)
         labels = [b.label for b in block.badges]
