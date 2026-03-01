@@ -1,4 +1,4 @@
-"""The Brain — Nightshift task prioritization engine.
+"""The Brain — Awake task prioritization engine.
 
 Decides what to work on in the next session by scoring candidate tasks against
 multiple signals: open issues (triaged), ROADMAP.md backlog items, recent code
@@ -221,6 +221,7 @@ def _score_issue_urgency(issues: list[dict]) -> float:
         if "human-priority" in labels:
             score += 15.0
         score += (6 - priority) * 3.0
+
         if issue.get("comment_count", 0) >= 3:
             score += 3.0
 
@@ -276,7 +277,7 @@ def _score_health_improvement(related_modules: list[str], health_data: dict) -> 
 # ---------------------------------------------------------------------------
 
 class Brain:
-    """Task prioritization engine for Nightshift sessions.
+    """Task prioritization engine for Awake sessions.
 
     Reads the repository state (roadmap, issues, health history) and
     returns a scored, ranked list of TaskCandidates for the session.
