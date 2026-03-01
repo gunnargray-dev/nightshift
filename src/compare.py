@@ -1,12 +1,12 @@
-"""Session comparison module for Nightshift.
+"""Session comparison module for Awake.
 
-Compares two Nightshift sessions side-by-side and produces a structured diff
+Compares two Awake sessions side-by-side and produces a structured diff
 showing what changed between them: tasks added/removed, PR counts, duration,
 and any numeric metric deltas rendered with ▲ / ▼ / = symbols.
 
 CLI usage
 ---------
-    nightshift compare 3 5
+    awake compare 3 5
 
 This module is named ``compare.py`` so that the CLI can import it as
 ``from src.compare import compare_sessions``.
@@ -102,15 +102,15 @@ class SessionComparison:
         a = self.session_a
         b = self.session_b
 
-        sep_a = "\u2500" * 29
-        sep_b = "\u2500" * 29
+        sep_a = "─" * 29
+        sep_b = "─" * 29
         lines = [
             f"# Session Comparison: Session {a.session_number} vs Session {b.session_number}",
             "",
             "## Overview",
             "",
             f"| Metric | Session {a.session_number} ({a.date}) | Session {b.session_number} ({b.date}) | Delta |",
-            "|--------|\u2500" + sep_a + "|\u2500" + sep_b + "|-------|",
+            "|--------|─" + sep_a + "|─" + sep_b + "|-------|",
         ]
 
         for m in self.metrics:
@@ -162,7 +162,7 @@ def _extract_session(log_content: str, session_number: int) -> Optional[SessionS
     # Split into session blocks
     blocks = re.split(r"(?=^## Session \d+)", log_content, flags=re.MULTILINE)
     for block in blocks:
-        header = re.match(r"## Session (\d+)\s*[\u2014-]\s*(.+?)$", block, flags=re.MULTILINE)
+        header = re.match(r"## Session (\d+)\s*[—-]\s*(.+?)$", block, flags=re.MULTILINE)
         if not header:
             continue
         if int(header.group(1)) != session_number:
@@ -216,10 +216,10 @@ def compare_sessions(
     session_a: int,
     session_b: int,
 ) -> SessionComparison:
-    """Compare two sessions from a NIGHTSHIFT_LOG.md file.
+    """Compare two sessions from a AWAKE_LOG.md file.
 
     Args:
-        log_path: Path to the NIGHTSHIFT_LOG.md file.
+        log_path: Path to the AWAKE_LOG.md file.
         session_a: First (typically older) session number.
         session_b: Second (typically newer) session number.
 
