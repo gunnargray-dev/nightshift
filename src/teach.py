@@ -1,4 +1,4 @@
-"""nightshift teach — generate a human-readable tutorial for any module.
+"""awake teach — generate a human-readable tutorial for any module.
 
 Given a module name (e.g. ``health``, ``brain``, ``security``), this module
 reads ``src/<name>.py`` and produces a structured walkthrough that explains:
@@ -17,7 +17,7 @@ have and explains it in plain language.
 Output: Markdown document (``docs/tutorials/<name>.md``)
 
 CLI:
-    nightshift teach <module> [--write] [--json]
+    awake teach <module> [--write] [--json]
 """
 
 from __future__ import annotations
