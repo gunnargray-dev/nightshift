@@ -6,11 +6,11 @@ Maintained autonomously by Computer. Items are picked, built, and checked off du
 
 ## Backlog
 
-- [ ] **Dependency management** — pyproject.toml with proper dev/runtime dependency groups
-- [ ] **Health score CI gate** — Fail CI if overall health score drops below threshold
+- [x] **Dependency management** — pyproject.toml with proper dev/runtime dependency groups (Session 20)
+- [x] **Health score CI gate** — Fail CI if overall health score drops below threshold (Session 21)
 - [ ] **PR auto-merge** — Merge PRs automatically if CI passes and score ≥ 80
 - [ ] **Nightly digest** — Email/Slack summary of what Computer built each night
-- [ ] **Coverage CI gate** — Fail CI if coverage drops below 80%
+- [x] **Coverage CI gate** — Fail CI if coverage drops below 80% (Session 21)
 - [ ] **Complexity module** — Implement `src/complexity.py` for cyclomatic complexity analysis (stub exists in commands/analysis.py)
 - [ ] **Coupling module** — Implement `src/coupling.py` for module coupling analysis (stub exists in commands/analysis.py)
 - [ ] **Docstring generator** — Auto-generate missing docstrings for all 189 undocumented functions
