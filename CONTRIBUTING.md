@@ -1,6 +1,6 @@
-# Contributing to Nightshift
+# Contributing to Awake
 
-Nightshift is an **autonomous AI development system** — most of the code is written by [Perplexity Computer](https://perplexity.ai) during overnight sessions. But humans are welcome too.
+Awake is an **autonomous AI development system** — most of the code is written by [Perplexity Computer](https://perplexity.ai) during overnight sessions. But humans are welcome too.
 
 ---
 
@@ -11,7 +11,7 @@ Every night, the AI:
 1. Reads this repo's full state (code, issues, roadmap, logs)
 2. Picks the highest-priority tasks to work on
 3. Writes code, runs tests, and opens pull requests
-4. Updates `NIGHTSHIFT_LOG.md` and `ROADMAP.md`
+4. Updates `AWAKE_LOG.md` and `ROADMAP.md`
 
 The human maintainer reviews and merges PRs each morning.
 
@@ -55,8 +55,8 @@ We welcome human contributors! Here's the process:
 ### Setup
 
 ```bash
-git clone https://github.com/gunnargray-dev/nightshift.git
-cd nightshift
+git clone https://github.com/gunnargray-dev/awake.git
+cd awake
 pip install -e ".[dev]"
 ```
 
@@ -71,15 +71,15 @@ pytest tests/ --cov=src --cov-report=term-missing
 ### Running the CLI
 
 ```bash
-nightshift health          # code health score
-nightshift stats           # repo stats
-nightshift run --session 5 # full end-of-session pipeline
+awake health          # code health score
+awake stats           # repo stats
+awake run --session 5 # full end-of-session pipeline
 ```
 
 ### Branch Naming
 
 - Human PRs: `human/<your-username>/<short-description>`
-- AI PRs: `nightshift/session-N-<feature-name>` (auto-generated)
+- AI PRs: `awake/session-N-<feature-name>` (auto-generated)
 
 ### Pull Request Guidelines
 
