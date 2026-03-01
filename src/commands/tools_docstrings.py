@@ -1,4 +1,4 @@
-"""Docstring generator command for Nightshift CLI.
+"""Docstring generator command for Awake CLI.
 
 This is a thin wrapper around :mod:`src.docstring_gen`.
 """

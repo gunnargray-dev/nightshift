@@ -1,16 +1,16 @@
-"""Smart commit message analyzer for Nightshift.
+"""Smart commit message analyzer for Awake.
 
 Parses every commit message in the repository and extracts:
 - Conventional Commits compliance (feat/fix/chore/docs/etc.)
 - Message quality score (subject line length, body presence, issue refs)
-- Nightshift vs human commit attribution
+- Awake vs human commit attribution
 - Pattern detection (bulk commits, emoji usage, WIP commits, etc.)
 
 CLI
 ---
-    nightshift commits                  # Show commit quality report
-    nightshift commits --json           # Emit JSON
-    nightshift commits --top 20         # Show top N commits by score
+    awake commits                  # Show commit quality report
+    awake commits --json           # Emit JSON
+    awake commits --top 20         # Show top N commits by score
 """
 
 from __future__ import annotations
@@ -39,9 +39,9 @@ CC_TYPES = {
 }
 
 NS_PATTERNS = [
-    r"\[nightshift\]",
+    r"\[awake\]",
     r"session[-\s]\d+",
-    r"nightshift session",
+    r"awake session",
     r"autonomous",
 ]
 
@@ -58,7 +58,7 @@ class CommitRecord:
     cc_type: str = ""
     cc_scope: str = ""
     is_breaking: bool = False
-    is_nightshift: bool = False
+    is_awake: bool = False
     quality_score: float = 0.0
     quality_issues: list[str] = field(default_factory=list)
     quality_badges: list[str] = field(default_factory=list)
@@ -79,7 +79,7 @@ class CommitPatterns:
     issue_ref_count: int = 0
     long_subject_count: int = 0
     no_body_count: int = 0
-    nightshift_count: int = 0
+    awake_count: int = 0
     human_count: int = 0
     type_distribution: dict = field(default_factory=dict)
 
@@ -126,7 +126,7 @@ class CommitAnalysisReport:
 | Quality grade | **{self.quality_grade}** |
 | Conventional Commits | {p.conventional_count} ({cc_pct:.0f}%) |
 | Breaking changes | {p.breaking_count} |
-| Nightshift commits | {p.nightshift_count} |
+| Awake commits | {p.awake_count} |
 | Human commits | {p.human_count} |
 """
 
@@ -175,9 +175,9 @@ def _score_commit(record: CommitRecord) -> None:
     if re.search(r"\bwip\b|work.?in.?progress", subject, re.I):
         score -= 15
         issues.append("WIP commit")
-    if record.is_nightshift:
+    if record.is_awake:
         score += 5
-        badges.append("nightshift")
+        badges.append("awake")
     score = max(0.0, min(100.0, score))
     record.quality_score = round(score, 1)
     record.quality_issues = issues
@@ -205,7 +205,7 @@ def _git_log(repo_root: Path, max_count: int = 500) -> list[CommitRecord]:
         if not sha:
             continue
         is_ns = any(re.search(p, subject + " " + body.strip(), re.I) for p in NS_PATTERNS)
-        records.append(CommitRecord(sha=sha, subject=subject, body=body.strip(), author=author.strip(), date=date.strip()[:10], is_nightshift=is_ns))
+        records.append(CommitRecord(sha=sha, subject=subject, body=body.strip(), author=author.strip(), date=date.strip()[:10], is_awake=is_ns))
     return records
 
 
@@ -227,7 +227,7 @@ def analyze_commits(repo_root: Path, max_commits: int = 500) -> CommitAnalysisRe
         if "references-issue" in c.quality_badges: patterns.issue_ref_count += 1
         if "long subject line" in c.quality_issues: patterns.long_subject_count += 1
         if "no body" in c.quality_issues: patterns.no_body_count += 1
-        if c.is_nightshift: patterns.nightshift_count += 1
+        if c.is_awake: patterns.awake_count += 1
         else: patterns.human_count += 1
     patterns.type_distribution = type_dist
     sorted_by_score = sorted(commits, key=lambda c: c.quality_score, reverse=True)

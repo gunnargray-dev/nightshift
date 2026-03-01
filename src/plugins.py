@@ -1,277 +1,195 @@
-"""Plugin and hook architecture for Nightshift.
+"""Plugin registry and loader for Awake.
 
-Allows users to register custom Python analyzer functions via ``nightshift.toml``.
-These plugins are discovered, loaded, and executed alongside the built-in analyzers.
+Provides a simple, file-based plugin system that lets third-party packages
+extend Awake with custom commands, hooks, and middleware.
 
-Configuration example (nightshift.toml)
-----------------------------------------
-[[plugins]]
-name = "my_complexity_check"
-module = "scripts.custom_checks"
-function = "check_complexity"
-description = "Custom complexity thresholds for our team"
-hooks = ["pre_health", "post_health"]
+A plugin is any Python package that declares an entry point under the group
+``awake.plugins``.  The registry discovers installed plugins at import time
+and provides helper methods to list, load, and invoke them.
 
-[[plugins]]
-name = "secret_scanner"
-module = "scripts.security"
-function = "scan_secrets"
-hooks = ["pre_run"]
-
-Plugin contract
----------------
-Every plugin function receives a single ``PluginContext`` dict and returns a
-``PluginResult`` dict.  This keeps the interface simple and forward-compatible.
-
-    def my_plugin(ctx: dict) -> dict:
-        # ctx keys: repo_path, config, session_number, trigger_hook
-        return {
-            "status": "ok",          # ok | warn | error
-            "message": "All clear",
-            "data": {},            # any JSON-serialisable payload
-        }
+CLI
+---
+    awake plugins                  # List registered plugins
+    awake plugins --json           # Emit JSON
+    awake plugins --reload         # Force reload all plugins
 """
 
 from __future__ import annotations
 
 import importlib
+import importlib.metadata
 import importlib.util
-import json
 import sys
-import traceback
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-try:
-    import tomllib
-except ImportError:
-    try:
-        import tomli as tomllib  # type: ignore[no-redef]
-    except ImportError:
-        tomllib = None  # type: ignore[assignment]
+
+# ---------------------------------------------------------------------------
+# Data models
+# ---------------------------------------------------------------------------
 
 
 @dataclass
-class PluginDefinition:
-    """A plugin entry as declared in nightshift.toml."""
+class PluginInfo:
+    """Metadata about a single discovered plugin."""
+
     name: str
+    version: str
+    entry_point: str
     module: str
-    function: str
-    description: str = ""
-    hooks: list[str] = field(default_factory=list)
-    enabled: bool = True
-
-    @classmethod
-    def from_dict(cls, d: dict) -> "PluginDefinition":
-        """Construct a PluginDefinition from a raw TOML dictionary"""
-        return cls(
-            name=d.get("name", "unknown"),
-            module=d.get("module", ""),
-            function=d.get("function", ""),
-            description=d.get("description", ""),
-            hooks=d.get("hooks", []),
-            enabled=d.get("enabled", True),
-        )
-
-    def to_dict(self) -> dict:
-        """Return a dictionary representation of the plugin definition"""
-        return asdict(self)
-
-
-@dataclass
-class PluginResult:
-    """Result returned by a plugin execution."""
-    plugin_name: str
-    hook: str
-    status: str
-    message: str = ""
-    data: dict = field(default_factory=dict)
-    duration_ms: float = 0.0
+    loaded: bool = False
     error: str = ""
+    commands: list[str] = field(default_factory=list)
+    hooks: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
-        """Return a dictionary representation of the plugin result"""
+        """Return a dictionary representation of the plugin info."""
         return asdict(self)
 
 
 @dataclass
-class PluginRunReport:
-    """Aggregated results for all plugins run against a hook."""
-    hook: str
-    plugins_run: int = 0
-    ok: int = 0
-    warnings: int = 0
-    errors: int = 0
-    skipped: int = 0
-    results: list[PluginResult] = field(default_factory=list)
+class PluginRegistry:
+    """Registry of all discovered and loaded plugins."""
+
+    plugins: list[PluginInfo] = field(default_factory=list)
+    _loaded_modules: dict[str, Any] = field(default_factory=dict, repr=False)
 
     def to_dict(self) -> dict:
-        """Return a dictionary representation of the run report"""
-        return asdict(self)
+        """Return a dictionary representation of the plugin registry."""
+        return {
+            "total": len(self.plugins),
+            "loaded": sum(1 for p in self.plugins if p.loaded),
+            "failed": sum(1 for p in self.plugins if p.error),
+            "plugins": [p.to_dict() for p in self.plugins],
+        }
 
-    def to_markdown(self) -> str:
-        """Render the run report as a Markdown summary table"""
-        lines = [
-            f"## Plugin Run Report -- Hook: `{self.hook}`",
-            "",
-            "| Metric | Value |",
-            "|--------|-------|",
-            f"| Plugins run | {self.plugins_run} |",
-            f"| OK | {self.ok} |",
-            f"| Warnings | {self.warnings} |",
-            f"| Errors | {self.errors} |",
-            f"| Skipped | {self.skipped} |",
-            "",
-        ]
-        if self.results:
-            lines += ["### Results", ""]
-            for r in self.results:
-                icon = {"ok": "[OK]", "warn": "[WARN]", "error": "[ERR]", "skipped": "[SKIP]"}.get(r.status, "[?]")
-                lines.append(f"{icon} **{r.plugin_name}** ({r.duration_ms:.1f}ms) -- {r.message}")
-                if r.error:
-                    lines.append(f"  > Error: `{r.error}`")
-        return "\n".join(lines)
-
-
-def load_plugin_definitions(repo_root: Path) -> list[PluginDefinition]:
-    """Read [[plugins]] entries from nightshift.toml."""
-    toml_path = repo_root / "nightshift.toml"
-    if not toml_path.exists() or tomllib is None:
-        return []
-    with toml_path.open("rb") as f:
-        config = tomllib.load(f)
-    raw_plugins = config.get("plugins", [])
-    return [PluginDefinition.from_dict(p) for p in raw_plugins]
-
-
-def _load_function(defn: PluginDefinition, repo_root: Path) -> Optional[Callable]:
-    """Import a plugin module and retrieve the registered function."""
-    module_name = defn.module
-    func_name = defn.function
-    candidate = repo_root / module_name.replace(".", "/")
-    if not candidate.suffix:
-        candidate = candidate.with_suffix(".py")
-    if candidate.exists():
-        spec = importlib.util.spec_from_file_location(module_name, candidate)
-        if spec and spec.loader:
-            mod = importlib.util.module_from_spec(spec)
-            sys.modules[module_name] = mod
-            spec.loader.exec_module(mod)
-            return getattr(mod, func_name, None)
-    repo_str = str(repo_root)
-    if repo_str not in sys.path:
-        sys.path.insert(0, repo_str)
-    try:
-        mod = importlib.import_module(module_name)
-        return getattr(mod, func_name, None)
-    except ImportError:
+    def get(self, name: str) -> Optional[PluginInfo]:
+        """Retrieve a plugin by name."""
+        for p in self.plugins:
+            if p.name == name:
+                return p
         return None
 
+    def loaded_module(self, name: str) -> Optional[Any]:
+        """Return the loaded module object for a plugin."""
+        return self._loaded_modules.get(name)
 
-def run_plugins(
-    hook: str,
-    *,
-    repo_root: Path,
-    session_number: int = 0,
-    extra_context: Optional[dict] = None,
-) -> PluginRunReport:
-    """Discover and run all enabled plugins registered for *hook*."""
-    import time
-    definitions = load_plugin_definitions(repo_root)
-    report = PluginRunReport(hook=hook)
-    ctx: dict[str, Any] = {
-        "repo_path": str(repo_root),
-        "session_number": session_number,
-        "trigger_hook": hook,
-    }
-    if extra_context:
-        ctx.update(extra_context)
-    for defn in definitions:
-        if not defn.enabled:
-            report.skipped += 1
-            report.results.append(PluginResult(
-                plugin_name=defn.name, hook=hook, status="skipped",
-                message="Plugin disabled in nightshift.toml",
-            ))
-            continue
-        if hook not in defn.hooks and defn.hooks:
-            continue
-        report.plugins_run += 1
-        func = _load_function(defn, repo_root)
-        if func is None:
-            report.errors += 1
-            report.results.append(PluginResult(
-                plugin_name=defn.name, hook=hook, status="error",
-                error=f"Could not load {defn.module}.{defn.function}",
-            ))
-            continue
-        t0 = time.perf_counter()
-        try:
-            raw = func(dict(ctx))
-            duration_ms = (time.perf_counter() - t0) * 1000
-            if not isinstance(raw, dict):
-                raw = {"status": "ok", "message": str(raw), "data": {}}
-            status = raw.get("status", "ok")
-            result = PluginResult(
-                plugin_name=defn.name,
-                hook=hook,
-                status=status,
-                message=raw.get("message", ""),
-                data=raw.get("data", {}),
-                duration_ms=duration_ms,
+
+# ---------------------------------------------------------------------------
+# Discovery
+# ---------------------------------------------------------------------------
+
+
+def _discover_plugins() -> list[PluginInfo]:
+    """Discover plugins via importlib.metadata entry points."""
+    infos: list[PluginInfo] = []
+    try:
+        eps = importlib.metadata.entry_points(group="awake.plugins")
+    except Exception:
+        return []
+
+    for ep in eps:
+        dist = ep.dist
+        version = "unknown"
+        if dist is not None:
+            try:
+                version = dist.metadata["Version"]
+            except Exception:
+                pass
+        infos.append(
+            PluginInfo(
+                name=ep.name,
+                version=version,
+                entry_point=str(ep.value),
+                module=ep.value.split(":")[0],
             )
-            if status == "warn":
-                report.warnings += 1
-            elif status == "error":
-                report.errors += 1
-            else:
-                report.ok += 1
-            report.results.append(result)
-        except Exception as exc:
-            duration_ms = (time.perf_counter() - t0) * 1000
-            report.errors += 1
-            report.results.append(PluginResult(
-                plugin_name=defn.name,
-                hook=hook,
-                status="error",
-                error=f"{type(exc).__name__}: {exc}",
-                duration_ms=duration_ms,
-            ))
-    return report
-
-
-def list_plugins(repo_root: Path) -> str:
-    """Return a Markdown table of registered plugins."""
-    definitions = load_plugin_definitions(repo_root)
-    if not definitions:
-        return "_No plugins registered in nightshift.toml_\n"
-    lines = [
-        "| Name | Module | Function | Hooks | Enabled |",
-        "|------|--------|----------|-------|---------|",
-    ]
-    for d in definitions:
-        hooks_str = ", ".join(f"`{h}`" for h in d.hooks) if d.hooks else "_any_"
-        enabled_str = "[YES]" if d.enabled else "[NO]"
-        lines.append(
-            f"| `{d.name}` | `{d.module}` | `{d.function}` | {hooks_str} | {enabled_str} |"
         )
+    return infos
+
+
+# ---------------------------------------------------------------------------
+# Loader
+# ---------------------------------------------------------------------------
+
+
+def _load_plugin(info: PluginInfo, registry: PluginRegistry) -> None:
+    """Attempt to import and initialise a plugin module."""
+    try:
+        mod = importlib.import_module(info.module)
+        registry._loaded_modules[info.name] = mod
+        info.loaded = True
+
+        # Introspect for commands and hooks
+        if hasattr(mod, "AWAKE_COMMANDS"):
+            info.commands = list(mod.AWAKE_COMMANDS)
+        if hasattr(mod, "AWAKE_HOOKS"):
+            info.hooks = list(mod.AWAKE_HOOKS)
+    except Exception as exc:
+        info.error = str(exc)
+        info.loaded = False
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+
+def load_plugins(force_reload: bool = False) -> PluginRegistry:
+    """Discover and load all registered Awake plugins."""
+    registry = PluginRegistry()
+    infos = _discover_plugins()
+    for info in infos:
+        if force_reload and info.module in sys.modules:
+            del sys.modules[info.module]
+        _load_plugin(info, registry)
+        registry.plugins.append(info)
+    return registry
+
+
+def list_plugins(registry: Optional[PluginRegistry] = None) -> PluginRegistry:
+    """Return the plugin registry, loading plugins if needed."""
+    if registry is None:
+        registry = load_plugins()
+    return registry
+
+
+def invoke_hook(
+    registry: PluginRegistry,
+    hook_name: str,
+    *args: Any,
+    **kwargs: Any,
+) -> list[Any]:
+    """Invoke a named hook across all loaded plugins that declare it."""
+    results: list[Any] = []
+    for info in registry.plugins:
+        if hook_name not in info.hooks:
+            continue
+        mod = registry.loaded_module(info.name)
+        if mod is None:
+            continue
+        hook_fn: Optional[Callable] = getattr(mod, hook_name, None)
+        if callable(hook_fn):
+            try:
+                results.append(hook_fn(*args, **kwargs))
+            except Exception as exc:
+                results.append({"error": str(exc)})
+    return results
+
+
+def render_markdown(registry: PluginRegistry) -> str:
+    """Render the plugin list as a Markdown table."""
+    lines = [
+        "## Awake Plugins",
+        "",
+        "| Plugin | Version | Status | Commands | Hooks |",
+        "|--------|---------|--------|----------|-------|",
+    ]
+    for p in registry.plugins:
+        status = "loaded" if p.loaded else f"ERROR: {p.error[:40]}"
+        cmds = ", ".join(p.commands) or "-"
+        hooks = ", ".join(p.hooks) or "-"
+        lines.append(f"| `{p.name}` | {p.version} | {status} | {cmds} | {hooks} |")
+    if not registry.plugins:
+        lines.append("| _No plugins installed_ | | | | |")
     return "\n".join(lines)
-
-
-EXAMPLE_TOML_SNIPPET = """
-# Example plugin configuration in nightshift.toml
-#
-# [[plugins]]
-# name        = "team_style_check"
-# module      = "scripts.style"
-# function    = "check_style"
-# description = "Enforce team-specific style rules beyond PEP 8"
-# hooks       = ["pre_health", "pre_run"]
-# enabled     = true
-#
-# Plugin function signature:
-#   def my_plugin(ctx: dict) -> dict:
-#       # ctx: {repo_path, session_number, trigger_hook, ...}
-#       return {"status": "ok", "message": "...", "data": {}}
-""".strip()

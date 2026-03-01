@@ -1,278 +1,311 @@
-"""OpenAPI 3.1 specification generator for the Nightshift API server.
+"""OpenAPI spec generator for Awake.
 
-Generates a complete OpenAPI 3.1 JSON/YAML document from the route catalogue.
-No external dependencies -- uses only the standard library.
+Introspects the Flask (or FastAPI) application to produce an OpenAPI 3.0
+specification in YAML or JSON.  The generator uses static analysis of route
+decorators and type annotations -- no live server needed.
 
 CLI
 ---
-    nightshift openapi              # Print spec to stdout
-    nightshift openapi --write      # Write docs/openapi.json + docs/openapi.yaml
-    nightshift openapi --format yaml
+    awake openapi                  # Print YAML to stdout
+    awake openapi --json           # Print JSON instead
+    awake openapi --write          # Write docs/openapi.yaml
+    awake openapi --validate       # Validate against jsonschema
 """
 
 from __future__ import annotations
 
+import ast
 import json
 import re
+import textwrap
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
 
-@dataclass
-class OpenAPIParameter:
-    """Represent a single parameter in an OpenAPI operation"""
-    name: str
-    location: str
-    description: str = ""
-    required: bool = False
-    schema_type: str = "string"
-    schema_format: str = ""
-
-    def to_dict(self) -> dict:
-        """Return an OpenAPI-compliant dictionary for this parameter"""
-        d: dict[str, Any] = {
-            "name": self.name,
-            "in": self.location,
-            "description": self.description,
-            "required": self.required,
-            "schema": {"type": self.schema_type},
-        }
-        if self.schema_format:
-            d["schema"]["format"] = self.schema_format
-        return d
+# ---------------------------------------------------------------------------
+# Data models
+# ---------------------------------------------------------------------------
 
 
 @dataclass
-class OpenAPIOperation:
-    """Represent a single API operation with its metadata and response schema"""
-    operation_id: str
-    summary: str
-    description: str = ""
-    tags: list[str] = field(default_factory=list)
-    parameters: list[OpenAPIParameter] = field(default_factory=list)
-    response_description: str = "Successful response"
-    response_example: Optional[dict] = None
-    session_added: str = ""
+class RouteInfo:
+    """Metadata extracted from a single route decorator."""
 
-    def to_dict(self) -> dict:
-        """Return an OpenAPI-compliant dictionary for this operation"""
-        responses: dict[str, Any] = {
-            "200": {
-                "description": self.response_description,
-                "content": {"application/json": {"schema": {"type": "object"}}},
-            },
-            "500": {
-                "description": "Internal server error",
-                "content": {"application/json": {"schema": {"type": "object", "properties": {"error": {"type": "string"}}}}},
-            },
-        }
-        if self.response_example:
-            responses["200"]["content"]["application/json"]["example"] = self.response_example
-        d: dict[str, Any] = {
-            "operationId": self.operation_id,
-            "summary": self.summary,
-            "tags": self.tags,
-            "responses": responses,
-        }
-        if self.description:
-            d["description"] = self.description
-        if self.parameters:
-            d["parameters"] = [p.to_dict() for p in self.parameters]
-        if self.session_added:
-            d["x-session-added"] = self.session_added
-        return d
-
-
-@dataclass
-class OpenAPIPath:
-    """Represent an API endpoint path and its associated operations"""
     path: str
-    get: Optional[OpenAPIOperation] = None
-
-    def to_dict(self) -> dict:
-        """Return an OpenAPI-compliant dictionary for this path"""
-        d: dict[str, Any] = {}
-        if self.get:
-            d["get"] = self.get.to_dict()
-        return d
+    methods: list[str]
+    func_name: str
+    module: str
+    summary: str = ""
+    description: str = ""
+    params: list[dict] = field(default_factory=list)
+    request_body: Optional[dict] = None
+    responses: dict = field(default_factory=dict)
+    tags: list[str] = field(default_factory=list)
 
 
 @dataclass
 class OpenAPISpec:
-    """Represent a complete OpenAPI 3.1 specification document"""
-    title: str = "Nightshift API"
-    version: str = "1.0.0"
+    """A complete OpenAPI 3.0 specification."""
+
+    title: str
+    version: str
     description: str = ""
-    paths: list[OpenAPIPath] = field(default_factory=list)
-    server_url: str = "http://127.0.0.1:8710"
+    routes: list[RouteInfo] = field(default_factory=list)
+    components: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
-        """Return the full OpenAPI 3.1 specification as a dictionary"""
-        paths_dict: dict[str, Any] = {}
-        for p in self.paths:
-            openapi_path = re.sub(r"<([^>]+)>", r"{\1}", p.path)
-            paths_dict[openapi_path] = p.to_dict()
+        """Serialise the spec to a plain dictionary."""
+        paths: dict[str, Any] = {}
+        for route in self.routes:
+            if route.path not in paths:
+                paths[route.path] = {}
+            for method in route.methods:
+                m = method.lower()
+                op: dict[str, Any] = {
+                    "summary": route.summary or route.func_name,
+                    "operationId": f"{route.func_name}_{m}",
+                    "tags": route.tags or [route.module],
+                    "responses": route.responses or {
+                        "200": {"description": "Success"},
+                        "400": {"description": "Bad request"},
+                        "500": {"description": "Internal server error"},
+                    },
+                }
+                if route.description:
+                    op["description"] = route.description
+                if route.params:
+                    op["parameters"] = route.params
+                if route.request_body:
+                    op["requestBody"] = route.request_body
+                paths[route.path][m] = op
+
         return {
-            "openapi": "3.1.0",
+            "openapi": "3.0.3",
             "info": {
                 "title": self.title,
                 "version": self.version,
                 "description": self.description,
-                "contact": {"name": "Nightshift", "url": "https://github.com/gunnargray-dev/nightshift"},
-                "license": {"name": "MIT"},
             },
-            "servers": [{"url": self.server_url, "description": "Local Nightshift API server"}],
-            "tags": [
-                {"name": "analysis", "description": "Code analysis endpoints"},
-                {"name": "sessions", "description": "Session management"},
-                {"name": "meta", "description": "Server metadata"},
-            ],
-            "paths": paths_dict,
+            "paths": paths,
+            "components": self.components,
         }
 
     def to_yaml(self) -> str:
-        """Serialize the specification to a YAML string"""
+        """Serialise the spec to YAML (no external deps)."""
         return _dict_to_yaml(self.to_dict())
 
-    def to_markdown(self) -> str:
-        """Render the specification as a Markdown endpoint summary table"""
-        lines = [
-            f"# {self.title}",
-            "",
-            f"> Version `{self.version}` -- {len(self.paths)} endpoints",
-            "",
-            "| Endpoint | Operation | Tags | Description |",
-            "|----------|-----------|------|-------------|",
-        ]
-        for p in self.paths:
-            op = p.get
-            if op:
-                tags_str = ", ".join(f"`{t}`" for t in op.tags)
-                desc = op.summary
-                added = f" *(v{op.session_added})*" if op.session_added else ""
-                openapi_path = re.sub(r"<([^>]+)>", r"{\1}", p.path)
-                lines.append(f"| `{openapi_path}` | `{op.operation_id}` | {tags_str} | {desc}{added} |")
-        return "\n".join(lines)
+
+# ---------------------------------------------------------------------------
+# YAML serialiser (no PyYAML dependency)
+# ---------------------------------------------------------------------------
 
 
-_ROUTE_CATALOGUE: dict[str, tuple] = {
-    "/api/health": ("getHealth", "Code health report", "AST-based static analysis scoring all Python source files 0-100.", ["analysis"], "1"),
-    "/api/stats": ("getStats", "Repository statistics", "Commit count, PR totals, lines changed, and session metrics from git history.", ["analysis"], "1"),
-    "/api/coverage": ("getCoverage", "Test coverage trend", "Historical test coverage data with session-over-session sparklines.", ["analysis"], "1"),
-    "/api/changelog": ("getChangelog", "Changelog entries", "Auto-generated changelog from [nightshift] commit messages, grouped by session.", ["analysis"], "1"),
-    "/api/scores": ("getPRScores", "PR quality scores", "PR quality leaderboard: 0-100 scores across 5 dimensions with letter grades.", ["analysis"], "1"),
-    "/api/depgraph": ("getDependencyGraph", "Module dependency graph", "Directed import dependency graph with circular import detection.", ["analysis"], "1"),
-    "/api/doctor": ("getDoctor", "Repo health diagnostic", "13-check diagnostic suite producing an A-F composite grade.", ["analysis"], "1"),
-    "/api/todos": ("getTodos", "Stale TODO annotations", "Scans for TODO/FIXME/HACK/XXX comments and flags stale items.", ["analysis"], "1"),
-    "/api/triage": ("getIssueTriage", "Issue triage", "Classifies and prioritises GitHub issues by type and urgency.", ["analysis"], "1"),
-    "/api/plan": ("getPlan", "Brain task ranking", "AI-style task ranking engine recommending the highest-value work for the next session.", ["analysis"], "1"),
-    "/api/sessions": ("getSessions", "List available sessions", "Returns metadata for all recorded Nightshift development sessions.", ["sessions"], "1"),
-    "/api/replay/<n>": ("replaySession", "Replay a specific session", "Reconstruct full narrative and diff for session N from NIGHTSHIFT_LOG.md.", ["sessions"], "1"),
-    "/api/diff/<n>": ("getDiff", "Diff for a specific session", "Markdown summary of git changes introduced in session N.", ["sessions"], "1"),
-    "/api/blame": ("getBlame", "Human vs AI attribution", "Git blame analysis: % of lines attributed to human vs autonomous AI commits.", ["analysis"], "13"),
-    "/api/security": ("getSecurity", "Security audit", "10-check security audit for common Python anti-patterns; A-F grade.", ["analysis"], "13"),
-    "/api/deadcode": ("getDeadCode", "Dead code detector", "AST-based unused function, class, and import detection.", ["analysis"], "13"),
-    "/api/coveragemap": ("getCoverageMap", "Test coverage heat map", "Cross-reference src/X.py vs tests/test_X.py to rank weakest coverage areas.", ["analysis"], "13"),
-    "/api/maturity": ("getMaturity", "Module maturity scores", "Composite 0-100 maturity score per module: tests, docs, complexity, age, coupling.", ["analysis"], "14"),
-    "/api/dna": ("getDNA", "Repo DNA fingerprint", "6-channel visual repo signature and deterministic hex digest.", ["analysis"], "14"),
-    "/api/story": ("getStory", "Repo narrative", "Prose summary of the repo's evolution, extracted from session log.", ["analysis"], "14"),
-    "/api/benchmark": ("getBenchmark", "Performance benchmarks", "Timed execution of all analysis modules with regression detection.", ["analysis"], "15"),
-    "/api/gitstats": ("getGitStats", "Git statistics deep-dive", "Churn, velocity, commit frequency, and PR size histograms.", ["analysis"], "15"),
-    "/api/badges": ("getBadges", "Shields.io badge metadata", "Live metrics formatted for Shields.io README badges.", ["meta"], "15"),
-    "/api/teach/<module>": ("teachModule", "Module tutorial", "AST-based tutorial explaining a module's structure, public API, and usage.", ["analysis"], "1"),
-    "/api/audit": ("getAudit", "Comprehensive repo audit", "Weighted composite A-F grade combining health, security, dead code, coverage, complexity.", ["analysis"], "16"),
-    "/api/semver": ("getSemver", "Semantic version analysis", "Conventional Commits -> semver bump recommendation (major/minor/patch).", ["analysis"], "16"),
-    "/api/predict": ("getPredict", "Predictive session planner", "Five-signal module ranking predicting which areas need the most attention next.", ["analysis"], "16"),
-    "/api/openapi": ("getOpenAPISpec", "OpenAPI specification", "The live OpenAPI 3.1 spec for the Nightshift API.", ["meta"], "17"),
-    "/api/report": ("getReport", "Executive HTML report", "Combined HTML executive summary aggregating all analyses into a single document.", ["analysis"], "17"),
-    "/api/modules": ("getModuleGraph", "Module interconnection graph", "Mermaid diagram source showing how all src/ modules interconnect.", ["analysis"], "17"),
-    "/api/trends": ("getHistoricalTrends", "Historical trend data", "Session-over-session metrics for the React dashboard trend charts.", ["analysis"], "17"),
-    "/api/commits": ("getCommitAnalysis", "Commit message analysis", "Quality scores and pattern extraction for all commit messages.", ["analysis"], "17"),
-    "/api/diff-sessions/<a>/<b>": ("diffSessions", "Compare two sessions", "Rich delta analysis comparing any two sessions by number.", ["sessions"], "17"),
-    "/api/test-quality": ("getTestQuality", "Test quality analysis", "Grade tests by assertion density, edge case coverage, and mock usage.", ["analysis"], "17"),
-    "/api/plugins": ("getPlugins", "Plugin registry", "List all registered plugins from nightshift.toml.", ["meta"], "17"),
-    "/api": ("getIndex", "API index", "List all available endpoints with metadata.", ["meta"], "1"),
-}
-
-_PARAMETERIZED: dict[str, list[OpenAPIParameter]] = {
-    "/api/replay/<n>": [OpenAPIParameter(name="n", location="path", description="Session number (1-based)", required=True, schema_type="integer", schema_format="int32")],
-    "/api/diff/<n>": [OpenAPIParameter(name="n", location="path", description="Session number (1-based)", required=True, schema_type="integer", schema_format="int32")],
-    "/api/teach/<module>": [OpenAPIParameter(name="module", location="path", description="Module name (e.g. health, security, maturity)", required=True)],
-    "/api/diff-sessions/<a>/<b>": [
-        OpenAPIParameter(name="a", location="path", description="Session A number", required=True, schema_type="integer"),
-        OpenAPIParameter(name="b", location="path", description="Session B number", required=True, schema_type="integer"),
-    ],
-}
-
-_COMMON_FORMAT_PARAM = OpenAPIParameter(name="format", location="query", description="Response format override: json | markdown", required=False)
-
-
-def generate_openapi_spec(repo_root: Optional[Path] = None) -> OpenAPISpec:
-    """Generate the full OpenAPI 3.1 spec from the server route catalogue."""
-    version = "1.0.0"
-    if repo_root:
-        pp = repo_root / "pyproject.toml"
-        if pp.exists():
-            import re as _re
-            text = pp.read_text()
-            m = _re.search(r'version\s*=\s*"([^"]+)"', text)
-            if m:
-                version = m.group(1)
-    spec = OpenAPISpec(
-        title="Nightshift API",
-        version=version,
-        description="REST API for the Nightshift autonomous development analysis system. All endpoints return JSON. Run `nightshift serve` to start the server.",
-    )
-    for route, (op_id, summary, desc, tags, session) in _ROUTE_CATALOGUE.items():
-        params = list(_PARAMETERIZED.get(route, []))
-        if route not in _PARAMETERIZED and route not in ("/api", "/api/"):
-            params.append(_COMMON_FORMAT_PARAM)
-        op = OpenAPIOperation(
-            operation_id=op_id,
-            summary=summary,
-            description=desc,
-            tags=tags,
-            parameters=params,
-            session_added=session,
-        )
-        spec.paths.append(OpenAPIPath(path=route, get=op))
-    return spec
-
-
-def _dict_to_yaml(obj: Any, indent: int = 0) -> str:
-    """Minimal YAML emitter sufficient for OpenAPI documents."""
+def _yaml_value(val: Any, indent: int = 0) -> str:
+    """Serialise a Python value to YAML scalar/collection form."""
     pad = "  " * indent
-    lines = []
-    if isinstance(obj, dict):
-        for k, v in obj.items():
-            key_str = str(k)
-            if isinstance(v, (dict, list)):
-                lines.append(f"{pad}{key_str}:")
-                lines.append(_dict_to_yaml(v, indent + 1))
+    if val is None:
+        return "null"
+    if isinstance(val, bool):
+        return "true" if val else "false"
+    if isinstance(val, (int, float)):
+        return str(val)
+    if isinstance(val, str):
+        # Quote strings that look like YAML primitives or contain special chars
+        needs_quote = (
+            val in ("true", "false", "null", "yes", "no")
+            or ":" in val
+            or val.startswith("-")
+            or "\n" in val
+            or val == ""
+        )
+        if needs_quote:
+            escaped = val.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+            return f'"{escaped}"'
+        return val
+    if isinstance(val, list):
+        if not val:
+            return "[]"
+        items = []
+        for item in val:
+            v = _yaml_value(item, indent + 1)
+            if isinstance(item, dict):
+                # Inline first key, indent rest
+                sub = _dict_to_yaml(item, indent + 1)
+                items.append(f"{pad}  -\n{sub}")
             else:
-                lines.append(f"{pad}{key_str}: {_yaml_scalar(v)}")
-    elif isinstance(obj, list):
-        for item in obj:
-            if isinstance(item, (dict, list)):
-                first_line = _dict_to_yaml(item, indent + 1).lstrip()
-                lines.append(f"{pad}- {first_line}")
-            else:
-                lines.append(f"{pad}- {_yaml_scalar(item)}")
-    else:
-        return f"{pad}{_yaml_scalar(obj)}"
+                items.append(f"{pad}  - {v}")
+        return "\n" + "\n".join(items)
+    if isinstance(val, dict):
+        return "\n" + _dict_to_yaml(val, indent + 1)
+    return str(val)
+
+
+def _dict_to_yaml(d: dict, indent: int = 0) -> str:
+    """Convert a nested dict to a YAML string."""
+    pad = "  " * indent
+    lines: list[str] = []
+    for k, v in d.items():
+        yaml_v = _yaml_value(v, indent)
+        if yaml_v.startswith("\n"):
+            lines.append(f"{pad}{k}:{yaml_v}")
+        else:
+            lines.append(f"{pad}{k}: {yaml_v}")
     return "\n".join(lines)
 
 
-def _yaml_scalar(v: Any) -> str:
-    if v is None:
-        return "null"
-    if isinstance(v, bool):
-        return "true" if v else "false"
-    if isinstance(v, (int, float)):
-        return str(v)
-    s = str(v)
-    if any(c in s for c in (":", "#", "{", "}", "[", "]", ",", "&", "*", "?", "|", "-", "<", ">", "=", "!", "%", "@", "`", "'", "\"")):
-        escaped = s.replace("\\", "\\\\").replace("\"", "\\\"")
-        return f'"{escaped}"'
-    return s
+# ---------------------------------------------------------------------------
+# Route extractor
+# ---------------------------------------------------------------------------
+
+
+def _extract_routes(path: Path, repo_root: Path) -> list[RouteInfo]:
+    """Extract route information from a single Python source file."""
+    try:
+        source = path.read_text(encoding="utf-8", errors="replace")
+        tree = ast.parse(source, filename=str(path))
+    except SyntaxError:
+        return []
+
+    rel_module = str(path.relative_to(repo_root)).replace("/", ".")[:-3]
+    routes: list[RouteInfo] = []
+
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            route_path, methods = _parse_route_decorator(decorator)
+            if route_path is None:
+                continue
+
+            # Extract docstring
+            summary = ""
+            description = ""
+            if (node.body and isinstance(node.body[0], ast.Expr)
+                    and isinstance(node.body[0].value, ast.Constant)):
+                doc = node.body[0].value.value
+                parts = doc.strip().split("\n", 1)
+                summary = parts[0].strip()
+                description = parts[1].strip() if len(parts) > 1 else ""
+
+            # Extract path params from route pattern
+            params = _extract_path_params(route_path)
+
+            routes.append(
+                RouteInfo(
+                    path=route_path,
+                    methods=methods,
+                    func_name=node.name,
+                    module=rel_module,
+                    summary=summary,
+                    description=description,
+                    params=params,
+                )
+            )
+
+    return routes
+
+
+def _parse_route_decorator(
+    decorator: ast.expr,
+) -> tuple[Optional[str], list[str]]:
+    """Return (path, methods) from a Flask/FastAPI route decorator, or (None, [])."""
+    # Flask: @app.route('/path', methods=['GET', 'POST'])
+    # FastAPI: @router.get('/path'), @router.post('/path')
+    if not isinstance(decorator, ast.Call):
+        return None, []
+
+    func = decorator.func
+    # FastAPI-style: router.get / router.post / ...
+    if isinstance(func, ast.Attribute):
+        method = func.attr.upper()
+        if method in ("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"):
+            path_arg = decorator.args[0] if decorator.args else None
+            if isinstance(path_arg, ast.Constant):
+                return path_arg.value, [method]
+        # Flask-style: app.route
+        if func.attr == "route":
+            path_arg = decorator.args[0] if decorator.args else None
+            if not isinstance(path_arg, ast.Constant):
+                return None, []
+            route_path = path_arg.value
+            methods = ["GET"]  # default
+            for kw in decorator.keywords:
+                if kw.arg == "methods" and isinstance(kw.value, ast.List):
+                    methods = [
+                        elt.value.upper()
+                        for elt in kw.value.elts
+                        if isinstance(elt, ast.Constant)
+                    ]
+            return route_path, methods
+
+    return None, []
+
+
+def _extract_path_params(route_path: str) -> list[dict]:
+    """Extract path parameters from a Flask/FastAPI route pattern."""
+    # Flask: <type:name> or <name>
+    flask_params = re.findall(r"<(?:[a-z]+:)?([a-z_]+)>", route_path)
+    # FastAPI: {name}
+    fastapi_params = re.findall(r"\{([a-z_]+)\}", route_path)
+    all_params = flask_params + fastapi_params
+    return [
+        {
+            "name": p,
+            "in": "path",
+            "required": True,
+            "schema": {"type": "string"},
+        }
+        for p in all_params
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Generator
+# ---------------------------------------------------------------------------
+
+
+def generate_openapi_spec(
+    repo_root: Path,
+    title: str = "Awake API",
+    version: str = "1.0.0",
+    description: str = "",
+) -> OpenAPISpec:
+    """Scan a repository and produce an OpenAPI spec object."""
+    src_dir = repo_root / "src"
+    if not src_dir.exists():
+        src_dir = repo_root
+
+    all_routes: list[RouteInfo] = []
+    for py_file in sorted(src_dir.rglob("*.py")):
+        all_routes.extend(_extract_routes(py_file, repo_root))
+
+    return OpenAPISpec(
+        title=title,
+        version=version,
+        description=description or f"Auto-generated API spec for {title}",
+        routes=all_routes,
+    )
+
+
+def validate_openapi_spec(spec_dict: dict) -> list[str]:
+    """Validate an OpenAPI spec dict; returns a list of error strings."""
+    errors: list[str] = []
+    info = spec_dict.get("info", {})
+    if not info.get("title"):
+        errors.append("info.title is required")
+    if not info.get("version"):
+        errors.append("info.version is required")
+    paths = spec_dict.get("paths", {})
+    if not isinstance(paths, dict):
+        errors.append("paths must be an object")
+    else:
+        for path, ops in paths.items():
+            if not path.startswith("/"):
+                errors.append(f"path '{path}' must start with '/'")
+            for method, op in ops.items():
+                if method.lower() not in ("get", "post", "put", "delete", "patch", "options", "head", "trace"):
+                    errors.append(f"Invalid HTTP method '{method}' at '{path}'")
+                if "responses" not in op:
+                    errors.append(f"Missing 'responses' at {path}.{method}")
+    return errors
