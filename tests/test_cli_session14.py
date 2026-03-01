@@ -7,7 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from src.cli import build_parser, cmd_story, cmd_maturity, cmd_teach, cmd_dna
+from src.cli import build_parser
+from src.commands.meta import cmd_story
+from src.commands.analysis import cmd_maturity
+from src.commands.tools import cmd_teach, cmd_dna
 
 # ---------------------------------------------------------------------------
 # Minimal log / repo fixture

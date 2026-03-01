@@ -182,16 +182,25 @@ def cmd_blame(args) -> int:
 
 def cmd_maturity(args) -> int:
     """Compute per-module maturity score (0-100)."""
-    from src.maturity import analyze_maturity
+    from src.maturity import assess_maturity, save_maturity_report
     _print_header("Module Maturity Scores")
     repo = _repo(getattr(args, "repo", None))
-    report = analyze_maturity(repo)
+    report = assess_maturity(repo)
+    if args.write:
+        out = repo / "docs" / "maturity_report.md"
+        save_maturity_report(report, out)
+        _print_ok(f"Report written to {out}")
+        return 0
     if args.json:
         print(json.dumps(report.to_dict(), indent=2))
         return 0
     print(report.to_markdown())
+    module_count = len(report.modules)
+    high = sum(1 for m in report.modules if m.total_score >= 80)
+    medium = sum(1 for m in report.modules if 40 <= m.total_score < 80)
+    low = sum(1 for m in report.modules if m.total_score < 40)
     _print_info(
-        f"Modules: {report.module_count}  Avg: {report.avg_score:.1f}/100  "
-        f"High: {report.high_count}  Medium: {report.medium_count}  Low: {report.low_count}"
+        f"Modules: {module_count}  Avg: {report.avg_score:.1f}/100  "
+        f"High: {high}  Medium: {medium}  Low: {low}"
     )
     return 0

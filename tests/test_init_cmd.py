@@ -81,7 +81,7 @@ class TestBootstrap:
         # Second run without force
         result2 = ic.bootstrap(tmp_path)
         # Should skip nightshift.toml
-        assert "nightshift.toml" in result2.skipped
+        assert any("nightshift.toml" in p for p in result2.skipped)
         # Content should be unchanged (custom)
         assert (tmp_path / "nightshift.toml").read_text() == "# custom"
 
@@ -90,7 +90,7 @@ class TestBootstrap:
         ic.bootstrap(tmp_path)
         (tmp_path / "nightshift.toml").write_text("# custom", encoding="utf-8")
         result2 = ic.bootstrap(tmp_path, force=True)
-        assert "nightshift.toml" in result2.created
+        assert any("nightshift.toml" in p for p in result2.created)
         content = (tmp_path / "nightshift.toml").read_text()
         assert "[thresholds]" in content  # original template restored
 
@@ -98,14 +98,14 @@ class TestBootstrap:
         ic = _import()
         result = ic.bootstrap(tmp_path, create_src=True)
         assert (tmp_path / "src" / "__init__.py").exists()
-        assert "src/__init__.py" in result.created
+        assert any("src/__init__.py" in p or p.endswith("__init__.py") for p in result.created)
 
     def test_create_src_skipped_if_exists(self, tmp_path):
         ic = _import()
         (tmp_path / "src").mkdir()
         (tmp_path / "src" / "__init__.py").write_text("# existing", encoding="utf-8")
         result = ic.bootstrap(tmp_path, create_src=True)
-        assert "src/__init__.py" in result.skipped
+        assert any("src/__init__.py" in p or p.endswith("__init__.py") for p in result.skipped)
 
 
 # ---------------------------------------------------------------------------

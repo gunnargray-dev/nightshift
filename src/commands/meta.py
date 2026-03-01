@@ -77,10 +77,15 @@ def cmd_changelog(args) -> int:
 
 def cmd_story(args) -> int:
     """Generate narrative prose summary of repo evolution."""
-    from src.story import generate_story
+    from src.story import generate_story, save_story
     _print_header("Repo Story")
     repo = _repo(getattr(args, "repo", None))
     story = generate_story(repo)
+    if args.write:
+        out = repo / "docs" / "story.md"
+        save_story(story, out)
+        _print_ok(f"Story written to {out}")
+        return 0
     if args.json:
         print(json.dumps(story.to_dict(), indent=2))
         return 0

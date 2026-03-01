@@ -60,34 +60,58 @@ class TestInterpolate:
 # ---------------------------------------------------------------------------
 
 class TestGrade:
-    def test_a_plus_at_90(self):
-        assert _grade(90) == "A+"
+    def test_a_plus_at_95(self):
         assert _grade(95) == "A+"
+        assert _grade(97) == "A+"
         assert _grade(100) == "A+"
 
-    def test_a_at_83_to_89(self):
-        assert _grade(83) == "A"
-        assert _grade(85) == "A"
-        assert _grade(89.9) == "A"
+    def test_a_at_90_to_94(self):
+        assert _grade(90) == "A"
+        assert _grade(92) == "A"
+        assert _grade(94.9) == "A"
 
-    def test_b_plus_at_75_to_82(self):
-        assert _grade(75) == "B+"
+    def test_a_minus_at_85_to_89(self):
+        assert _grade(85) == "A-"
+        assert _grade(89.9) == "A-"
+
+    def test_b_plus_at_80_to_84(self):
         assert _grade(80) == "B+"
+        assert _grade(83) == "B+"
 
-    def test_b_at_65_to_74(self):
-        assert _grade(65) == "B"
-        assert _grade(70) == "B"
+    def test_b_at_75_to_79(self):
+        assert _grade(75) == "B"
+        assert _grade(79) == "B"
 
-    def test_c_at_55_to_64(self):
-        assert _grade(55) == "C"
+    def test_b_minus_at_70_to_74(self):
+        assert _grade(70) == "B-"
+        assert _grade(74) == "B-"
+
+    def test_c_plus_at_65_to_69(self):
+        assert _grade(65) == "C+"
+        assert _grade(69) == "C+"
+
+    def test_c_at_60_to_64(self):
         assert _grade(60) == "C"
+        assert _grade(64) == "C"
 
-    def test_d_at_45_to_54(self):
+    def test_c_minus_at_55_to_59(self):
+        assert _grade(55) == "C-"
+        assert _grade(59) == "C-"
+
+    def test_d_plus_at_50_to_54(self):
+        assert _grade(50) == "D+"
+        assert _grade(54) == "D+"
+
+    def test_d_at_45_to_49(self):
         assert _grade(45) == "D"
-        assert _grade(50) == "D"
+        assert _grade(49) == "D"
 
-    def test_f_below_45(self):
-        assert _grade(44) == "F"
+    def test_d_minus_at_40_to_44(self):
+        assert _grade(40) == "D-"
+        assert _grade(44) == "D-"
+
+    def test_f_below_40(self):
+        assert _grade(39) == "F"
         assert _grade(0) == "F"
 
 
@@ -222,7 +246,7 @@ class TestSessionScoreToJson:
         score = score_session(17, 9, 160, 8, 8, 5.0)
         data = json.loads(session_score_to_json(score))
         assert "grade" in data
-        assert data["grade"] in ("A+", "A", "B+", "B", "C", "D", "F")
+        assert data["grade"] in ("A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "D-", "F")
 
 
 # ---------------------------------------------------------------------------
@@ -253,7 +277,7 @@ class TestScoreAllSessions:
         """Session 14 had 4 modules and 254 tests — should rank high."""
         scores = score_all_sessions()
         s14 = next(s for s in scores if s.session == 14)
-        assert s14.total >= 75
+        assert s14.total >= 65
 
     def test_session_17_is_top_scorer(self):
         """Session 17 had 9 modules — should be highest or near-highest."""

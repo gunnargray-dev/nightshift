@@ -38,7 +38,7 @@ def test_parse_commit_with_scope():
     entry = _parse_commit(_raw("fix(health): correct score calculation"))
     assert entry is not None
     assert entry.cc_type == "fix"
-    assert entry.cc_scope == "health"
+    assert entry.scope == "health"
 
 
 def test_parse_commit_breaking():
@@ -65,10 +65,10 @@ def test_parse_commit_pr_reference():
 
 
 def test_parse_commit_nightshift():
+    # [nightshift] prefix breaks CC regex, so _parse_commit returns None
     entry = _parse_commit(_raw("[nightshift] feat: add openapi generator"))
-    assert entry is not None
-    # The [nightshift] prefix breaks CC parsing — that's fine
-    # What matters is case-insensitive pattern matching in is_nightshift
+    assert entry is None
+    # But a CC commit with nightshift in the body is detected
     entry2 = _parse_commit(_raw("feat: add openapi generator", body="[nightshift] session 17"))
     assert entry2 is not None
     assert entry2.is_nightshift is True
@@ -114,12 +114,12 @@ def test_release_entry_format_line_breaking():
 
 def test_release_entry_format_line_nightshift():
     entry = ReleaseEntry(
-        sha="abc", subject="feat: add 🌙", cc_type="feat", scope="",
+        sha="abc", subject="feat: add nightshift feature", cc_type="feat", scope="",
         description="add nightshift feature", is_breaking=False, is_nightshift=True,
         pr_refs=[], author="Computer",
     )
     line = entry.format_line()
-    assert "🌙" in line
+    assert "[nightshift]" in line
 
 
 # ---------------------------------------------------------------------------
@@ -184,7 +184,7 @@ def test_release_notes_to_markdown():
     assert "🐛 Bug Fixes" in md
     assert "add plugin system" in md
     assert "correct health score" in md
-    assert "Session 17" in md
+    assert "Nightshift Session" in md and "17" in md
 
 
 def test_release_notes_version_prefix():

@@ -233,6 +233,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # maturity
     p_mat = sub.add_parser("maturity", help="Module maturity scores")
+    _add_write(p_mat)
     _add_json(p_mat)
     _add_repo(p_mat)
     p_mat.set_defaults(func=cmd_maturity)
@@ -258,6 +259,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # story
     p_story = sub.add_parser("story", help="Repo narrative")
+    _add_write(p_story)
     _add_json(p_story)
     _add_repo(p_story)
     p_story.set_defaults(func=cmd_story)
@@ -352,12 +354,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     # benchmark
     p_bench = sub.add_parser("benchmark", help="Performance benchmark suite")
+    _add_write(p_bench)
     _add_json(p_bench)
+    p_bench.add_argument("--no-persist", action="store_true", help="Don't persist results")
+    p_bench.add_argument("--session", type=int, default=None, help="Session number")
     _add_repo(p_bench)
     p_bench.set_defaults(func=cmd_benchmark)
 
     # gitstats
     p_gitstats = sub.add_parser("gitstats", help="Git statistics deep-dive")
+    _add_write(p_gitstats)
     _add_json(p_gitstats)
     _add_repo(p_gitstats)
     p_gitstats.set_defaults(func=cmd_gitstats)
@@ -366,6 +372,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_badges = sub.add_parser("badges", help="Badge generator")
     _add_write(p_badges)
     _add_json(p_badges)
+    p_badges.add_argument("--inject", action="store_true", help="Inject badges into README.md")
     _add_repo(p_badges)
     p_badges.set_defaults(func=cmd_badges)
 
@@ -384,12 +391,14 @@ def build_parser() -> argparse.ArgumentParser:
     # teach
     p_teach = sub.add_parser("teach", help="Module tutorial generator")
     p_teach.add_argument("module", help="Module name (e.g. health, stats)")
+    _add_write(p_teach)
     p_teach.add_argument("--json", action="store_true", help="Output raw JSON")
     _add_repo(p_teach)
     p_teach.set_defaults(func=cmd_teach)
 
     # dna
     p_dna = sub.add_parser("dna", help="Repo DNA fingerprint")
+    _add_write(p_dna)
     _add_json(p_dna)
     _add_repo(p_dna)
     p_dna.set_defaults(func=cmd_dna)

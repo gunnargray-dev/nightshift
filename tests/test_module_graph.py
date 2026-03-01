@@ -217,5 +217,5 @@ def test_full_mermaid_includes_all_edges():
     ]
     graph.edges = [("a", "b")]
     graph.layers = {"core": ["a"], "analysis": ["b"]}
-    full = graph.to_full_mermaid()
+    full = graph.to_mermaid(show_all_edges=True)
     assert "a --> b" in full

@@ -28,11 +28,18 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Optional
 
-from src.scoring import (
-    score_to_grade as _score_to_grade_full,
-    score_to_status as _score_to_status,
-    score_to_overall_status as _overall_status,
-)
+try:
+    from src.scoring import (
+        score_to_grade as _score_to_grade_full,
+        score_to_status as _score_to_status,
+        score_to_overall_status as _overall_status,
+    )
+except ModuleNotFoundError:
+    from scoring import (
+        score_to_grade as _score_to_grade_full,
+        score_to_status as _score_to_status,
+        score_to_overall_status as _overall_status,
+    )
 
 
 def _grade(score: float) -> str:

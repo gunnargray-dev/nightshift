@@ -78,10 +78,15 @@ def cmd_todos(args) -> int:
 
 def cmd_benchmark(args) -> int:
     """Run the performance benchmark suite."""
-    from src.benchmark import run_benchmarks
+    from src.benchmark import run_benchmarks, save_benchmark_report
     _print_header("Performance Benchmark Suite")
     repo = _repo(getattr(args, "repo", None))
     report = run_benchmarks(repo)
+    if args.write:
+        out = repo / "docs" / "benchmark_report.md"
+        save_benchmark_report(report, out)
+        _print_ok(f"Report written to {out}")
+        return 0
     if args.json:
         print(json.dumps(report.to_dict(), indent=2))
         return 0
@@ -101,10 +106,15 @@ def cmd_benchmark(args) -> int:
 
 def cmd_gitstats(args) -> int:
     """Git statistics deep-dive: churn, velocity, commit frequency."""
-    from src.gitstats import analyze_gitstats
+    from src.gitstats import compute_git_stats, save_git_stats_report
     _print_header("Git Statistics Deep-Dive")
     repo = _repo(getattr(args, "repo", None))
-    report = analyze_gitstats(repo)
+    report = compute_git_stats(repo)
+    if args.write:
+        out = repo / "docs" / "gitstats_report.md"
+        save_git_stats_report(report, out)
+        _print_ok(f"Report written to {out}")
+        return 0
     if args.json:
         print(json.dumps(report.to_dict(), indent=2))
         return 0
@@ -128,6 +138,14 @@ def cmd_badges(args) -> int:
     _print_header("Badge Generator")
     repo = _repo(getattr(args, "repo", None))
     report = generate_badges(repo)
+    if args.inject:
+        from src.badges import write_badges_to_readme
+        ok = write_badges_to_readme(report, repo / "README.md")
+        if ok:
+            _print_ok("Badges injected into README.md")
+        else:
+            _print_warn("Could not inject badges into README.md")
+        return 0
     if args.json:
         print(json.dumps(report.to_dict(), indent=2))
         return 0
@@ -195,10 +213,25 @@ def cmd_predict(args) -> int:
 
 def cmd_teach(args) -> int:
     """Generate an AST-based tutorial for a specific module."""
-    from src.teach import generate_tutorial
-    _print_header(f"Module Tutorial: {args.module}")
+    from src.teach import teach_module, list_teachable_modules, save_tutorial
     repo = _repo(getattr(args, "repo", None))
-    tutorial = generate_tutorial(repo, args.module)
+    if args.module == "list":
+        _print_header("Teachable Modules")
+        modules = list_teachable_modules(repo)
+        for m in modules:
+            print(f"  {m}")
+        return 0
+    _print_header(f"Module Tutorial: {args.module}")
+    try:
+        tutorial = teach_module(args.module, repo)
+    except FileNotFoundError as e:
+        print(str(e))
+        return 1
+    if args.write:
+        out = repo / "docs" / "tutorials" / f"{args.module}.md"
+        save_tutorial(tutorial, out)
+        _print_ok(f"Tutorial written to {out}")
+        return 0
     if args.json:
         print(json.dumps(tutorial.to_dict(), indent=2))
         return 0
@@ -213,10 +246,15 @@ def cmd_teach(args) -> int:
 
 def cmd_dna(args) -> int:
     """Generate 6-channel visual repo DNA fingerprint."""
-    from src.dna import generate_dna
+    from src.dna import fingerprint_repo, save_dna_report
     _print_header("Repo DNA Fingerprint")
     repo = _repo(getattr(args, "repo", None))
-    dna = generate_dna(repo)
+    dna = fingerprint_repo(repo)
+    if args.write:
+        out = repo / "docs" / "dna.md"
+        save_dna_report(dna, out)
+        _print_ok(f"DNA report written to {out}")
+        return 0
     if args.json:
         print(json.dumps(dna.to_dict(), indent=2))
         return 0

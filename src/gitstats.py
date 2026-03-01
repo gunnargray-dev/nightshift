@@ -102,6 +102,11 @@ class GitStatsReport:
     churn_rate_per_day: float = 0.0
     recent_velocity: int = 0
 
+    @property
+    def contributor_count(self) -> int:
+        """Return the number of contributors."""
+        return len(self.contributors)
+
     def to_dict(self) -> dict:
         """Return a dictionary representation of the full git stats report"""
         d = asdict(self)

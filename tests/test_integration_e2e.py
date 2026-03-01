@@ -54,7 +54,14 @@ def _import_module(name: str) -> Any:
     if spec is None or spec.loader is None:
         pytest.skip(f"src/{name}.py not found in repo")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)  # type: ignore
+    # Register in sys.modules before exec so that `from __future__ import
+    # annotations` works correctly with dataclasses on Python < 3.10.
+    sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)  # type: ignore
+    except Exception:
+        sys.modules.pop(name, None)
+        raise
     return module
 
 

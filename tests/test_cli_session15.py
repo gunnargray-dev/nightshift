@@ -12,7 +12,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.cli import build_parser, cmd_benchmark, cmd_gitstats, cmd_badges
+from src.cli import build_parser
+from src.commands.tools import cmd_benchmark, cmd_gitstats, cmd_badges
 from src.benchmark import BenchmarkReport, BenchmarkResult
 from src.gitstats import GitStatsReport, ContributorStats
 from src.badges import BadgeBlock, Badge
@@ -99,7 +100,7 @@ class TestCmdBenchmark:
         report = BenchmarkReport(results=[], total_ms=0.0, session=15)
         with patch("src.benchmark.run_benchmarks", return_value=report), \
              patch("src.benchmark.save_benchmark_report") as mock_save, \
-             patch("src.cli._repo", return_value=tmp_path):
+             patch("src.commands.tools._repo", return_value=tmp_path):
             args = _make_benchmark_args(write=True)
             rc = cmd_benchmark(args)
         assert rc == 0
@@ -107,7 +108,7 @@ class TestCmdBenchmark:
     def test_default_markdown_output(self, tmp_path, capsys):
         report = BenchmarkReport(results=[], total_ms=0.0, session=15)
         with patch("src.benchmark.run_benchmarks", return_value=report), \
-             patch("src.cli._repo", return_value=tmp_path):
+             patch("src.commands.tools._repo", return_value=tmp_path):
             args = _make_benchmark_args()
             rc = cmd_benchmark(args)
         assert rc == 0
@@ -141,7 +142,7 @@ class TestCmdGitstats:
         report = GitStatsReport(total_commits=10)
         with patch("src.gitstats.compute_git_stats", return_value=report), \
              patch("src.gitstats.save_git_stats_report") as mock_save, \
-             patch("src.cli._repo", return_value=tmp_path):
+             patch("src.commands.tools._repo", return_value=tmp_path):
             args = _make_gitstats_args(write=True)
             rc = cmd_gitstats(args)
         assert rc == 0
@@ -149,7 +150,7 @@ class TestCmdGitstats:
     def test_default_markdown_output(self, tmp_path, capsys):
         report = GitStatsReport(total_commits=25, active_days=8, churn_rate_per_day=100.0)
         with patch("src.gitstats.compute_git_stats", return_value=report), \
-             patch("src.cli._repo", return_value=tmp_path):
+             patch("src.commands.tools._repo", return_value=tmp_path):
             args = _make_gitstats_args()
             rc = cmd_gitstats(args)
         assert rc == 0
@@ -187,7 +188,7 @@ class TestCmdBadges:
         block = BadgeBlock(badges=[Badge(label="tests", message="1500", color="brightgreen")])
         with patch("src.badges.generate_badges", return_value=block), \
              patch("src.badges.save_badges_report") as mock_save, \
-             patch("src.cli._repo", return_value=tmp_path):
+             patch("src.commands.tools._repo", return_value=tmp_path):
             args = _make_badges_args(write=True)
             rc = cmd_badges(args)
         assert rc == 0
@@ -196,7 +197,7 @@ class TestCmdBadges:
         block = BadgeBlock(badges=[Badge(label="sessions", message="15", color="blueviolet")])
         with patch("src.badges.generate_badges", return_value=block), \
              patch("src.badges.write_badges_to_readme", return_value=True) as mock_inject, \
-             patch("src.cli._repo", return_value=tmp_path):
+             patch("src.commands.tools._repo", return_value=tmp_path):
             args = _make_badges_args(inject=True)
             rc = cmd_badges(args)
         assert rc == 0
@@ -205,7 +206,7 @@ class TestCmdBadges:
         block = BadgeBlock(badges=[])
         with patch("src.badges.generate_badges", return_value=block), \
              patch("src.badges.write_badges_to_readme", return_value=False), \
-             patch("src.cli._repo", return_value=tmp_path):
+             patch("src.commands.tools._repo", return_value=tmp_path):
             args = _make_badges_args(inject=True)
             rc = cmd_badges(args)
         assert rc == 0
@@ -215,7 +216,7 @@ class TestCmdBadges:
             badges=[Badge(label="sessions", message="15", color="blueviolet")],
         )
         with patch("src.badges.generate_badges", return_value=block), \
-             patch("src.cli._repo", return_value=tmp_path):
+             patch("src.commands.tools._repo", return_value=tmp_path):
             args = _make_badges_args()
             rc = cmd_badges(args)
         assert rc == 0
