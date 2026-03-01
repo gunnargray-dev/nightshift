@@ -1,4 +1,4 @@
-# Nightshift Live Dashboard Design
+# Awake Live Dashboard Design
 
 ## Overview
 
@@ -7,7 +7,7 @@ Replace the static HTML dashboard with a live, real-time dashboard powered by a 
 ## Architecture
 
 ```
-nightshift/
+awake/
 ├── src/                    # existing CLI modules (unchanged)
 ├── src/server.py           # NEW: HTTP API server wrapping CLI commands
 ├── dashboard/              # NEW: React + Vite SPA
@@ -25,7 +25,7 @@ nightshift/
 
 - stdlib `http.server` + `subprocess` to invoke CLI commands
 - CORS headers for local dev
-- Zero new runtime dependencies (maintains nightshift principle)
+- Zero new runtime dependencies (maintains awake principle)
 - Endpoints:
   - `GET /api/health` -- health report with per-file scores
   - `GET /api/stats` -- repo stats (sessions, PRs, commits, lines)
@@ -52,8 +52,8 @@ nightshift/
 ### CLI Integration
 
 ```bash
-nightshift dashboard            # starts API on :8710, opens browser
-nightshift dashboard --port N   # custom API port
+awake dashboard            # starts API on :8710, opens browser
+awake dashboard --port N   # custom API port
 ```
 
 The `dashboard` subcommand starts the API server, serves built frontend assets (or proxies to Vite dev server), and opens the browser.
@@ -148,7 +148,7 @@ The `dashboard` subcommand starts the API server, serves built frontend assets (
 
 ## Launch Flow
 
-1. `nightshift dashboard` command added to CLI
+1. `awake dashboard` command added to CLI
 2. Starts Python API server (`src/server.py`) on port 8710
 3. In production mode: serves `dashboard/dist/` static files
 4. In dev mode: proxies to Vite dev server on port 5173
