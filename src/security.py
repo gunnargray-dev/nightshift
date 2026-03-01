@@ -1,4 +1,4 @@
-"""Security audit module for Nightshift.
+"""Security audit module for Awake.
 
 Scans Python source files for common security anti-patterns using AST
 analysis and regex, without any external dependencies.
@@ -28,7 +28,7 @@ Public API
 
 CLI
 ---
-    nightshift security [--write] [--json]
+    awake security [--write] [--json]
 """
 
 from __future__ import annotations
@@ -362,7 +362,7 @@ def audit_security(repo_path: Optional[Path] = None) -> SecurityReport:
     Parameters
     ----------
     repo_path:
-        Root of the Nightshift repo.  Defaults to the repo root when
+        Root of the Awake repo.  Defaults to the repo root when
         installed via ``pip install -e .``.
     """
     if repo_path is None:
