@@ -1,18 +1,18 @@
-"""Nightshift configuration system.
+"""Awake configuration system.
 
-Reads ``nightshift.toml`` from the repo root to allow users to customize
-thresholds, output formats, and other Nightshift behaviour without modifying
+Reads ``awake.toml`` from the repo root to allow users to customize
+thresholds, output formats, and other Awake behaviour without modifying
 source code.
 
-If no ``nightshift.toml`` exists the module returns built-in defaults so that
+If no ``awake.toml`` exists the module returns built-in defaults so that
 all subcommands work out of the box.
 
 Usage
 -----
     from src.config import load_config, save_default_config
 
-    cfg = load_config(repo_root)          # returns NightshiftConfig
-    save_default_config(repo_root)        # writes nightshift.toml with defaults
+    cfg = load_config(repo_root)          # returns AwakeConfig
+    save_default_config(repo_root)        # writes awake.toml with defaults
 """
 
 from __future__ import annotations
@@ -71,7 +71,7 @@ class OutputConfig:
 class SessionConfig:
     """Session-specific settings."""
 
-    session_log_path: str = "NIGHTSHIFT_LOG.md"
+    session_log_path: str = "AWAKE_LOG.md"
     docs_dir: str = "docs"
     src_dir: str = "src"
 
@@ -81,10 +81,10 @@ class SessionConfig:
 
 
 @dataclass
-class NightshiftConfig:
-    """Top-level Nightshift configuration object.
+class AwakeConfig:
+    """Top-level Awake configuration object.
 
-    Populated from nightshift.toml or built-in defaults.
+    Populated from awake.toml or built-in defaults.
     """
 
     thresholds: ThresholdsConfig = field(default_factory=ThresholdsConfig)
@@ -107,7 +107,7 @@ class NightshiftConfig:
     def to_markdown(self) -> str:
         """Render the config as a human-readable Markdown table."""
         lines = [
-            "# Nightshift Configuration",
+            "# Awake Configuration",
             "",
             "## Thresholds",
             "",
@@ -165,7 +165,7 @@ class NightshiftConfig:
     # ------------------------------------------------------------------
 
     @classmethod
-    def from_dict(cls, data: dict) -> "NightshiftConfig":
+    def from_dict(cls, data: dict) -> "AwakeConfig":
         """Build a config from a nested dict (as loaded from TOML)."""
         thresholds = ThresholdsConfig(
             **{
@@ -196,8 +196,8 @@ class NightshiftConfig:
 # ---------------------------------------------------------------------------
 
 
-def load_config(repo_root: Optional[Path] = None) -> NightshiftConfig:
-    """Load configuration from ``nightshift.toml`` in the repo root.
+def load_config(repo_root: Optional[Path] = None) -> AwakeConfig:
+    """Load configuration from ``awake.toml`` in the repo root.
 
     Falls back to built-in defaults if the file does not exist or cannot be
     parsed.
@@ -206,13 +206,13 @@ def load_config(repo_root: Optional[Path] = None) -> NightshiftConfig:
         repo_root: Path to the repository root. Defaults to CWD.
 
     Returns:
-        NightshiftConfig populated from the TOML file or defaults.
+        AwakeConfig populated from the TOML file or defaults.
     """
     root = repo_root or Path.cwd()
-    config_path = root / "nightshift.toml"
+    config_path = root / "awake.toml"
 
     if not config_path.exists():
-        cfg = NightshiftConfig()
+        cfg = AwakeConfig()
         cfg._source = None
         return cfg
 
@@ -221,7 +221,7 @@ def load_config(repo_root: Optional[Path] = None) -> NightshiftConfig:
         try:
             with config_path.open("rb") as f:
                 data = tomllib.load(f)
-            cfg = NightshiftConfig.from_dict(data)
+            cfg = AwakeConfig.from_dict(data)
             cfg._source = str(config_path)
             return cfg
         except Exception:
@@ -230,19 +230,19 @@ def load_config(repo_root: Optional[Path] = None) -> NightshiftConfig:
     # Fallback: minimal hand-rolled TOML parser for simple key=value files
     try:
         data = _parse_simple_toml(config_path.read_text(encoding="utf-8"))
-        cfg = NightshiftConfig.from_dict(data)
+        cfg = AwakeConfig.from_dict(data)
         cfg._source = str(config_path)
         return cfg
     except Exception:
         pass
 
-    cfg = NightshiftConfig()
+    cfg = AwakeConfig()
     cfg._source = None
     return cfg
 
 
 def save_default_config(repo_root: Optional[Path] = None) -> Path:
-    """Write the default configuration to ``nightshift.toml``.
+    """Write the default configuration to ``awake.toml``.
 
     Does NOT overwrite an existing file.
 
@@ -253,9 +253,9 @@ def save_default_config(repo_root: Optional[Path] = None) -> Path:
         Path to the written (or existing) config file.
     """
     root = repo_root or Path.cwd()
-    config_path = root / "nightshift.toml"
+    config_path = root / "awake.toml"
     if not config_path.exists():
-        default = NightshiftConfig()
+        default = AwakeConfig()
         config_path.write_text(default.to_toml(), encoding="utf-8")
     return config_path
 

@@ -1,4 +1,4 @@
-"""Test coverage heat map for Nightshift.
+"""Test coverage heat map for Awake.
 
 Cross-references every ``src/X.py`` module against ``tests/test_X.py``
 using AST to count:
@@ -21,7 +21,7 @@ Public API
 
 CLI
 ---
-    nightshift coveragemap [--write] [--json]
+    awake coveragemap [--write] [--json]
 """
 
 from __future__ import annotations
@@ -110,7 +110,7 @@ class ModuleCoverageEntry:
 
 @dataclass
 class CoverageMapReport:
-    """Test coverage heat map for the full Nightshift src/ tree."""
+    """Test coverage heat map for the full Awake src/ tree."""
 
     entries: list[ModuleCoverageEntry] = field(default_factory=list)
     repo_path: str = ""
@@ -271,7 +271,7 @@ def build_coverage_map(repo_path: Optional[Path] = None) -> CoverageMapReport:
     Parameters
     ----------
     repo_path:
-        Root of the Nightshift repo.  Defaults to the grandparent of this
+        Root of the Awake repo.  Defaults to the grandparent of this
         file when installed normally.
     """
     if repo_path is None:

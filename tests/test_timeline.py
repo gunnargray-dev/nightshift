@@ -10,7 +10,7 @@ from src.timeline import (
 )
 
 SAMPLE_LOG = textwrap.dedent("""\
-    # Nightshift Log
+    # Awake Log
 
     ## Session 1 — February 27, 2026
 
@@ -30,18 +30,19 @@ SAMPLE_LOG = textwrap.dedent("""\
     - ✅ README updater → PR #6 — src/readme_updater.py
     - ✅ PR scorer → PR #7 — src/pr_scorer.py
     - ✅ Diff visualizer → PR #8 — src/diff_visualizer.py
-""")
+"""
+)
 
 @pytest.fixture
 def log_file(tmp_path):
-    log = tmp_path / "NIGHTSHIFT_LOG.md"
+    log = tmp_path / "AWAKE_LOG.md"
     log.write_text(SAMPLE_LOG, encoding="utf-8")
     return log
 
 @pytest.fixture
 def empty_log(tmp_path):
-    log = tmp_path / "NIGHTSHIFT_LOG.md"
-    log.write_text("# Nightshift Log\n\nNo sessions yet.\n", encoding="utf-8")
+    log = tmp_path / "AWAKE_LOG.md"
+    log.write_text("# Awake Log\n\nNo sessions yet.\n", encoding="utf-8")
     return log
 
 class TestShortenDate:
@@ -117,7 +118,7 @@ class TestRenderTimeline:
         assert isinstance(render_timeline(build_timeline(log_path=log_file)), str)
     def test_contains_header(self, log_file):
         md = render_timeline(build_timeline(log_path=log_file))
-        assert "Nightshift" in md and "Timeline" in md
+        assert "Awake" in md and "Timeline" in md
     def test_contains_session_sections(self, log_file):
         md = render_timeline(build_timeline(log_path=log_file))
         assert "Session 1" in md and "Session 2" in md and "Session 3" in md
@@ -155,9 +156,9 @@ class TestIntegration:
         assert out.exists()
     def test_real_repo_log(self):
         repo_root = Path(__file__).resolve().parent.parent
-        log_path = repo_root / "NIGHTSHIFT_LOG.md"
+        log_path = repo_root / "AWAKE_LOG.md"
         if not log_path.exists():
-            pytest.skip("NIGHTSHIFT_LOG.md not found")
+            pytest.skip("AWAKE_LOG.md not found")
         tl = build_timeline(log_path=log_path)
         assert tl.total_sessions >= 1
         assert "Session" in tl.to_markdown()

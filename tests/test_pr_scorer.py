@@ -41,8 +41,8 @@ class TestPRScore:
         ]
         defaults = dict(
             pr_number=7,
-            title="[nightshift] feat: add pr scorer",
-            branch="nightshift/session-3-pr-scorer",
+            title="[awake] feat: add pr scorer",
+            branch="awake/session-3-pr-scorer",
             session=3,
             dimensions=dims,
         )
@@ -89,7 +89,7 @@ class TestLeaderboard:
             return PRScore(
                 pr_number=num,
                 title=f"PR {num}",
-                branch=f"nightshift/session-1-pr-{num}",
+                branch=f"awake/session-1-pr-{num}",
                 session=1,
                 dimensions=dims,
             )
@@ -194,9 +194,9 @@ class TestScoreTestCoverageSignal:
 
 
 class TestScoreCodeClarity:
-    def test_nightshift_format_scores_high(self):
-        title = "[nightshift] feat: add pr scorer"
-        branch = "nightshift/session-3-pr-scorer"
+    def test_awake_format_scores_high(self):
+        title = "[awake] feat: add pr scorer"
+        branch = "awake/session-3-pr-scorer"
         result = _score_code_clarity(title, branch)
         assert result.score >= 16
 
@@ -204,15 +204,15 @@ class TestScoreCodeClarity:
         result = _score_code_clarity("random PR title", "feature/random")
         assert result.score < 16
 
-    def test_nightshift_branch_prefix_adds_points(self):
-        good = _score_code_clarity("title", "nightshift/session-3-feature")
+    def test_awake_branch_prefix_adds_points(self):
+        good = _score_code_clarity("title", "awake/session-3-feature")
         basic = _score_code_clarity("title", "some-branch")
         assert good.score > basic.score
 
     def test_max_score_capped(self):
         result = _score_code_clarity(
-            "[nightshift] feat: description",
-            "nightshift/session-3-feature"
+            "[awake] feat: description",
+            "awake/session-3-feature"
         )
         assert result.score <= 20
 
@@ -242,21 +242,21 @@ class TestScoreDiffScope:
 class TestScoreSessionMetadata:
     def test_full_metadata_scores_high(self):
         body = "## What\nAdd scorer.\nSession: 3\n" * 3
-        result = _score_session_metadata(body, "[nightshift] feat: add scorer", "nightshift/session-3-scorer")
+        result = _score_session_metadata(body, "[awake] feat: add scorer", "awake/session-3-scorer")
         assert result.score >= 14
 
     def test_no_metadata_scores_low(self):
         result = _score_session_metadata("brief", "random title", "random-branch")
         assert result.score <= 4
 
-    def test_nightshift_tag_in_title(self):
-        with_tag = _score_session_metadata("body", "[nightshift] feat: x", "branch")
+    def test_awake_tag_in_title(self):
+        with_tag = _score_session_metadata("body", "[awake] feat: x", "branch")
         without_tag = _score_session_metadata("body", "feat: x", "branch")
         assert with_tag.score >= without_tag.score
 
     def test_session_number_in_branch(self):
-        with_session = _score_session_metadata("body", "title", "nightshift/session-3-feature")
-        without_session = _score_session_metadata("body", "title", "nightshift/feature")
+        with_session = _score_session_metadata("body", "title", "awake/session-3-feature")
+        without_session = _score_session_metadata("body", "title", "awake/feature")
         assert with_session.score > without_session.score
 
 
@@ -270,7 +270,7 @@ Add a PR quality scorer that analyzes PRs across 5 dimensions.
 
 ## Why
 Tracking PR quality over time enables the system to improve its own output quality.
-This is the kind of self-aware tooling that makes nightshift genuinely viral.
+This is the kind of self-aware tooling that makes awake genuinely viral.
 
 ## How
 Parse PR body text, title, and branch name. Score each dimension 0-20.
@@ -288,16 +288,16 @@ class TestScorePR:
     def test_returns_pr_score_object(self):
         result = score_pr(
             pr_number=7,
-            title="[nightshift] feat: add pr scorer",
+            title="[awake] feat: add pr scorer",
             body=SAMPLE_PR_BODY,
-            branch="nightshift/session-3-pr-scorer",
+            branch="awake/session-3-pr-scorer",
             lines_added=300,
             lines_deleted=0,
         )
         assert isinstance(result, PRScore)
 
     def test_score_is_bounded(self):
-        result = score_pr(7, "[nightshift] feat: x", SAMPLE_PR_BODY, "nightshift/session-3-x", 200, 50)
+        result = score_pr(7, "[awake] feat: x", SAMPLE_PR_BODY, "awake/session-3-x", 200, 50)
         assert 0 <= result.total <= 100
 
     def test_five_dimensions(self):
@@ -309,19 +309,19 @@ class TestScorePR:
         assert result.session == 3
 
     def test_extracts_session_from_branch(self):
-        result = score_pr(7, "title", "body", "nightshift/session-2-feature", 0, 0)
+        result = score_pr(7, "title", "body", "awake/session-2-feature", 0, 0)
         assert result.session == 2
 
     def test_explicit_session_overrides(self):
-        result = score_pr(7, "title", "Session: 3\nbody", "nightshift/session-2-x", 0, 0, session=5)
+        result = score_pr(7, "title", "Session: 3\nbody", "awake/session-2-x", 0, 0, session=5)
         assert result.session == 5
 
     def test_perfect_pr_scores_high(self):
         result = score_pr(
             1,
-            "[nightshift] feat: add readme updater",
+            "[awake] feat: add readme updater",
             SAMPLE_PR_BODY,
-            "nightshift/session-3-readme-updater",
+            "awake/session-3-readme-updater",
             lines_added=200,
             lines_deleted=50,
             session=3,
@@ -344,7 +344,7 @@ class TestStorage:
         return PRScore(
             pr_number=num,
             title=f"PR #{num}",
-            branch=f"nightshift/session-3-pr-{num}",
+            branch=f"awake/session-3-pr-{num}",
             session=3,
             dimensions=dims,
             scored_at="2026-02-27T03:00:00+00:00",
@@ -381,7 +381,7 @@ class TestStorage:
         score_v1 = self._make_score(1)
         upsert_score(score_v1, path)
         dims = [DimensionScore(f"d{i}", 20) for i in range(5)]
-        score_v2 = PRScore(1, "Updated", "nightshift/updated", 3, dims, "2026-02-27T04:00:00+00:00")
+        score_v2 = PRScore(1, "Updated", "awake/updated", 3, dims, "2026-02-27T04:00:00+00:00")
         upsert_score(score_v2, path)
         loaded = load_scores(path)
         assert len(loaded) == 1
@@ -409,7 +409,7 @@ class TestRenderLeaderboard:
     def _make_leaderboard(self) -> Leaderboard:
         def make_pr(num, total_per_dim):
             dims = [DimensionScore(f"d{i}", total_per_dim) for i in range(5)]
-            return PRScore(num, f"PR {num}", f"nightshift/session-3-pr-{num}", 3, dims)
+            return PRScore(num, f"PR {num}", f"awake/session-3-pr-{num}", 3, dims)
 
         return Leaderboard(scores=[
             make_pr(1, 18),  # 90
@@ -451,7 +451,7 @@ class TestRenderLeaderboard:
 class TestRenderPRReport:
     def test_contains_pr_number(self):
         dims = [DimensionScore(f"d{i}", 15) for i in range(5)]
-        score = PRScore(42, "[nightshift] feat: x", "nightshift/session-3-x", 3, dims)
+        score = PRScore(42, "[awake] feat: x", "awake/session-3-x", 3, dims)
         output = render_pr_report(score)
         assert "42" in output
 

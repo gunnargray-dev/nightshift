@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: ["main", "nightshift/**"]
+    branches: ["main", "awake/**"]
   pull_request:
     branches: ["main"]
 
@@ -36,4 +36,4 @@ jobs:
         run: python -m pytest tests/ --cov=src --cov-report=term-missing -q
 
       - name: Verify package imports
-        run: python -c "import src; print(f'nightshift v{src.__version__} OK')"
+        run: python -c "import src; print(f'awake v{src.__version__} OK')"

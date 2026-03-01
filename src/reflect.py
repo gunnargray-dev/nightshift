@@ -1,14 +1,14 @@
 """
 reflect.py — Session meta-analysis engine.
 
-Analyzes all past Nightshift sessions from NIGHTSHIFT_LOG.md and produces:
+Analyzes all past Awake sessions from AWAKE_LOG.md and produces:
   - Per-session quality scores (5 dimensions)
   - Ranking of most/least productive sessions
   - Trend analysis (is the AI improving?)
   - Pattern discovery (what themes recur?)
   - Meta-insights about the AI's own development
 
-CLI: nightshift reflect [--json] [--write] [--top N]
+CLI: awake reflect [--json] [--write] [--top N]
 API: GET /api/reflect
 """
 
@@ -279,7 +279,7 @@ def generate_reflection(log_path=None):
     Generate a full reflection report from session history.
 
     Args:
-        log_path: Optional path to NIGHTSHIFT_LOG.md.
+        log_path: Optional path to AWAKE_LOG.md.
                   Falls back to seed data if not available.
 
     Returns:
@@ -424,7 +424,7 @@ def save_reflection(report, path):
     """Save reflection report to docs/reflect.md."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    content = "# Nightshift Session Meta-Analysis\n\nGenerated automatically by `nightshift reflect`.\n\n"
+    content = "# Awake Session Meta-Analysis\n\nGenerated automatically by `awake reflect`.\n\n"
     content += "```\n" + format_reflection(report) + "\n```\n"
     path.write_text(content, encoding="utf-8")
 

@@ -78,7 +78,7 @@ function = "run"
 hooks = ["pre_health"]
 enabled = true
 """
-    (tmp_path / "nightshift.toml").write_text(toml_content)
+    (tmp_path / "awake.toml").write_text(toml_content)
     try:
         import tomllib
     except ImportError:
@@ -95,7 +95,7 @@ enabled = true
 
 def test_load_plugin_definitions_empty_plugins_section(tmp_path):
     toml_content = "[thresholds]\nhealth_score_min = 60.0\n"
-    (tmp_path / "nightshift.toml").write_text(toml_content)
+    (tmp_path / "awake.toml").write_text(toml_content)
     try:
         import tomllib
     except ImportError:
@@ -129,7 +129,7 @@ function = "run"
 hooks = ["pre_health"]
 enabled = false
 """
-    (tmp_path / "nightshift.toml").write_text(toml_content)
+    (tmp_path / "awake.toml").write_text(toml_content)
     try:
         import tomllib
     except ImportError:
@@ -153,7 +153,7 @@ function = "run"
 hooks = ["pre_health"]
 enabled = true
 """
-    (tmp_path / "nightshift.toml").write_text(toml_content)
+    (tmp_path / "awake.toml").write_text(toml_content)
     try:
         import tomllib
     except ImportError:
@@ -176,7 +176,7 @@ function = "run"
 hooks = ["pre_health"]
 enabled = true
 """
-    (tmp_path / "nightshift.toml").write_text(toml_content)
+    (tmp_path / "awake.toml").write_text(toml_content)
     try:
         import tomllib
     except ImportError:
@@ -206,7 +206,7 @@ function = "check"
 hooks = ["pre_health"]
 enabled = true
 """
-    (tmp_path / "nightshift.toml").write_text(toml_content)
+    (tmp_path / "awake.toml").write_text(toml_content)
     try:
         import tomllib
     except ImportError:
@@ -236,7 +236,7 @@ function = "warn_plugin"
 hooks = ["pre_health"]
 enabled = true
 """
-    (tmp_path / "nightshift.toml").write_text(toml_content)
+    (tmp_path / "awake.toml").write_text(toml_content)
     try:
         import tomllib
     except ImportError:
@@ -263,7 +263,7 @@ function = "explode"
 hooks = ["pre_health"]
 enabled = true
 """
-    (tmp_path / "nightshift.toml").write_text(toml_content)
+    (tmp_path / "awake.toml").write_text(toml_content)
     try:
         import tomllib
     except ImportError:

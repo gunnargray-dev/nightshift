@@ -31,7 +31,7 @@ Output:
   - JSON (channel values + hex digest)
 
 CLI:
-    nightshift dna [--write] [--json]
+    awake dna [--write] [--json]
 """
 
 from __future__ import annotations
@@ -524,7 +524,7 @@ def _normalise_complexity(avg_cc: float) -> float:
 # ---------------------------------------------------------------------------
 
 
-def fingerprint_repo(repo_path: Path, repo_name: str = "nightshift") -> RepoDna:
+def fingerprint_repo(repo_path: Path, repo_name: str = "awake") -> RepoDna:
     """Generate the DNA fingerprint for a repository.
 
     Args:
@@ -538,7 +538,7 @@ def fingerprint_repo(repo_path: Path, repo_name: str = "nightshift") -> RepoDna:
 
     src_dir = repo_path / "src"
     tests_dir = repo_path / "tests"
-    log_path = repo_path / "NIGHTSHIFT_LOG.md"
+    log_path = repo_path / "AWAKE_LOG.md"
 
     if not src_dir.exists():
         return RepoDna(

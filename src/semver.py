@@ -1,6 +1,6 @@
 """Semantic versioning automation — Session 16.
 
-``nightshift semver`` analyses commit messages since the last git tag (or all
+``awake semver`` analyses commit messages since the last git tag (or all
 commits if no tags exist), classifies them by Conventional Commits convention,
 determines the appropriate semver bump (major / minor / patch), bumps the
 version in ``pyproject.toml``, and emits a ready-to-paste CHANGELOG release

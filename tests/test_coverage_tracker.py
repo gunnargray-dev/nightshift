@@ -1,4 +1,4 @@
-"""Tests for the Nightshift coverage tracker (src/coverage_tracker.py)."""
+"""Tests for the Awake coverage tracker (src/coverage_tracker.py)."""
 
 from __future__ import annotations
 

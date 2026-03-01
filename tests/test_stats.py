@@ -1,4 +1,4 @@
-"""Tests for the Nightshift self-stats engine (src/stats.py)."""
+"""Tests for the Awake self-stats engine (src/stats.py)."""
 
 from __future__ import annotations
 
@@ -14,9 +14,9 @@ from src.stats import (
     _run_git,
     count_commits,
     count_lines_changed,
-    count_nightshift_sessions,
+    count_awake_sessions,
     get_commit_messages,
-    parse_nightshift_log,
+    parse_awake_log,
     compute_stats,
     update_readme_stats,
 )
@@ -170,48 +170,48 @@ class TestGetCommitMessages:
 
 
 # ---------------------------------------------------------------------------
-# count_nightshift_sessions
+# count_awake_sessions
 # ---------------------------------------------------------------------------
 
 
-class TestCountNightshiftSessions:
+class TestCountAwakeSessions:
     def test_counts_session_numbers(self, tmp_path):
         fake_log = textwrap.dedent("""\
-            [nightshift] feat: add stats engine
+            [awake] feat: add stats engine
 
             Session: 1
 
-            [nightshift] feat: add logger
+            [awake] feat: add logger
 
             Session: 1
 
-            [nightshift] feat: add CI
+            [awake] feat: add CI
 
             Session: 2
         """)
         with patch("src.stats._run_git", return_value=fake_log):
-            count = count_nightshift_sessions(tmp_path)
+            count = count_awake_sessions(tmp_path)
         assert count == 2
 
-    def test_no_nightshift_commits(self, tmp_path):
+    def test_no_awake_commits(self, tmp_path):
         with patch("src.stats._run_git", return_value=""):
             pass
         with patch("src.stats.get_commit_messages", return_value=[]):
             with patch("src.stats._run_git", return_value=""):
-                count = count_nightshift_sessions(tmp_path)
+                count = count_awake_sessions(tmp_path)
         assert count == 0
 
 
 # ---------------------------------------------------------------------------
-# parse_nightshift_log
+# parse_awake_log
 # ---------------------------------------------------------------------------
 
 
-class TestParseNightshiftLog:
+class TestParseAwakeLog:
     def test_parses_sessions(self, tmp_path):
-        log = tmp_path / "NIGHTSHIFT_LOG.md"
+        log = tmp_path / "AWAKE_LOG.md"
         log.write_text(textwrap.dedent("""\
-            # Nightshift Log
+            # Awake Log
 
             ## Session 0 — February 27, 2026 (Setup)
 
@@ -226,18 +226,18 @@ class TestParseNightshiftLog:
 
             ---
         """))
-        sessions = parse_nightshift_log(log)
+        sessions = parse_awake_log(log)
         assert len(sessions) == 2
         assert sessions[0]["session"] == 0
         assert sessions[1]["session"] == 1
         assert sessions[1]["date"] == "February 28, 2026"
 
     def test_missing_log_returns_empty(self, tmp_path):
-        result = parse_nightshift_log(tmp_path / "nonexistent.md")
+        result = parse_awake_log(tmp_path / "nonexistent.md")
         assert result == []
 
     def test_extracts_pr_references(self, tmp_path):
-        log = tmp_path / "NIGHTSHIFT_LOG.md"
+        log = tmp_path / "AWAKE_LOG.md"
         log.write_text(textwrap.dedent("""\
             ## Session 1 — February 28, 2026
 
@@ -245,7 +245,7 @@ class TestParseNightshiftLog:
 
             ---
         """))
-        sessions = parse_nightshift_log(log)
+        sessions = parse_awake_log(log)
         assert sessions[0]["prs"] == 3
 
 
@@ -258,8 +258,8 @@ class TestComputeStats:
     def test_returns_repo_stats(self, tmp_path):
         with patch("src.stats.count_commits", return_value=10):
             with patch("src.stats.count_lines_changed", return_value=500):
-                with patch("src.stats.count_nightshift_sessions", return_value=2):
-                    with patch("src.stats.parse_nightshift_log", return_value=[]):
+                with patch("src.stats.count_awake_sessions", return_value=2):
+                    with patch("src.stats.parse_awake_log", return_value=[]):
                         stats = compute_stats(repo_path=tmp_path, pr_count=5)
         assert isinstance(stats, RepoStats)
         assert stats.total_commits == 10
@@ -273,8 +273,8 @@ class TestComputeStats:
         ]
         with patch("src.stats.count_commits", return_value=0):
             with patch("src.stats.count_lines_changed", return_value=0):
-                with patch("src.stats.count_nightshift_sessions", return_value=0):
-                    with patch("src.stats.parse_nightshift_log", return_value=log_sessions):
+                with patch("src.stats.count_awake_sessions", return_value=0):
+                    with patch("src.stats.parse_awake_log", return_value=log_sessions):
                         stats = compute_stats(repo_path=tmp_path)
         assert stats.nights_active == 1
 
@@ -288,7 +288,7 @@ class TestUpdateReadmeStats:
     def test_replaces_existing_table(self, tmp_path):
         readme = tmp_path / "README.md"
         readme.write_text(textwrap.dedent("""\
-            # Nightshift
+            # Awake
 
             ## Stats
 
@@ -311,7 +311,7 @@ class TestUpdateReadmeStats:
 
     def test_appends_when_no_stats_section(self, tmp_path):
         readme = tmp_path / "README.md"
-        readme.write_text("# Nightshift\n\nSome content.\n")
+        readme.write_text("# Awake\n\nSome content.\n")
         stats = RepoStats(nights_active=1, total_prs=1, total_commits=5, lines_changed=100)
         new_content = update_readme_stats(readme, stats)
         assert "## Stats" in new_content

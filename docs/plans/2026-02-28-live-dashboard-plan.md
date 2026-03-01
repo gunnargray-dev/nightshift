@@ -2,9 +2,9 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Build a real-time dashboard for nightshift with a Python API server and React + Vite frontend styled like Linear.
+**Goal:** Build a real-time dashboard for awake with a Python API server and React + Vite frontend styled like Linear.
 
-**Architecture:** Two-process model — `src/server.py` wraps all CLI `--json` outputs as HTTP endpoints; `dashboard/` is a React SPA that fetches from those endpoints. The `nightshift dashboard` CLI command launches both.
+**Architecture:** Two-process model — `src/server.py` wraps all CLI `--json` outputs as HTTP endpoints; `dashboard/` is a React SPA that fetches from those endpoints. The `awake dashboard` CLI command launches both.
 
 **Tech Stack:** Python stdlib `http.server` (backend), React 18 + TypeScript + Vite + Tailwind CSS + TanStack Query + React Router + Lucide React (frontend).
 
@@ -19,7 +19,7 @@
 **Step 1: Write failing test for server request handler**
 
 ```python
-"""Tests for src/server.py — the Nightshift dashboard API server."""
+"""Tests for src/server.py — the Awake dashboard API server."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.server import NightshiftHandler
+from src.server import AwakeHandler
 
 
 class MockRequest:
@@ -47,9 +47,9 @@ class MockRequest:
         return BytesIO()
 
 
-def make_handler(path: str) -> NightshiftHandler:
+def make_handler(path: str) -> AwakeHandler:
     """Create a handler with a mocked request for the given path."""
-    handler = NightshiftHandler.__new__(NightshiftHandler)
+    handler = AwakeHandler.__new__(AwakeHandler)
     handler.path = path
     handler.headers = {}
     handler.command = "GET"
@@ -109,13 +109,13 @@ class TestRouteMatching:
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/gunnar/Documents/Dev/nightshift && python -m pytest tests/test_server.py -v`
+Run: `cd /Users/gunnar/Documents/Dev/awake && python -m pytest tests/test_server.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'src.server'`
 
 **Step 3: Write the server implementation**
 
 ```python
-"""HTTP API server for the Nightshift dashboard.
+"""HTTP API server for the Awake dashboard.
 
 Wraps CLI commands as JSON HTTP endpoints.  Uses only stdlib
 (http.server + subprocess) to maintain the zero-dependency principle.
@@ -168,11 +168,11 @@ PARAMETERIZED_ROUTES: dict[str, tuple[str, list[str]]] = {
 }
 
 
-class NightshiftHandler(BaseHTTPRequestHandler):
-    """HTTP request handler that dispatches to nightshift CLI commands."""
+class AwakeHandler(BaseHTTPRequestHandler):
+    """HTTP request handler that dispatches to awake CLI commands."""
 
     def _run_command(self, cli_args: list[str]) -> str:
-        """Run a nightshift CLI command and return stdout."""
+        """Run a awake CLI command and return stdout."""
         repo = getattr(self.server, "repo_path", Path("."))
         result = subprocess.run(
             [sys.executable, "-m", "src.cli"] + cli_args,
@@ -197,57 +197,38 @@ class NightshiftHandler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self) -> None:
         """Handle CORS preflight requests."""
-        self._send_json(204, "")
+        self._send_json(200, "{}")
 
     def do_GET(self) -> None:
-        """Route GET requests to CLI commands."""
-        # Static routes
-        if self.path in ROUTE_MAP:
+        """Route GET requests to the appropriate CLI command."""
+        path = self.path.split("?")[0]  # strip query params
+
+        # Static exact routes
+        if path in ROUTE_MAP:
             try:
-                output = self._run_command(ROUTE_MAP[self.path])
-                self._send_json(200, output)
-            except Exception as exc:
-                self._send_json(500, json.dumps({"error": str(exc)}))
+                result = self._run_command(ROUTE_MAP[path])
+                self._send_json(200, result)
+            except Exception as e:
+                self._send_json(500, json.dumps({"error": str(e)}))
             return
 
         # Parameterized routes
-        for pattern, (cmd, base_args) in PARAMETERIZED_ROUTES.items():
-            match = re.match(pattern, self.path)
-            if match:
-                session_num = match.group(1)
+        for pattern, (cmd, extra_args) in PARAMETERIZED_ROUTES.items():
+            m = re.fullmatch(pattern, path)
+            if m:
+                session_n = m.group(1)
                 try:
-                    output = self._run_command([cmd] + base_args + [session_num])
-                    self._send_json(200, output)
-                except Exception as exc:
-                    self._send_json(500, json.dumps({"error": str(exc)}))
+                    result = self._run_command([cmd] + extra_args + [session_n])
+                    self._send_json(200, result)
+                except Exception as e:
+                    self._send_json(500, json.dumps({"error": str(e)}))
                 return
 
-        # Sessions list (derived from replay)
-        if self.path == "/api/sessions":
-            try:
-                from src.stats import compute_stats
-                repo = getattr(self.server, "repo_path", Path("."))
-                stats = compute_stats(
-                    repo_path=repo, log_path=repo / "NIGHTSHIFT_LOG.md"
-                )
-                self._send_json(200, json.dumps({
-                    "sessions": stats.to_dict().get("sessions", []),
-                    "total": len(stats.sessions),
-                }))
-            except Exception as exc:
-                self._send_json(500, json.dumps({"error": str(exc)}))
-            return
-
         # 404
-        self.send_response(404)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.end_headers()
-        self.wfile.write(json.dumps({"error": "Not found"}).encode("utf-8"))
+        self._send_json(404, json.dumps({"error": f"Unknown route: {path}"}))
 
-    def log_message(self, format: str, *args) -> None:
-        """Suppress default logging to stderr."""
-        pass
+    def log_message(self, fmt: str, *args: object) -> None:  # type: ignore[override]
+        """Suppress default request logging (noisy in CLI context)."""
 
 
 def start_server(
@@ -255,31 +236,25 @@ def start_server(
     repo_path: Optional[Path] = None,
     open_browser: bool = True,
 ) -> None:
-    """Start the dashboard API server."""
-    server = HTTPServer(("127.0.0.1", port), NightshiftHandler)
-    server.repo_path = repo_path or Path(__file__).resolve().parent.parent  # type: ignore[attr-defined]
-    print(f"Nightshift API server running on http://127.0.0.1:{port}")
+    """Start the Awake API server."""
+    if repo_path is None:
+        repo_path = Path.cwd()
+    server = HTTPServer(("localhost", port), AwakeHandler)
+    server.repo_path = repo_path  # type: ignore[attr-defined]
+    url = f"http://localhost:{port}"
+    print(f"Awake dashboard API running at {url}")
     if open_browser:
-        webbrowser.open(f"http://127.0.0.1:{port}")
+        webbrowser.open(url)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nServer stopped.")
-        server.server_close()
 ```
 
-**Step 4: Run tests to verify they pass**
+**Step 4: Run test to verify it passes**
 
-Run: `cd /Users/gunnar/Documents/Dev/nightshift && python -m pytest tests/test_server.py -v`
-Expected: PASS (all 4 tests)
-
-**Step 5: Commit**
-
-```bash
-cd /Users/gunnar/Documents/Dev/nightshift
-git add src/server.py tests/test_server.py
-git commit -m "feat: add API server wrapping CLI commands as JSON endpoints"
-```
+Run: `cd /Users/gunnar/Documents/Dev/awake && python -m pytest tests/test_server.py -v`
+Expected: All 4 tests PASS
 
 ---
 
@@ -287,366 +262,549 @@ git commit -m "feat: add API server wrapping CLI commands as JSON endpoints"
 
 **Files:**
 - Modify: `src/cli.py`
-- Modify: `tests/test_cli.py`
 
-**Step 1: Write failing test for dashboard subcommand parsing**
-
-Add to `tests/test_cli.py`:
+**Step 1: Write failing test for new CLI subcommand**
 
 ```python
-def test_dashboard_subcommand_parses(self):
-    parser = build_parser()
-    args = parser.parse_args(["dashboard"])
-    assert args.command == "dashboard"
+# Add to tests/test_cli.py
 
-def test_dashboard_custom_port(self):
-    parser = build_parser()
-    args = parser.parse_args(["dashboard", "--port", "9000"])
-    assert args.port == 9000
-
-def test_dashboard_default_port(self):
-    parser = build_parser()
-    args = parser.parse_args(["dashboard"])
-    assert args.port == 8710
+def test_dashboard_subcommand_exists():
+    """Verify the dashboard subcommand is registered."""
+    result = subprocess.run(
+        [sys.executable, "-m", "src.cli", "dashboard", "--help"],
+        capture_output=True, text=True, cwd=str(REPO_ROOT)
+    )
+    assert result.returncode == 0
+    assert "port" in result.stdout.lower()
 ```
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/gunnar/Documents/Dev/nightshift && python -m pytest tests/test_cli.py::TestBuildParser::test_dashboard_subcommand_parses -v`
-Expected: FAIL — SystemExit (unrecognized command)
+Run: `cd /Users/gunnar/Documents/Dev/awake && python -m pytest tests/test_cli.py::test_dashboard_subcommand_exists -v`
+Expected: FAIL
 
 **Step 3: Add dashboard subcommand to cli.py**
 
-Add the `cmd_dashboard` function before `build_parser` in `src/cli.py`:
-
-```python
-def cmd_dashboard(args: argparse.Namespace) -> int:
-    """Launch the dashboard API server."""
-    from src.server import start_server
-
-    repo = _repo(getattr(args, "repo", None))
-    _print_header("Dashboard")
-    _print_info(f"Starting API server on port {args.port}...")
-    start_server(port=args.port, repo_path=repo)
-    return 0
-```
-
-Add to `build_parser()` before the `run` subparser:
+Find the subcommand registration section in `src/cli.py` and add:
 
 ```python
 # dashboard
-p_dash = sub.add_parser("dashboard", help="Launch live dashboard")
-p_dash.add_argument("--port", type=int, default=8710, help="API server port (default: 8710)")
-p_dash.set_defaults(func=cmd_dashboard)
+parser_dashboard = subparsers.add_parser(
+    "dashboard",
+    help="Launch the live repo evolution dashboard",
+)
+parser_dashboard.add_argument(
+    "--port",
+    type=int,
+    default=8710,
+    help="Port for the API server (default: 8710)",
+)
+parser_dashboard.add_argument(
+    "--no-browser",
+    action="store_true",
+    help="Don't open the browser automatically",
+)
 ```
 
-**Step 4: Run tests to verify they pass**
+And in the dispatch section:
 
-Run: `cd /Users/gunnar/Documents/Dev/nightshift && python -m pytest tests/test_cli.py -v`
+```python
+elif args.command == "dashboard":
+    from src.server import start_server
+    start_server(
+        port=args.port,
+        repo_path=Path.cwd(),
+        open_browser=not args.no_browser,
+    )
+```
+
+**Step 4: Run test to verify it passes**
+
+Run: `cd /Users/gunnar/Documents/Dev/awake && python -m pytest tests/test_cli.py::test_dashboard_subcommand_exists -v`
 Expected: PASS
-
-**Step 5: Commit**
-
-```bash
-cd /Users/gunnar/Documents/Dev/nightshift
-git add src/cli.py tests/test_cli.py
-git commit -m "feat: add 'nightshift dashboard' CLI subcommand"
-```
 
 ---
 
 ### Task 3: Scaffold React + Vite Frontend
 
 **Files:**
-- Create: `dashboard/` directory (via `npm create vite`)
-- Modify: `dashboard/package.json` (add deps)
-- Modify: `dashboard/vite.config.ts` (proxy)
-- Modify: `dashboard/tailwind.config.js` (theme)
+- Create: `dashboard/package.json`
+- Create: `dashboard/vite.config.ts`
+- Create: `dashboard/tsconfig.json`
+- Create: `dashboard/index.html`
+- Create: `dashboard/tailwind.config.js`
+- Create: `dashboard/postcss.config.js`
 
-**Step 1: Create Vite project**
+**Step 1: Create `dashboard/package.json`**
 
-```bash
-cd /Users/gunnar/Documents/Dev/nightshift
-npm create vite@latest dashboard -- --template react-ts
-```
-
-**Step 2: Install dependencies**
-
-```bash
-cd /Users/gunnar/Documents/Dev/nightshift/dashboard
-npm install
-npm install -D tailwindcss @tailwindcss/vite
-npm install @tanstack/react-query react-router-dom lucide-react
-```
-
-**Step 3: Configure Tailwind**
-
-Replace `dashboard/src/index.css` with:
-
-```css
-@import "tailwindcss";
-
-@theme {
-  --color-bg-primary: #0a0a0b;
-  --color-bg-surface: #141415;
-  --color-bg-elevated: #1c1c1e;
-  --color-border: #2a2a2d;
-  --color-text-primary: #ededef;
-  --color-text-secondary: #8a8a8e;
-  --color-text-tertiary: #5c5c60;
-  --color-accent: #6e6afa;
-  --color-success: #45d483;
-  --color-warning: #f0b232;
-  --color-error: #ef5f5f;
-
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
-}
-
-body {
-  background-color: var(--color-bg-primary);
-  color: var(--color-text-primary);
-  font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
+```json
+{
+  "name": "awake-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.0.0",
+    "lucide-react": "^0.344.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.22.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@vitejs/plugin-react": "^4.2.0",
+    "autoprefixer": "^10.4.17",
+    "postcss": "^8.4.35",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.3.3",
+    "vite": "^5.1.0"
+  }
 }
 ```
 
-**Step 4: Configure Vite proxy**
+**Step 2: Create `dashboard/vite.config.ts`**
 
-Replace `dashboard/vite.config.ts`:
-
-```ts
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import tailwindcss from "@tailwindcss/vite";
+```typescript
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react()],
   server: {
     port: 5173,
     proxy: {
-      "/api": {
-        target: "http://127.0.0.1:8710",
-        changeOrigin: true,
-      },
+      '/api': 'http://localhost:8710',
     },
+  },
+  build: {
+    outDir: '../docs/dashboard',
+    emptyOutDir: true,
   },
 });
 ```
 
-**Step 5: Clean up Vite defaults**
+**Step 3: Create `dashboard/tsconfig.json`**
 
-Delete: `dashboard/src/App.css`, `dashboard/public/vite.svg`, `dashboard/src/assets/react.svg`
-
-Replace `dashboard/src/App.tsx`:
-
-```tsx
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { Sidebar } from "./components/Sidebar";
-import { Overview } from "./views/Overview";
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchInterval: 30_000,
-      staleTime: 10_000,
-    },
+```json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
   },
-});
-
-export default function App() {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <div className="flex h-screen">
-          <Sidebar />
-          <main className="flex-1 overflow-y-auto p-8">
-            <Routes>
-              <Route path="/" element={<Navigate to="/overview" replace />} />
-              <Route path="/overview" element={<Overview />} />
-            </Routes>
-          </main>
-        </div>
-      </BrowserRouter>
-    </QueryClientProvider>
-  );
+  "include": ["src"]
 }
 ```
 
-**Step 6: Verify it builds**
+**Step 4: Create `dashboard/index.html`**
 
-Run: `cd /Users/gunnar/Documents/Dev/nightshift/dashboard && npm run build`
-Expected: Build succeeds (may have TS errors for missing components — that's fine, we'll create them next)
-
-**Step 7: Commit**
-
-```bash
-cd /Users/gunnar/Documents/Dev/nightshift
-git add dashboard/
-git commit -m "feat: scaffold React + Vite dashboard with Tailwind theme"
+```html
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Awake Dashboard</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
 ```
+
+**Step 5: Create `dashboard/tailwind.config.js`**
+
+```javascript
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: ['./index.html', './src/**/*.{ts,tsx}'],
+  theme: {
+    extend: {
+      colors: {
+        'bg-primary': '#0a0a0b',
+        'bg-surface': '#141415',
+        'bg-elevated': '#1c1c1e',
+        border: '#2a2a2d',
+        'text-primary': '#ededef',
+        'text-secondary': '#8a8a8e',
+        'text-tertiary': '#5c5c60',
+        accent: '#6e6afa',
+        success: '#45d483',
+        warning: '#f0b232',
+        error: '#ef5f5f',
+      },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
+      },
+      borderRadius: {
+        DEFAULT: '4px',
+        md: '6px',
+      },
+    },
+  },
+  plugins: [],
+};
+```
+
+**Step 6: Create `dashboard/postcss.config.js`**
+
+```javascript
+export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+};
+```
+
+**Step 7: Verify node + npm available**
+
+Run: `node --version && npm --version`
+Expected: Both print version strings (no error)
+
+**Step 8: Install dependencies**
+
+Run: `cd /Users/gunnar/Documents/Dev/awake/dashboard && npm install`
+Expected: `node_modules/` directory created, no errors
 
 ---
 
 ### Task 4: Sidebar Component + Layout Shell
 
 **Files:**
+- Create: `dashboard/src/main.tsx`
+- Create: `dashboard/src/styles/globals.css`
 - Create: `dashboard/src/components/Sidebar.tsx`
+- Create: `dashboard/src/App.tsx` (initial shell)
 
-**Step 1: Create sidebar component**
+**Step 1: Create `dashboard/src/styles/globals.css`**
+
+```css
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: #0a0a0b;
+  color: #ededef;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Remove default focus outline, replace with subtle ring */
+*:focus-visible {
+  outline: 2px solid #6e6afa;
+  outline-offset: 2px;
+}
+```
+
+**Step 2: Create `dashboard/src/main.tsx`**
 
 ```tsx
-import { NavLink } from "react-router-dom";
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { BrowserRouter } from 'react-router-dom';
+import App from './App';
+import './styles/globals.css';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      retry: 1,
+    },
+  },
+});
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </QueryClientProvider>
+  </React.StrictMode>
+);
+```
+
+**Step 3: Create `dashboard/src/components/Sidebar.tsx`**
+
+```tsx
+import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
-  Clock,
-  HeartPulse,
-  TestTubeDiagonal,
-  GitFork,
+  History,
+  Heart,
+  TestTube2,
+  Network,
   Brain,
   Stethoscope,
-} from "lucide-react";
+} from 'lucide-react';
 
-const NAV_ITEMS = [
-  { to: "/overview", label: "Overview", icon: LayoutDashboard },
-  { to: "/sessions", label: "Sessions", icon: Clock },
-  { to: "/health", label: "Health", icon: HeartPulse },
-  { to: "/coverage", label: "Coverage", icon: TestTubeDiagonal },
-  { to: "/dependencies", label: "Dependencies", icon: GitFork },
-  { to: "/brain", label: "Brain", icon: Brain },
-  { to: "/diagnostics", label: "Diagnostics", icon: Stethoscope },
+const NAV = [
+  { to: '/', icon: LayoutDashboard, label: 'Overview' },
+  { to: '/sessions', icon: History, label: 'Sessions' },
+  { to: '/health', icon: Heart, label: 'Health' },
+  { to: '/coverage', icon: TestTube2, label: 'Coverage' },
+  { to: '/deps', icon: Network, label: 'Dependencies' },
+  { to: '/brain', icon: Brain, label: 'Brain' },
+  { to: '/diagnostics', icon: Stethoscope, label: 'Diagnostics' },
 ];
 
 export function Sidebar() {
   return (
-    <aside className="w-52 shrink-0 border-r border-border bg-bg-surface flex flex-col">
-      <div className="px-4 py-5">
-        <span className="text-sm font-semibold tracking-tight text-text-primary">
-          nightshift
-        </span>
+    <aside className="fixed inset-y-0 left-0 w-[200px] bg-bg-surface border-r border-border flex flex-col">
+      <div className="px-4 py-5 border-b border-border">
+        <span className="text-sm font-semibold text-text-primary tracking-tight">Awake</span>
+        <span className="ml-1.5 text-xs text-text-tertiary">dashboard</span>
       </div>
-      <nav className="flex-1 px-2 space-y-0.5">
-        {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+      <nav className="flex-1 px-2 py-3 space-y-0.5">
+        {NAV.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
             to={to}
+            end={to === '/'}
             className={({ isActive }) =>
-              `flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
+              `flex items-center gap-2.5 px-3 py-2 rounded text-sm transition-colors ${
                 isActive
-                  ? "bg-accent/10 text-accent"
-                  : "text-text-secondary hover:text-text-primary hover:bg-bg-elevated"
+                  ? 'bg-accent/10 text-accent font-medium'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-bg-elevated'
               }`
             }
           >
-            <Icon size={16} strokeWidth={1.75} />
+            <Icon size={15} strokeWidth={1.75} />
             {label}
           </NavLink>
         ))}
       </nav>
+      <div className="px-4 py-3 border-t border-border">
+        <p className="text-xs text-text-tertiary">autonomous dev system</p>
+      </div>
     </aside>
   );
 }
 ```
 
-**Step 2: Verify it compiles**
+**Step 4: Create `dashboard/src/App.tsx` (shell)**
 
-Run: `cd /Users/gunnar/Documents/Dev/nightshift/dashboard && npx tsc --noEmit`
-Expected: PASS (no type errors)
+```tsx
+import { Routes, Route } from 'react-router-dom';
+import { Sidebar } from './components/Sidebar';
 
-**Step 3: Commit**
+function Placeholder({ name }: { name: string }) {
+  return (
+    <div className="p-8">
+      <h1 className="text-xl font-semibold text-text-primary">{name}</h1>
+      <p className="mt-2 text-text-secondary">Loading…</p>
+    </div>
+  );
+}
 
-```bash
-cd /Users/gunnar/Documents/Dev/nightshift
-git add dashboard/src/components/Sidebar.tsx
-git commit -m "feat: add sidebar navigation component"
+export default function App() {
+  return (
+    <div className="flex min-h-screen bg-bg-primary">
+      <Sidebar />
+      <main className="ml-[200px] flex-1">
+        <Routes>
+          <Route path="/" element={<Placeholder name="Overview" />} />
+          <Route path="/sessions" element={<Placeholder name="Sessions" />} />
+          <Route path="/health" element={<Placeholder name="Health" />} />
+          <Route path="/coverage" element={<Placeholder name="Coverage" />} />
+          <Route path="/deps" element={<Placeholder name="Dependencies" />} />
+          <Route path="/brain" element={<Placeholder name="Brain" />} />
+          <Route path="/diagnostics" element={<Placeholder name="Diagnostics" />} />
+        </Routes>
+      </main>
+    </div>
+  );
+}
 ```
+
+**Step 5: Verify dev server starts**
+
+Run: `cd /Users/gunnar/Documents/Dev/awake/dashboard && npm run dev -- --port 5173`
+Expected: Vite starts, no TypeScript or import errors
+Stop with Ctrl+C after confirming it starts.
 
 ---
 
 ### Task 5: API Fetch Hooks
 
 **Files:**
-- Create: `dashboard/src/api/hooks.ts`
+- Create: `dashboard/src/api/index.ts`
 
-**Step 1: Create all API hooks**
+**Step 1: Create `dashboard/src/api/index.ts`**
 
-```ts
-import { useQuery } from "@tanstack/react-query";
+```typescript
+import { useQuery } from '@tanstack/react-query';
 
-async function fetchApi<T>(path: string): Promise<T> {
-  const res = await fetch(path);
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
-  return res.json();
+const BASE = '/api';
+
+async function get<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`);
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json() as Promise<T>;
 }
 
-export function useHealth() {
-  return useQuery({ queryKey: ["health"], queryFn: () => fetchApi("/api/health") });
+// Health
+export interface FileHealth {
+  file: string;
+  score: number;
+  grade: string;
+  issues: string[];
 }
-
-export function useStats() {
-  return useQuery({ queryKey: ["stats"], queryFn: () => fetchApi("/api/stats") });
+export interface HealthReport {
+  overall_score: number;
+  grade: string;
+  files: FileHealth[];
+  generated_at: string;
 }
+export const useHealth = () =>
+  useQuery({ queryKey: ['health'], queryFn: () => get<HealthReport>('/health'), refetchInterval: 30_000 });
 
-export function useCoverage() {
-  return useQuery({ queryKey: ["coverage"], queryFn: () => fetchApi("/api/coverage") });
+// Stats
+export interface RepoStats {
+  nights_run: number;
+  total_prs: number;
+  source_modules: number;
+  test_count: number;
+  total_commits: number;
+  lines_changed: number;
 }
+export const useStats = () =>
+  useQuery({ queryKey: ['stats'], queryFn: () => get<RepoStats>('/stats'), refetchInterval: 30_000 });
 
-export function useChangelog() {
-  return useQuery({ queryKey: ["changelog"], queryFn: () => fetchApi("/api/changelog") });
+// Coverage
+export interface CoverageRun {
+  session: number;
+  date: string;
+  coverage_pct: number;
 }
-
-export function useScores() {
-  return useQuery({ queryKey: ["scores"], queryFn: () => fetchApi("/api/scores") });
+export interface CoverageReport {
+  current_pct: number;
+  trend: CoverageRun[];
 }
+export const useCoverage = () =>
+  useQuery({ queryKey: ['coverage'], queryFn: () => get<CoverageReport>('/coverage'), refetchInterval: 60_000 });
 
-export function useDepGraph() {
-  return useQuery({ queryKey: ["depgraph"], queryFn: () => fetchApi("/api/depgraph") });
+// Sessions
+export interface SessionMeta {
+  session: number;
+  date: string;
+  prs: number;
+  theme: string;
 }
+export const useSessions = () =>
+  useQuery({ queryKey: ['sessions'], queryFn: () => get<SessionMeta[]>('/sessions') });
 
-export function useDoctor() {
-  return useQuery({ queryKey: ["doctor"], queryFn: () => fetchApi("/api/doctor") });
+// Session replay
+export interface SessionReplay {
+  session: number;
+  tasks: string[];
+  prs: Array<{ number: number; title: string; url: string }>;
+  summary: string;
 }
+export const useReplay = (n: number) =>
+  useQuery({ queryKey: ['replay', n], queryFn: () => get<SessionReplay>(`/replay/${n}`), enabled: n >= 0 });
 
-export function useTodos() {
-  return useQuery({ queryKey: ["todos"], queryFn: () => fetchApi("/api/todos") });
+// Diff
+export interface DiffReport {
+  session: number;
+  files_changed: number;
+  lines_added: number;
+  lines_removed: number;
+  by_file: Array<{ file: string; added: number; removed: number }>;
 }
+export const useDiff = (n: number) =>
+  useQuery({ queryKey: ['diff', n], queryFn: () => get<DiffReport>(`/diff/${n}`), enabled: n >= 0 });
 
-export function useTriage() {
-  return useQuery({ queryKey: ["triage"], queryFn: () => fetchApi("/api/triage") });
+// Dep graph
+export interface DepGraph {
+  nodes: string[];
+  edges: Array<[string, string]>;
+  fan_in: Record<string, number>;
+  fan_out: Record<string, number>;
+  cycles: string[][];
 }
+export const useDepGraph = () =>
+  useQuery({ queryKey: ['depgraph'], queryFn: () => get<DepGraph>('/depgraph') });
 
-export function usePlan() {
-  return useQuery({ queryKey: ["plan"], queryFn: () => fetchApi("/api/plan") });
+// Plan (brain)
+export interface Task {
+  rank: number;
+  action: string;
+  score: number;
+  urgency: number;
+  roadmap: number;
+  health: number;
+  complexity: number;
+  synergy: number;
 }
+export const usePlan = () =>
+  useQuery({ queryKey: ['plan'], queryFn: () => get<{ tasks: Task[] }>('/plan'), refetchInterval: 60_000 });
 
-export function useSessions() {
-  return useQuery({ queryKey: ["sessions"], queryFn: () => fetchApi("/api/sessions") });
+// Doctor
+export interface DoctorCheck {
+  name: string;
+  status: 'pass' | 'warn' | 'fail';
+  detail: string;
 }
+export const useDoctor = () =>
+  useQuery({ queryKey: ['doctor'], queryFn: () => get<{ checks: DoctorCheck[] }>('/doctor') });
 
-export function useReplay(session: number) {
-  return useQuery({
-    queryKey: ["replay", session],
-    queryFn: () => fetchApi(`/api/replay/${session}`),
-    enabled: session > 0,
-  });
+// TODOs
+export interface TodoItem {
+  file: string;
+  line: number;
+  text: string;
+  age_days: number;
+  author: string;
 }
+export const useTodos = () =>
+  useQuery({ queryKey: ['todos'], queryFn: () => get<{ todos: TodoItem[] }>('/todos') });
 
-export function useDiff(session: number) {
-  return useQuery({
-    queryKey: ["diff", session],
-    queryFn: () => fetchApi(`/api/diff/${session}`),
-    enabled: session > 0,
-  });
+// Triage
+export interface Issue {
+  number: number;
+  title: string;
+  priority: 'high' | 'medium' | 'low';
+  labels: string[];
+  url: string;
 }
-```
+export const useTriage = () =>
+  useQuery({ queryKey: ['triage'], queryFn: () => get<{ issues: Issue[] }>('/triage') });
 
-**Step 2: Commit**
-
-```bash
-cd /Users/gunnar/Documents/Dev/nightshift
-git add dashboard/src/api/hooks.ts
-git commit -m "feat: add TanStack Query hooks for all API endpoints"
+// Scores
+export interface PRScore {
+  pr: number;
+  title: string;
+  grade: string;
+  score: number;
+  dimensions: Record<string, number>;
+}
+export const useScores = () =>
+  useQuery({ queryKey: ['scores'], queryFn: () => get<{ prs: PRScore[] }>('/scores') });
 ```
 
 ---
@@ -655,182 +813,115 @@ git commit -m "feat: add TanStack Query hooks for all API endpoints"
 
 **Files:**
 - Create: `dashboard/src/components/StatCard.tsx`
-- Create: `dashboard/src/components/DataTable.tsx`
-- Create: `dashboard/src/components/Badge.tsx`
-- Create: `dashboard/src/components/PageHeader.tsx`
-- Create: `dashboard/src/components/Skeleton.tsx`
+- Create: `dashboard/src/components/GradeChip.tsx`
+- Create: `dashboard/src/components/SkeletonBlock.tsx`
+- Create: `dashboard/src/components/ErrorMessage.tsx`
+- Create: `dashboard/src/components/SectionHeader.tsx`
 
-**Step 1: Create StatCard**
+**Step 1: Create `dashboard/src/components/StatCard.tsx`**
 
 ```tsx
-import type { ReactNode } from "react";
-
 interface StatCardProps {
   label: string;
   value: string | number;
   sub?: string;
-  icon?: ReactNode;
+  color?: 'accent' | 'success' | 'warning' | 'error' | 'default';
 }
 
-export function StatCard({ label, value, sub, icon }: StatCardProps) {
+const COLOR_MAP = {
+  accent: 'text-accent',
+  success: 'text-success',
+  warning: 'text-warning',
+  error: 'text-error',
+  default: 'text-text-primary',
+};
+
+export function StatCard({ label, value, sub, color = 'accent' }: StatCardProps) {
   return (
-    <div className="rounded-md border border-border bg-bg-surface p-5">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium uppercase tracking-wider text-text-tertiary">
-          {label}
-        </span>
-        {icon && <span className="text-text-tertiary">{icon}</span>}
-      </div>
-      <div className="mt-2 text-2xl font-semibold tabular-nums text-text-primary">
-        {value}
-      </div>
-      {sub && <div className="mt-0.5 text-xs text-text-tertiary">{sub}</div>}
+    <div className="bg-bg-surface border border-border rounded-md p-5">
+      <div className="text-[11px] font-medium text-text-tertiary uppercase tracking-widest">{label}</div>
+      <div className={`text-3xl font-bold mt-1 ${COLOR_MAP[color]}`}>{value}</div>
+      {sub && <div className="text-xs text-text-tertiary mt-0.5">{sub}</div>}
     </div>
   );
 }
 ```
 
-**Step 2: Create DataTable**
+**Step 2: Create `dashboard/src/components/GradeChip.tsx`**
 
 ```tsx
-interface Column<T> {
-  key: string;
-  header: string;
-  render: (row: T) => React.ReactNode;
-  align?: "left" | "right";
-}
+const GRADE_COLORS: Record<string, string> = {
+  'A+': 'bg-success/20 text-success',
+  A: 'bg-success/20 text-success',
+  'A-': 'bg-success/15 text-success',
+  'B+': 'bg-success/10 text-success',
+  B: 'bg-success/10 text-success',
+  'B-': 'bg-warning/15 text-warning',
+  'C+': 'bg-warning/20 text-warning',
+  C: 'bg-warning/20 text-warning',
+  D: 'bg-error/15 text-error',
+  F: 'bg-error/20 text-error',
+};
 
-interface DataTableProps<T> {
-  columns: Column<T>[];
-  data: T[];
-  keyFn: (row: T) => string;
-}
-
-export function DataTable<T>({ columns, data, keyFn }: DataTableProps<T>) {
+export function GradeChip({ grade }: { grade: string }) {
+  const cls = GRADE_COLORS[grade] ?? 'bg-bg-elevated text-text-secondary';
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-[13px]">
-        <thead>
-          <tr className="border-b border-border">
-            {columns.map((col) => (
-              <th
-                key={col.key}
-                className={`px-3 py-2 font-medium text-xs uppercase tracking-wider text-text-tertiary ${
-                  col.align === "right" ? "text-right" : "text-left"
-                }`}
-              >
-                {col.header}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((row) => (
-            <tr key={keyFn(row)} className="border-b border-border last:border-0">
-              {columns.map((col) => (
-                <td
-                  key={col.key}
-                  className={`px-3 py-2.5 ${
-                    col.align === "right" ? "text-right" : "text-left"
-                  }`}
-                >
-                  {col.render(row)}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-```
-
-**Step 3: Create Badge**
-
-```tsx
-const VARIANTS = {
-  success: "bg-success/15 text-success",
-  warning: "bg-warning/15 text-warning",
-  error: "bg-error/15 text-error",
-  neutral: "bg-bg-elevated text-text-secondary",
-  accent: "bg-accent/15 text-accent",
-} as const;
-
-interface BadgeProps {
-  variant: keyof typeof VARIANTS;
-  children: React.ReactNode;
-}
-
-export function Badge({ variant, children }: BadgeProps) {
-  return (
-    <span
-      className={`inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-semibold ${VARIANTS[variant]}`}
-    >
-      {children}
+    <span className={`inline-block text-xs font-bold px-1.5 py-0.5 rounded ${cls}`}>
+      {grade}
     </span>
   );
 }
 ```
 
-**Step 4: Create PageHeader**
+**Step 3: Create `dashboard/src/components/SkeletonBlock.tsx`**
 
 ```tsx
-interface PageHeaderProps {
-  title: string;
-  description?: string;
-}
-
-export function PageHeader({ title, description }: PageHeaderProps) {
-  return (
-    <div className="mb-6">
-      <h1 className="text-lg font-semibold text-text-primary">{title}</h1>
-      {description && (
-        <p className="mt-1 text-sm text-text-secondary">{description}</p>
-      )}
-    </div>
-  );
-}
-```
-
-**Step 5: Create Skeleton**
-
-```tsx
-export function Skeleton({ className = "" }: { className?: string }) {
+export function SkeletonBlock({ className = '' }: { className?: string }) {
   return (
     <div
-      className={`animate-pulse rounded bg-bg-elevated ${className}`}
+      className={`bg-bg-elevated animate-pulse rounded ${className}`}
+      aria-hidden
     />
   );
 }
+```
 
-export function StatCardSkeleton() {
-  return (
-    <div className="rounded-md border border-border bg-bg-surface p-5">
-      <Skeleton className="h-3 w-16 mb-3" />
-      <Skeleton className="h-7 w-20 mb-1" />
-      <Skeleton className="h-3 w-24" />
-    </div>
-  );
-}
+**Step 4: Create `dashboard/src/components/ErrorMessage.tsx`**
 
-export function TableSkeleton({ rows = 5 }: { rows?: number }) {
+```tsx
+import { AlertCircle } from 'lucide-react';
+
+export function ErrorMessage({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
-    <div className="space-y-3">
-      {Array.from({ length: rows }).map((_, i) => (
-        <Skeleton key={i} className="h-8 w-full" />
-      ))}
+    <div className="flex items-start gap-3 p-4 bg-error/10 border border-error/30 rounded-md">
+      <AlertCircle size={16} className="text-error mt-0.5 flex-shrink-0" />
+      <div className="flex-1">
+        <p className="text-sm text-error">{message}</p>
+        {onRetry && (
+          <button
+            onClick={onRetry}
+            className="mt-2 text-xs text-text-secondary hover:text-text-primary underline"
+          >
+            Retry
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 ```
 
-**Step 6: Commit**
+**Step 5: Create `dashboard/src/components/SectionHeader.tsx`**
 
-```bash
-cd /Users/gunnar/Documents/Dev/nightshift
-git add dashboard/src/components/
-git commit -m "feat: add shared UI primitives — StatCard, DataTable, Badge, PageHeader, Skeleton"
+```tsx
+export function SectionHeader({ title, sub }: { title: string; sub?: string }) {
+  return (
+    <div className="mb-6">
+      <h1 className="text-lg font-semibold text-text-primary">{title}</h1>
+      {sub && <p className="text-sm text-text-secondary mt-0.5">{sub}</p>}
+    </div>
+  );
+}
 ```
 
 ---
@@ -840,142 +931,118 @@ git commit -m "feat: add shared UI primitives — StatCard, DataTable, Badge, Pa
 **Files:**
 - Create: `dashboard/src/views/Overview.tsx`
 
-**Step 1: Implement Overview page**
+**Create `dashboard/src/views/Overview.tsx`:**
 
 ```tsx
-import {
-  Clock,
-  GitPullRequest,
-  Blocks,
-  TestTubeDiagonal,
-  TrendingUp,
-} from "lucide-react";
-import { useStats, useHealth, useCoverage } from "../api/hooks";
-import { StatCard } from "../components/StatCard";
-import { PageHeader } from "../components/PageHeader";
-import { Badge } from "../components/Badge";
-import { StatCardSkeleton } from "../components/Skeleton";
-
-function healthBadge(score: number) {
-  if (score >= 85) return <Badge variant="success">Excellent</Badge>;
-  if (score >= 70) return <Badge variant="warning">Good</Badge>;
-  return <Badge variant="error">Needs work</Badge>;
-}
+import { useHealth, useStats, useCoverage } from '../api';
+import { StatCard } from '../components/StatCard';
+import { GradeChip } from '../components/GradeChip';
+import { SkeletonBlock } from '../components/SkeletonBlock';
+import { ErrorMessage } from '../components/ErrorMessage';
+import { SectionHeader } from '../components/SectionHeader';
 
 export function Overview() {
-  const stats = useStats();
   const health = useHealth();
+  const stats = useStats();
   const coverage = useCoverage();
 
-  const s = stats.data as any;
-  const h = health.data as any;
+  const isLoading = health.isLoading || stats.isLoading;
+  const error = health.error || stats.error;
 
   return (
-    <div className="max-w-5xl">
-      <PageHeader
+    <div className="p-8 max-w-[1280px]">
+      <SectionHeader
         title="Overview"
-        description="Real-time snapshot of the nightshift autonomous development system."
+        sub="Live snapshot of autonomous repo evolution"
       />
 
-      <div className="grid grid-cols-5 gap-4 mb-8">
-        {stats.isLoading ? (
-          Array.from({ length: 5 }).map((_, i) => <StatCardSkeleton key={i} />)
+      {error && (
+        <ErrorMessage
+          message={error instanceof Error ? error.message : 'Failed to load data'}
+          onRetry={() => { health.refetch(); stats.refetch(); }}
+        />
+      )}
+
+      {/* Stat row */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+        {isLoading ? (
+          Array.from({ length: 5 }).map((_, i) => (
+            <SkeletonBlock key={i} className="h-[88px]" />
+          ))
         ) : (
           <>
+            <StatCard label="Sessions" value={stats.data?.nights_run ?? '—'} sub="Nights active" />
+            <StatCard label="Total PRs" value={stats.data?.total_prs ?? '—'} sub="Merged" color="success" />
+            <StatCard label="Modules" value={stats.data?.source_modules ?? '—'} sub="in src/" color="default" />
+            <StatCard label="Tests" value={stats.data?.test_count ?? '—'} sub="pytest" color="warning" />
             <StatCard
-              label="Sessions"
-              value={s?.nights_active ?? "—"}
-              sub="Nights active"
-              icon={<Clock size={15} />}
-            />
-            <StatCard
-              label="PRs"
-              value={s?.total_prs ?? "—"}
-              sub="Merged"
-              icon={<GitPullRequest size={15} />}
-            />
-            <StatCard
-              label="Modules"
-              value={h?.files ? Object.keys(h.files).length : "—"}
-              sub="in src/"
-              icon={<Blocks size={15} />}
-            />
-            <StatCard
-              label="Tests"
-              value={s?.total_commits ?? "—"}
-              sub="Total commits"
-              icon={<TestTubeDiagonal size={15} />}
-            />
-            <StatCard
-              label="Health"
-              value={h?.overall_health_score != null ? `${Math.round(h.overall_health_score)}` : "—"}
-              sub={h?.overall_health_score != null ? undefined : "Loading..."}
-              icon={<TrendingUp size={15} />}
+              label="Coverage"
+              value={coverage.data ? `${coverage.data.current_pct}%` : '—'}
+              sub="all files"
+              color="success"
             />
           </>
         )}
       </div>
 
-      {h?.overall_health_score != null && (
-        <div className="rounded-md border border-border bg-bg-surface p-5 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-sm font-medium text-text-primary">Overall Health</span>
-            {healthBadge(h.overall_health_score)}
-          </div>
-          <div className="h-2 rounded-full bg-bg-elevated overflow-hidden">
-            <div
-              className="h-full rounded-full bg-accent transition-all duration-500"
-              style={{ width: `${h.overall_health_score}%` }}
-            />
-          </div>
-          <div className="mt-2 text-xs text-text-tertiary tabular-nums">
-            {Math.round(h.overall_health_score)} / 100
-          </div>
-        </div>
-      )}
-
-      {s?.sessions && s.sessions.length > 0 && (
-        <div className="rounded-md border border-border bg-bg-surface">
+      {/* Health summary */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-bg-surface border border-border rounded-md overflow-hidden">
           <div className="px-4 py-3 border-b border-border">
-            <span className="text-xs font-medium uppercase tracking-wider text-text-tertiary">
-              Recent Sessions
-            </span>
+            <span className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">Health Score</span>
           </div>
-          <div className="divide-y divide-border">
-            {[...s.sessions].reverse().slice(0, 5).map((session: any, i: number) => (
-              <div key={i} className="flex items-center gap-3 px-4 py-3">
-                <span className="shrink-0 rounded bg-bg-elevated px-2 py-0.5 text-[11px] font-semibold text-accent tabular-nums">
-                  S{session.session ?? i}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13px] text-text-primary truncate">
-                    {session.title ?? `Session ${session.session ?? i}`}
+          <div className="p-6 flex items-center gap-6">
+            {health.isLoading ? (
+              <SkeletonBlock className="h-20 w-full" />
+            ) : (
+              <>
+                <div>
+                  <div className="text-5xl font-bold text-text-primary">
+                    {health.data?.overall_score ?? '—'}
                   </div>
-                  <div className="text-xs text-text-tertiary">
-                    {session.date ?? "—"} — {session.prs ?? 0} PRs
-                  </div>
+                  <div className="text-sm text-text-secondary mt-1">out of 100</div>
                 </div>
-              </div>
-            ))}
+                <div>
+                  <GradeChip grade={health.data?.grade ?? 'N/A'} />
+                </div>
+              </>
+            )}
           </div>
         </div>
-      )}
+
+        <div className="bg-bg-surface border border-border rounded-md overflow-hidden">
+          <div className="px-4 py-3 border-b border-border">
+            <span className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">Module Health</span>
+          </div>
+          <div className="overflow-auto max-h-[240px]">
+            {health.isLoading ? (
+              <div className="p-4"><SkeletonBlock className="h-40 w-full" /></div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left">
+                    <th className="px-4 py-2.5 text-[11px] font-medium text-text-tertiary uppercase tracking-wider border-b border-border">File</th>
+                    <th className="px-4 py-2.5 text-[11px] font-medium text-text-tertiary uppercase tracking-wider border-b border-border">Score</th>
+                    <th className="px-4 py-2.5 text-[11px] font-medium text-text-tertiary uppercase tracking-wider border-b border-border">Grade</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(health.data?.files ?? []).map((f) => (
+                    <tr key={f.file} className="border-b border-border last:border-0">
+                      <td className="px-4 py-2.5 font-mono text-xs text-text-secondary">{f.file}</td>
+                      <td className="px-4 py-2.5 text-text-primary">{f.score}</td>
+                      <td className="px-4 py-2.5"><GradeChip grade={f.grade} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
-```
-
-**Step 2: Verify it compiles**
-
-Run: `cd /Users/gunnar/Documents/Dev/nightshift/dashboard && npx tsc --noEmit`
-Expected: PASS
-
-**Step 3: Commit**
-
-```bash
-cd /Users/gunnar/Documents/Dev/nightshift
-git add dashboard/src/views/Overview.tsx
-git commit -m "feat: add Overview view with stat cards, health gauge, session list"
 ```
 
 ---
@@ -984,73 +1051,62 @@ git commit -m "feat: add Overview view with stat cards, health gauge, session li
 
 **Files:**
 - Create: `dashboard/src/views/Sessions.tsx`
-- Modify: `dashboard/src/App.tsx` (add route)
-
-**Step 1: Implement Sessions page**
 
 ```tsx
-import { useState } from "react";
-import { ChevronRight, GitPullRequest, CheckCircle2 } from "lucide-react";
-import { useSessions, useReplay } from "../api/hooks";
-import { PageHeader } from "../components/PageHeader";
-import { Badge } from "../components/Badge";
-import { TableSkeleton } from "../components/Skeleton";
+import { useState } from 'react';
+import { useSessions, useReplay, useDiff } from '../api';
+import { SectionHeader } from '../components/SectionHeader';
+import { SkeletonBlock } from '../components/SkeletonBlock';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 
-function SessionDetail({ session }: { session: number }) {
-  const { data, isLoading } = useReplay(session);
-  const d = data as any;
-
-  if (isLoading) return <TableSkeleton rows={3} />;
-  if (!d) return <div className="text-sm text-text-tertiary">No data</div>;
+function SessionRow({ session }: { session: number; date: string; prs: number; theme: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const replay = useReplay(expanded ? session : -1);
+  const diff = useDiff(expanded ? session : -1);
 
   return (
-    <div className="space-y-4 py-3">
-      {d.narrative && (
-        <p className="text-[13px] text-text-secondary leading-relaxed">{d.narrative}</p>
-      )}
-
-      {d.tasks?.length > 0 && (
-        <div>
-          <div className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-2">
-            Tasks
-          </div>
-          <div className="space-y-1.5">
-            {d.tasks.map((t: any, i: number) => (
-              <div key={i} className="flex items-center gap-2 text-[13px]">
-                <CheckCircle2 size={14} className="text-success shrink-0" />
-                <span className="text-text-primary">{t.name ?? t}</span>
+    <div className="border-b border-border last:border-0">
+      <button
+        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-bg-elevated text-left"
+        onClick={() => setExpanded(!expanded)}
+      >
+        {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        <span className="bg-bg-elevated border border-border rounded-full px-2.5 py-0.5 text-xs font-bold text-accent">S{session}</span>
+        <span className="flex-1 text-sm text-text-primary">{theme || `Session ${session}`}</span>
+        <span className="text-xs text-text-tertiary">{prs} PR{prs !== 1 ? 's' : ''}</span>
+        <span className="text-xs text-text-tertiary ml-4">{date}</span>
+      </button>
+      {expanded && (
+        <div className="px-10 pb-4">
+          {replay.isLoading ? <SkeletonBlock className="h-20 w-full" /> : (
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-1.5">Summary</p>
+                <p className="text-sm text-text-secondary">{replay.data?.summary ?? 'No summary available.'}</p>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {d.prs?.length > 0 && (
-        <div>
-          <div className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-2">
-            Pull Requests
-          </div>
-          <div className="space-y-1.5">
-            {d.prs.map((pr: any, i: number) => (
-              <div key={i} className="flex items-center gap-2 text-[13px]">
-                <GitPullRequest size={14} className="text-accent shrink-0" />
-                <span className="text-text-primary">{pr.title ?? `PR #${pr.number}`}</span>
-                {pr.number && (
-                  <span className="text-text-tertiary">#{pr.number}</span>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {d.stats_snapshot && (
-        <div className="flex gap-4 text-xs text-text-tertiary">
-          {d.stats_snapshot.lines_changed != null && (
-            <span>{d.stats_snapshot.lines_changed} lines changed</span>
-          )}
-          {d.stats_snapshot.total_commits != null && (
-            <span>{d.stats_snapshot.total_commits} commits</span>
+              {(replay.data?.prs?.length ?? 0) > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-1.5">Pull Requests</p>
+                  <div className="flex flex-wrap gap-2">
+                    {replay.data?.prs.map((pr) => (
+                      <a key={pr.number} href={pr.url} target="_blank" rel="noreferrer"
+                        className="text-xs text-accent hover:underline bg-bg-elevated border border-border rounded px-2 py-0.5"
+                      >
+                        #{pr.number} {pr.title}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {diff.data && (
+                <div>
+                  <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-1.5">Diff</p>
+                  <p className="text-xs text-text-secondary">
+                    {diff.data.files_changed} files &mdash; +{diff.data.lines_added} / -{diff.data.lines_removed}
+                  </p>
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -1060,74 +1116,20 @@ function SessionDetail({ session }: { session: number }) {
 
 export function Sessions() {
   const { data, isLoading } = useSessions();
-  const [expanded, setExpanded] = useState<number | null>(null);
-  const sessions = (data as any)?.sessions ?? [];
-
   return (
-    <div className="max-w-3xl">
-      <PageHeader
-        title="Sessions"
-        description="Timeline of autonomous development sessions."
-      />
-
-      {isLoading ? (
-        <TableSkeleton rows={6} />
-      ) : (
-        <div className="rounded-md border border-border bg-bg-surface divide-y divide-border">
-          {[...sessions].reverse().map((s: any, i: number) => {
-            const num = s.session ?? sessions.length - i;
-            const isOpen = expanded === num;
-            return (
-              <div key={num}>
-                <button
-                  onClick={() => setExpanded(isOpen ? null : num)}
-                  className="flex items-center gap-3 w-full px-4 py-3 text-left hover:bg-bg-elevated transition-colors"
-                >
-                  <ChevronRight
-                    size={14}
-                    className={`text-text-tertiary transition-transform ${isOpen ? "rotate-90" : ""}`}
-                  />
-                  <span className="shrink-0 rounded bg-bg-elevated px-2 py-0.5 text-[11px] font-semibold text-accent tabular-nums">
-                    S{num}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <span className="text-[13px] font-medium text-text-primary">
-                      {s.title ?? `Session ${num}`}
-                    </span>
-                  </div>
-                  <span className="text-xs text-text-tertiary shrink-0">
-                    {s.date ?? "—"}
-                  </span>
-                  {s.prs != null && (
-                    <Badge variant="neutral">{s.prs} PRs</Badge>
-                  )}
-                </button>
-                {isOpen && (
-                  <div className="px-4 pb-4 pl-12 border-t border-border">
-                    <SessionDetail session={num} />
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+    <div className="p-8 max-w-[1280px]">
+      <SectionHeader title="Sessions" sub="Every night the AI ran" />
+      <div className="bg-bg-surface border border-border rounded-md overflow-hidden">
+        {isLoading
+          ? <SkeletonBlock className="h-64 w-full" />
+          : [...(data ?? [])].reverse().map((s) => (
+            <SessionRow key={s.session} {...s} />
+          ))
+        }
+      </div>
     </div>
   );
 }
-```
-
-**Step 2: Add route to App.tsx**
-
-Add import: `import { Sessions } from "./views/Sessions";`
-Add route: `<Route path="/sessions" element={<Sessions />} />`
-
-**Step 3: Commit**
-
-```bash
-cd /Users/gunnar/Documents/Dev/nightshift
-git add dashboard/src/views/Sessions.tsx dashboard/src/App.tsx
-git commit -m "feat: add Sessions view with expandable timeline"
 ```
 
 ---
@@ -1136,135 +1138,82 @@ git commit -m "feat: add Sessions view with expandable timeline"
 
 **Files:**
 - Create: `dashboard/src/views/Health.tsx`
-- Modify: `dashboard/src/App.tsx` (add route)
-
-**Step 1: Implement Health page**
 
 ```tsx
-import { useHealth } from "../api/hooks";
-import { PageHeader } from "../components/PageHeader";
-import { DataTable } from "../components/DataTable";
-import { Badge } from "../components/Badge";
-import { TableSkeleton } from "../components/Skeleton";
+import { useState } from 'react';
+import { useHealth } from '../api';
+import { GradeChip } from '../components/GradeChip';
+import { SectionHeader } from '../components/SectionHeader';
+import { SkeletonBlock } from '../components/SkeletonBlock';
+import { ErrorMessage } from '../components/ErrorMessage';
+import { ChevronUp, ChevronDown } from 'lucide-react';
 
-function scoreBadge(score: number) {
-  if (score >= 90) return <Badge variant="success">Excellent</Badge>;
-  if (score >= 80) return <Badge variant="success">Good</Badge>;
-  if (score >= 70) return <Badge variant="warning">Fair</Badge>;
-  return <Badge variant="error">Needs work</Badge>;
-}
+type SortKey = 'file' | 'score' | 'grade';
 
 export function Health() {
-  const { data, isLoading } = useHealth();
-  const h = data as any;
+  const { data, isLoading, error, refetch } = useHealth();
+  const [sortKey, setSortKey] = useState<SortKey>('score');
+  const [sortAsc, setSortAsc] = useState(false);
 
-  const files = h?.files
-    ? Object.entries(h.files).map(([path, metrics]: [string, any]) => ({
-        path,
-        ...metrics,
-      }))
-    : [];
+  const toggle = (k: SortKey) => {
+    if (sortKey === k) setSortAsc(!sortAsc);
+    else { setSortKey(k); setSortAsc(k === 'file'); }
+  };
 
-  const sorted = [...files].sort(
-    (a: any, b: any) => (b.health_score ?? 0) - (a.health_score ?? 0)
-  );
+  const sorted = [...(data?.files ?? [])].sort((a, b) => {
+    const av = a[sortKey];
+    const bv = b[sortKey];
+    const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+    return sortAsc ? cmp : -cmp;
+  });
 
-  const columns = [
-    {
-      key: "path",
-      header: "Module",
-      render: (row: any) => (
-        <span className="font-mono text-xs text-text-primary">{row.path}</span>
-      ),
-    },
-    {
-      key: "score",
-      header: "Score",
-      align: "right" as const,
-      render: (row: any) => (
-        <span className="font-mono text-xs tabular-nums">
-          {row.health_score != null ? Math.round(row.health_score) : "—"}
-        </span>
-      ),
-    },
-    {
-      key: "status",
-      header: "Status",
-      render: (row: any) =>
-        row.health_score != null ? scoreBadge(row.health_score) : null,
-    },
-    {
-      key: "functions",
-      header: "Functions",
-      align: "right" as const,
-      render: (row: any) => (
-        <span className="text-xs text-text-secondary tabular-nums">
-          {row.function_count ?? "—"}
-        </span>
-      ),
-    },
-    {
-      key: "lines",
-      header: "Lines",
-      align: "right" as const,
-      render: (row: any) => (
-        <span className="text-xs text-text-secondary tabular-nums">
-          {row.total_lines ?? "—"}
-        </span>
-      ),
-    },
-    {
-      key: "docstrings",
-      header: "Docstring %",
-      align: "right" as const,
-      render: (row: any) => (
-        <span className="text-xs text-text-secondary tabular-nums">
-          {row.docstring_coverage != null
-            ? `${Math.round(row.docstring_coverage * 100)}%`
-            : "—"}
-        </span>
-      ),
-    },
-  ];
+  const SortIcon = ({ k }: { k: SortKey }) =>
+    sortKey === k ? (
+      sortAsc ? <ChevronUp size={12} /> : <ChevronDown size={12} />
+    ) : null;
 
   return (
-    <div className="max-w-5xl">
-      <PageHeader
-        title="Health"
-        description="Per-module code quality scores from static analysis."
+    <div className="p-8 max-w-[1280px]">
+      <SectionHeader
+        title="Code Health"
+        sub={data ? `Overall: ${data.overall_score}/100 — ${data.files.length} files analyzed` : 'Loading…'}
       />
-
-      {h?.overall_health_score != null && (
-        <div className="flex items-center gap-3 mb-6">
-          <span className="text-sm text-text-secondary">Overall:</span>
-          <span className="text-lg font-semibold tabular-nums">
-            {Math.round(h.overall_health_score)}
-          </span>
-          <span className="text-sm text-text-tertiary">/ 100</span>
-          {scoreBadge(h.overall_health_score)}
+      {error && <ErrorMessage message={String(error)} onRetry={refetch} />}
+      {isLoading ? (
+        <SkeletonBlock className="h-64 w-full" />
+      ) : (
+        <div className="bg-bg-surface border border-border rounded-md overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr>
+                {(['file', 'score', 'grade'] as SortKey[]).map((k) => (
+                  <th
+                    key={k}
+                    onClick={() => toggle(k)}
+                    className="cursor-pointer select-none px-4 py-3 text-left text-[11px] font-medium text-text-tertiary uppercase tracking-wider border-b border-border hover:text-text-secondary"
+                  >
+                    <span className="flex items-center gap-1">{k} <SortIcon k={k} /></span>
+                  </th>
+                ))}
+                <th className="px-4 py-3 text-left text-[11px] font-medium text-text-tertiary uppercase tracking-wider border-b border-border">Issues</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((f) => (
+                <tr key={f.file} className="border-b border-border last:border-0 hover:bg-bg-elevated/50">
+                  <td className="px-4 py-2.5 font-mono text-xs text-text-secondary">{f.file}</td>
+                  <td className="px-4 py-2.5 text-text-primary font-medium">{f.score}</td>
+                  <td className="px-4 py-2.5"><GradeChip grade={f.grade} /></td>
+                  <td className="px-4 py-2.5 text-xs text-text-tertiary">{f.issues.join(', ') || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
-
-      <div className="rounded-md border border-border bg-bg-surface">
-        {isLoading ? (
-          <div className="p-4">
-            <TableSkeleton rows={8} />
-          </div>
-        ) : (
-          <DataTable columns={columns} data={sorted} keyFn={(r: any) => r.path} />
-        )}
-      </div>
     </div>
   );
 }
-```
-
-**Step 2: Add route, commit**
-
-```bash
-cd /Users/gunnar/Documents/Dev/nightshift
-git add dashboard/src/views/Health.tsx dashboard/src/App.tsx
-git commit -m "feat: add Health view with sortable module scores table"
 ```
 
 ---
@@ -1273,118 +1222,44 @@ git commit -m "feat: add Health view with sortable module scores table"
 
 **Files:**
 - Create: `dashboard/src/views/Coverage.tsx`
-- Modify: `dashboard/src/App.tsx` (add route)
-
-**Step 1: Implement Coverage page**
 
 ```tsx
-import { useCoverage } from "../api/hooks";
-import { PageHeader } from "../components/PageHeader";
-import { DataTable } from "../components/DataTable";
-import { Badge } from "../components/Badge";
-import { TableSkeleton } from "../components/Skeleton";
+import { useCoverage } from '../api';
+import { SectionHeader } from '../components/SectionHeader';
+import { SkeletonBlock } from '../components/SkeletonBlock';
+import { ErrorMessage } from '../components/ErrorMessage';
 
 export function Coverage() {
-  const { data, isLoading } = useCoverage();
-  const d = data as any;
+  const { data, isLoading, error, refetch } = useCoverage();
 
-  const snapshots = d?.snapshots ?? [];
-  const latest = snapshots.length > 0 ? snapshots[snapshots.length - 1] : null;
-
-  const columns = [
-    {
-      key: "session",
-      header: "Session",
-      render: (row: any) => (
-        <span className="font-mono text-xs text-accent tabular-nums">
-          S{row.session ?? "—"}
-        </span>
-      ),
-    },
-    {
-      key: "coverage",
-      header: "Coverage",
-      align: "right" as const,
-      render: (row: any) => (
-        <span className="font-mono text-xs tabular-nums">
-          {row.total_coverage != null ? `${row.total_coverage.toFixed(1)}%` : "—"}
-        </span>
-      ),
-    },
-    {
-      key: "lines",
-      header: "Covered / Total",
-      align: "right" as const,
-      render: (row: any) => (
-        <span className="text-xs text-text-secondary tabular-nums">
-          {row.lines_covered ?? "—"} / {row.lines_total ?? "—"}
-        </span>
-      ),
-    },
-  ];
+  const max = Math.max(...(data?.trend.map((r) => r.coverage_pct) ?? [100]));
 
   return (
-    <div className="max-w-4xl">
-      <PageHeader
-        title="Coverage"
-        description="Test coverage trends across sessions."
+    <div className="p-8 max-w-[1280px]">
+      <SectionHeader
+        title="Test Coverage"
+        sub={data ? `Current: ${data.current_pct}%` : 'Loading…'}
       />
-
-      {latest && (
-        <div className="flex items-center gap-4 mb-6">
-          <div className="text-2xl font-semibold tabular-nums">
-            {latest.total_coverage?.toFixed(1)}%
-          </div>
-          <Badge variant={latest.total_coverage >= 80 ? "success" : "warning"}>
-            Latest
-          </Badge>
-        </div>
-      )}
-
-      {/* Trend bars */}
-      {snapshots.length > 0 && (
-        <div className="rounded-md border border-border bg-bg-surface p-5 mb-6">
-          <div className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-4">
-            Coverage Trend
-          </div>
-          <div className="flex items-end gap-1.5 h-24">
-            {snapshots.map((snap: any, i: number) => {
-              const pct = snap.total_coverage ?? 0;
-              return (
+      {error && <ErrorMessage message={String(error)} onRetry={refetch} />}
+      {isLoading ? <SkeletonBlock className="h-48 w-full" /> : (
+        <div className="bg-bg-surface border border-border rounded-md p-6 space-y-3">
+          {(data?.trend ?? []).map((run) => (
+            <div key={run.session} className="flex items-center gap-4">
+              <span className="w-16 text-right text-xs font-medium text-text-tertiary">S{run.session}</span>
+              <div className="flex-1 bg-bg-elevated rounded h-3 overflow-hidden">
                 <div
-                  key={i}
-                  className="flex-1 rounded-t bg-accent/60 hover:bg-accent transition-colors"
-                  style={{ height: `${pct}%` }}
-                  title={`S${snap.session ?? i}: ${pct.toFixed(1)}%`}
+                  className="h-3 bg-success rounded transition-all"
+                  style={{ width: `${(run.coverage_pct / max) * 100}%` }}
                 />
-              );
-            })}
-          </div>
+              </div>
+              <span className="w-12 text-right text-xs text-text-secondary font-mono">{run.coverage_pct}%</span>
+            </div>
+          ))}
         </div>
       )}
-
-      <div className="rounded-md border border-border bg-bg-surface">
-        {isLoading ? (
-          <div className="p-4"><TableSkeleton rows={5} /></div>
-        ) : (
-          <DataTable
-            columns={columns}
-            data={[...snapshots].reverse()}
-            keyFn={(r: any) => `s${r.session ?? Math.random()}`}
-          />
-        )}
-      </div>
     </div>
   );
 }
-```
-
-**Step 2: Add route, commit**
-
-```bash
-cd /Users/gunnar/Documents/Dev/nightshift
-git add dashboard/src/views/Coverage.tsx dashboard/src/App.tsx
-git commit -m "feat: add Coverage view with trend bars and history table"
 ```
 
 ---
@@ -1393,131 +1268,65 @@ git commit -m "feat: add Coverage view with trend bars and history table"
 
 **Files:**
 - Create: `dashboard/src/views/Dependencies.tsx`
-- Modify: `dashboard/src/App.tsx` (add route)
-
-**Step 1: Implement Dependencies page**
 
 ```tsx
-import { useDepGraph } from "../api/hooks";
-import { PageHeader } from "../components/PageHeader";
-import { DataTable } from "../components/DataTable";
-import { Badge } from "../components/Badge";
-import { TableSkeleton } from "../components/Skeleton";
+import { useDepGraph } from '../api';
+import { SectionHeader } from '../components/SectionHeader';
+import { SkeletonBlock } from '../components/SkeletonBlock';
+import { AlertTriangle } from 'lucide-react';
 
 export function Dependencies() {
   const { data, isLoading } = useDepGraph();
-  const d = data as any;
 
-  const modules = d?.modules ?? [];
-  const fanIn = d?.fan_in ?? {};
-  const cycles = d?.cycles ?? [];
-
-  const enriched = modules.map((m: any) => ({
-    ...m,
-    fan_in: fanIn[m.name] ?? 0,
-    fan_out: m.imports?.length ?? m.fan_out ?? 0,
-  }));
-
-  const sorted = [...enriched].sort((a: any, b: any) => b.fan_in - a.fan_in);
-
-  const columns = [
-    {
-      key: "name",
-      header: "Module",
-      render: (row: any) => (
-        <span className="font-mono text-xs text-text-primary">{row.name}</span>
-      ),
-    },
-    {
-      key: "fan_in",
-      header: "Fan-in",
-      align: "right" as const,
-      render: (row: any) => (
-        <span className="font-mono text-xs tabular-nums text-accent">
-          {row.fan_in}
-        </span>
-      ),
-    },
-    {
-      key: "fan_out",
-      header: "Fan-out",
-      align: "right" as const,
-      render: (row: any) => (
-        <span className="font-mono text-xs tabular-nums">{row.fan_out}</span>
-      ),
-    },
-    {
-      key: "lines",
-      header: "Lines",
-      align: "right" as const,
-      render: (row: any) => (
-        <span className="text-xs text-text-secondary tabular-nums">
-          {row.line_count ?? "—"}
-        </span>
-      ),
-    },
-    {
-      key: "imports",
-      header: "Imports",
-      render: (row: any) => (
-        <div className="flex flex-wrap gap-1">
-          {(row.imports ?? []).map((imp: string) => (
-            <span
-              key={imp}
-              className="rounded bg-bg-elevated px-1.5 py-0.5 text-[11px] text-text-secondary"
-            >
-              {imp}
-            </span>
-          ))}
-        </div>
-      ),
-    },
-  ];
+  const sorted = Object.entries(data?.fan_in ?? {})
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 15);
 
   return (
-    <div className="max-w-5xl">
-      <PageHeader
-        title="Dependencies"
-        description="Module dependency graph and coupling metrics."
-      />
+    <div className="p-8 max-w-[1280px]">
+      <SectionHeader title="Module Dependencies" sub="Import relationships between source files" />
 
-      {cycles.length > 0 && (
-        <div className="rounded-md border border-error/30 bg-error/5 p-4 mb-6">
-          <div className="text-sm font-medium text-error mb-1">
-            Circular Dependencies Detected
-          </div>
-          {cycles.map((cycle: any, i: number) => (
-            <div key={i} className="text-xs font-mono text-text-secondary">
-              {Array.isArray(cycle) ? cycle.join(" → ") : String(cycle)}
+      {isLoading ? <SkeletonBlock className="h-64 w-full" /> : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Fan-in ranking */}
+          <div className="bg-bg-surface border border-border rounded-md overflow-hidden">
+            <div className="px-4 py-3 border-b border-border text-xs font-semibold text-text-tertiary uppercase tracking-wider">Most Imported (Fan-in)</div>
+            <div className="p-4 space-y-2.5">
+              {sorted.map(([mod, count]) => (
+                <div key={mod} className="flex items-center gap-3">
+                  <span className="w-40 text-right text-xs font-mono text-text-secondary truncate" title={mod}>{mod}</span>
+                  <div className="flex-1 bg-bg-elevated rounded h-2">
+                    <div className="bg-accent h-2 rounded" style={{ width: `${(count / sorted[0][1]) * 100}%` }} />
+                  </div>
+                  <span className="w-6 text-right text-xs text-text-tertiary">{count}</span>
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
+
+          {/* Cycles */}
+          <div className="bg-bg-surface border border-border rounded-md overflow-hidden">
+            <div className="px-4 py-3 border-b border-border text-xs font-semibold text-text-tertiary uppercase tracking-wider">Circular Dependencies</div>
+            <div className="p-4">
+              {(data?.cycles.length ?? 0) === 0 ? (
+                <p className="text-sm text-success">No cycles detected</p>
+              ) : (
+                <div className="space-y-2">
+                  {data?.cycles.map((cycle, i) => (
+                    <div key={i} className="flex items-start gap-2 text-xs text-error">
+                      <AlertTriangle size={13} className="mt-0.5 flex-shrink-0" />
+                      <span className="font-mono">{cycle.join(' → ')}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
-
-      {cycles.length === 0 && !isLoading && (
-        <div className="mb-6">
-          <Badge variant="success">No circular dependencies</Badge>
-        </div>
-      )}
-
-      <div className="rounded-md border border-border bg-bg-surface">
-        {isLoading ? (
-          <div className="p-4"><TableSkeleton rows={8} /></div>
-        ) : (
-          <DataTable columns={columns} data={sorted} keyFn={(r: any) => r.name} />
-        )}
-      </div>
     </div>
   );
 }
-```
-
-**Step 2: Add route, commit**
-
-```bash
-cd /Users/gunnar/Documents/Dev/nightshift
-git add dashboard/src/views/Dependencies.tsx dashboard/src/App.tsx
-git commit -m "feat: add Dependencies view with coupling metrics"
 ```
 
 ---
@@ -1525,150 +1334,85 @@ git commit -m "feat: add Dependencies view with coupling metrics"
 ### Task 12: Brain View
 
 **Files:**
-- Create: `dashboard/src/views/BrainView.tsx`
-- Modify: `dashboard/src/App.tsx` (add route)
-
-**Step 1: Implement Brain page**
+- Create: `dashboard/src/views/Brain.tsx`
 
 ```tsx
-import { usePlan, useTriage } from "../api/hooks";
-import { PageHeader } from "../components/PageHeader";
-import { Badge } from "../components/Badge";
-import { TableSkeleton } from "../components/Skeleton";
+import { usePlan, useTriage } from '../api';
+import { SectionHeader } from '../components/SectionHeader';
+import { SkeletonBlock } from '../components/SkeletonBlock';
 
-function ScoreBar({ label, value, max = 25 }: { label: string; value: number; max?: number }) {
-  const pct = Math.min((value / max) * 100, 100);
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-[11px] text-text-tertiary w-24 text-right shrink-0">
-        {label}
-      </span>
-      <div className="flex-1 h-1.5 rounded-full bg-bg-elevated overflow-hidden">
-        <div
-          className="h-full rounded-full bg-accent"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <span className="text-[11px] font-mono text-text-secondary tabular-nums w-8">
-        {value.toFixed(1)}
-      </span>
-    </div>
-  );
-}
+const PRIORITY_COLORS = {
+  high: 'bg-error/15 text-error',
+  medium: 'bg-warning/15 text-warning',
+  low: 'bg-bg-elevated text-text-tertiary',
+};
 
-export function BrainView() {
+export function Brain() {
   const plan = usePlan();
   const triage = useTriage();
-  const p = plan.data as any;
-  const t = triage.data as any;
-
-  const tasks = p?.top_tasks ?? p?.tasks ?? [];
-  const issues = Array.isArray(t) ? t : t?.issues ?? [];
 
   return (
-    <div className="max-w-4xl">
-      <PageHeader
-        title="Brain"
-        description="Task prioritization engine and issue triage."
-      />
+    <div className="p-8 max-w-[1280px]">
+      <SectionHeader title="Brain" sub="AI task prioritization and issue triage" />
 
-      <div className="space-y-3 mb-8">
-        <div className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-2">
-          Ranked Task Candidates
-        </div>
-        {plan.isLoading ? (
-          <TableSkeleton rows={5} />
-        ) : tasks.length === 0 ? (
-          <div className="text-sm text-text-tertiary">No task candidates available.</div>
-        ) : (
-          tasks.map((task: any, i: number) => (
-            <div
-              key={i}
-              className="rounded-md border border-border bg-bg-surface p-4"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-accent tabular-nums">
-                    #{i + 1}
-                  </span>
-                  <span className="text-[13px] font-medium text-text-primary">
-                    {task.title ?? task.name ?? "Untitled"}
-                  </span>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Task ranking */}
+        <div className="bg-bg-surface border border-border rounded-md overflow-hidden">
+          <div className="px-4 py-3 border-b border-border text-xs font-semibold text-text-tertiary uppercase tracking-wider">Task Candidates</div>
+          {plan.isLoading ? <SkeletonBlock className="h-48 w-full" /> : (
+            <div className="divide-y divide-border">
+              {(plan.data?.tasks ?? []).map((task) => (
+                <div key={task.rank} className="px-4 py-3">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-xs font-bold text-text-tertiary w-5">#{task.rank}</span>
+                    <span className="text-sm text-text-primary">{task.action}</span>
+                    <span className="ml-auto text-xs font-mono text-accent">{task.score.toFixed(1)}</span>
+                  </div>
+                  <div className="flex gap-1.5 ml-7">
+                    {(['urgency', 'roadmap', 'health', 'complexity', 'synergy'] as const).map((dim) => (
+                      <div key={dim} className="flex-1">
+                        <div className="text-[10px] text-text-tertiary mb-0.5">{dim.slice(0, 3)}</div>
+                        <div className="bg-bg-elevated rounded-full h-1.5">
+                          <div className="bg-accent/60 h-1.5 rounded-full" style={{ width: `${task[dim] * 10}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <span className="text-sm font-semibold tabular-nums text-text-primary">
-                  {task.score != null ? task.score.toFixed(1) : "—"}
-                </span>
-              </div>
-              {task.rationale && (
-                <p className="text-xs text-text-secondary mb-3">{task.rationale}</p>
-              )}
-              {task.breakdown && (
-                <div className="space-y-1.5">
-                  {task.breakdown.issue_urgency != null && (
-                    <ScoreBar label="Urgency" value={task.breakdown.issue_urgency} />
-                  )}
-                  {task.breakdown.roadmap_alignment != null && (
-                    <ScoreBar label="Roadmap" value={task.breakdown.roadmap_alignment} />
-                  )}
-                  {task.breakdown.health_improvement != null && (
-                    <ScoreBar label="Health" value={task.breakdown.health_improvement} />
-                  )}
-                  {task.breakdown.complexity_fit != null && (
-                    <ScoreBar label="Complexity" value={task.breakdown.complexity_fit} />
-                  )}
-                  {task.breakdown.cross_module_synergy != null && (
-                    <ScoreBar label="Synergy" value={task.breakdown.cross_module_synergy} />
-                  )}
-                </div>
-              )}
-              {task.source && (
-                <div className="mt-2">
-                  <Badge variant="neutral">{task.source}</Badge>
-                </div>
-              )}
+              ))}
             </div>
-          ))
-        )}
-      </div>
-
-      {issues.length > 0 && (
-        <div>
-          <div className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-2">
-            Triaged Issues
-          </div>
-          <div className="rounded-md border border-border bg-bg-surface divide-y divide-border">
-            {issues.map((issue: any, i: number) => (
-              <div key={i} className="flex items-center gap-3 px-4 py-3">
-                <span className="font-mono text-xs text-text-tertiary">
-                  #{issue.number ?? i}
-                </span>
-                <span className="flex-1 text-[13px] text-text-primary truncate">
-                  {issue.title ?? "Untitled"}
-                </span>
-                {issue.category && (
-                  <Badge variant="neutral">{issue.category}</Badge>
-                )}
-                {issue.priority != null && (
-                  <Badge variant={issue.priority <= 2 ? "error" : "neutral"}>
-                    P{issue.priority}
-                  </Badge>
-                )}
-              </div>
-            ))}
-          </div>
+          )}
         </div>
-      )}
+
+        {/* Issue triage */}
+        <div className="bg-bg-surface border border-border rounded-md overflow-hidden">
+          <div className="px-4 py-3 border-b border-border text-xs font-semibold text-text-tertiary uppercase tracking-wider">Issue Triage</div>
+          {triage.isLoading ? <SkeletonBlock className="h-48 w-full" /> : (
+            <div className="divide-y divide-border">
+              {(triage.data?.issues ?? []).map((issue) => (
+                <div key={issue.number} className="px-4 py-3 flex items-start gap-3">
+                  <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded ${PRIORITY_COLORS[issue.priority]}`}>
+                    {issue.priority}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <a href={issue.url} target="_blank" rel="noreferrer" className="text-sm text-text-primary hover:text-accent truncate block">
+                      #{issue.number} {issue.title}
+                    </a>
+                    <div className="flex gap-1 mt-1">
+                      {issue.labels.map((l) => (
+                        <span key={l} className="text-[10px] bg-bg-elevated border border-border rounded px-1.5 py-0.5 text-text-tertiary">{l}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
-```
-
-**Step 2: Add route, commit**
-
-```bash
-cd /Users/gunnar/Documents/Dev/nightshift
-git add dashboard/src/views/BrainView.tsx dashboard/src/App.tsx
-git commit -m "feat: add Brain view with ranked tasks and score breakdowns"
 ```
 
 ---
@@ -1677,22 +1421,18 @@ git commit -m "feat: add Brain view with ranked tasks and score breakdowns"
 
 **Files:**
 - Create: `dashboard/src/views/Diagnostics.tsx`
-- Modify: `dashboard/src/App.tsx` (add route)
-
-**Step 1: Implement Diagnostics page**
 
 ```tsx
-import { CircleCheck, AlertTriangle, XCircle } from "lucide-react";
-import { useDoctor, useTodos, useScores } from "../api/hooks";
-import { PageHeader } from "../components/PageHeader";
-import { DataTable } from "../components/DataTable";
-import { Badge } from "../components/Badge";
-import { TableSkeleton } from "../components/Skeleton";
+import { useDoctor, useTodos, useScores } from '../api';
+import { GradeChip } from '../components/GradeChip';
+import { SectionHeader } from '../components/SectionHeader';
+import { SkeletonBlock } from '../components/SkeletonBlock';
+import { CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
 
-const STATUS_CONFIG = {
-  OK: { icon: CircleCheck, color: "text-success", variant: "success" as const },
-  WARN: { icon: AlertTriangle, color: "text-warning", variant: "warning" as const },
-  FAIL: { icon: XCircle, color: "text-error", variant: "error" as const },
+const STATUS_ICON = {
+  pass: <CheckCircle2 size={14} className="text-success" />,
+  warn: <AlertTriangle size={14} className="text-warning" />,
+  fail: <XCircle size={14} className="text-error" />,
 };
 
 export function Diagnostics() {
@@ -1700,158 +1440,82 @@ export function Diagnostics() {
   const todos = useTodos();
   const scores = useScores();
 
-  const doc = doctor.data as any;
-  const todoList = Array.isArray(todos.data) ? todos.data : (todos.data as any)?.items ?? [];
-  const scoreList = Array.isArray(scores.data) ? scores.data : (scores.data as any)?.scores ?? [];
-
-  const checks = doc?.checks ?? [];
-
-  const todoColumns = [
-    {
-      key: "file",
-      header: "File",
-      render: (row: any) => (
-        <span className="font-mono text-xs text-text-primary">{row.file ?? row.path ?? "—"}</span>
-      ),
-    },
-    {
-      key: "line",
-      header: "Line",
-      align: "right" as const,
-      render: (row: any) => (
-        <span className="font-mono text-xs tabular-nums">{row.line ?? "—"}</span>
-      ),
-    },
-    {
-      key: "text",
-      header: "Annotation",
-      render: (row: any) => (
-        <span className="text-xs text-text-secondary truncate max-w-xs block">
-          {row.text ?? row.content ?? "—"}
-        </span>
-      ),
-    },
-    {
-      key: "age",
-      header: "Age",
-      align: "right" as const,
-      render: (row: any) => (
-        <span className="text-xs text-text-tertiary">
-          {row.sessions_old != null ? `${row.sessions_old}s` : "—"}
-        </span>
-      ),
-    },
-  ];
-
-  const scoreColumns = [
-    {
-      key: "pr",
-      header: "PR",
-      render: (row: any) => (
-        <span className="font-mono text-xs text-accent">#{row.pr_number ?? "—"}</span>
-      ),
-    },
-    {
-      key: "title",
-      header: "Title",
-      render: (row: any) => (
-        <span className="text-xs text-text-primary truncate max-w-xs block">
-          {row.title ?? "—"}
-        </span>
-      ),
-    },
-    {
-      key: "score",
-      header: "Score",
-      align: "right" as const,
-      render: (row: any) => (
-        <span className="font-mono text-xs tabular-nums">{row.total ?? "—"}</span>
-      ),
-    },
-    {
-      key: "grade",
-      header: "Grade",
-      render: (row: any) => {
-        const g = row.grade ?? "—";
-        const v = g.startsWith("A") ? "success" : g.startsWith("B") ? "warning" : "error";
-        return <Badge variant={v as any}>{g}</Badge>;
-      },
-    },
-  ];
-
   return (
-    <div className="max-w-5xl">
-      <PageHeader
-        title="Diagnostics"
-        description="Repo health checks, stale annotations, and PR quality."
-      />
+    <div className="p-8 max-w-[1280px]">
+      <SectionHeader title="Diagnostics" sub="Environment checks, stale TODO items, and PR quality grades" />
 
-      {/* Doctor checks */}
-      <div className="mb-8">
-        <div className="flex items-center gap-3 mb-3">
-          <span className="text-xs font-medium uppercase tracking-wider text-text-tertiary">
-            Doctor
-          </span>
-          {doc?.grade && <Badge variant="accent">{doc.grade}</Badge>}
-        </div>
-        {doctor.isLoading ? (
-          <TableSkeleton rows={5} />
-        ) : (
-          <div className="rounded-md border border-border bg-bg-surface divide-y divide-border">
-            {checks.map((check: any, i: number) => {
-              const cfg = STATUS_CONFIG[check.status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.OK;
-              const Icon = cfg.icon;
-              return (
-                <div key={i} className="flex items-center gap-3 px-4 py-2.5">
-                  <Icon size={15} className={cfg.color} />
-                  <span className="flex-1 text-[13px] text-text-primary">{check.name}</span>
-                  <Badge variant={cfg.variant}>{check.status}</Badge>
-                  {check.message && (
-                    <span className="text-xs text-text-tertiary max-w-xs truncate">
-                      {check.message}
-                    </span>
-                  )}
+      <div className="space-y-6">
+        {/* Doctor checks */}
+        <div className="bg-bg-surface border border-border rounded-md overflow-hidden">
+          <div className="px-4 py-3 border-b border-border text-xs font-semibold text-text-tertiary uppercase tracking-wider">Environment Checks</div>
+          {doctor.isLoading ? <SkeletonBlock className="h-32 w-full" /> : (
+            <div className="divide-y divide-border">
+              {(doctor.data?.checks ?? []).map((check) => (
+                <div key={check.name} className="px-4 py-3 flex items-start gap-3">
+                  {STATUS_ICON[check.status]}
+                  <div>
+                    <p className="text-sm font-medium text-text-primary">{check.name}</p>
+                    <p className="text-xs text-text-tertiary mt-0.5">{check.detail}</p>
+                  </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Stale TODOs */}
+        <div className="bg-bg-surface border border-border rounded-md overflow-hidden">
+          <div className="px-4 py-3 border-b border-border text-xs font-semibold text-text-tertiary uppercase tracking-wider">Stale TODO Items</div>
+          {todos.isLoading ? <SkeletonBlock className="h-32 w-full" /> : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-medium text-text-tertiary uppercase tracking-wider border-b border-border">File:Line</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-medium text-text-tertiary uppercase tracking-wider border-b border-border">Text</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-medium text-text-tertiary uppercase tracking-wider border-b border-border">Age</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(todos.data?.todos ?? []).map((t, i) => (
+                  <tr key={i} className="border-b border-border last:border-0">
+                    <td className="px-4 py-2.5 font-mono text-xs text-text-secondary">{t.file}:{t.line}</td>
+                    <td className="px-4 py-2.5 text-xs text-text-tertiary max-w-[400px] truncate">{t.text}</td>
+                    <td className="px-4 py-2.5 text-xs text-text-tertiary">{t.age_days}d</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* PR scores */}
+        <div className="bg-bg-surface border border-border rounded-md overflow-hidden">
+          <div className="px-4 py-3 border-b border-border text-xs font-semibold text-text-tertiary uppercase tracking-wider">PR Quality Grades</div>
+          {scores.isLoading ? <SkeletonBlock className="h-32 w-full" /> : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-medium text-text-tertiary uppercase tracking-wider border-b border-border">PR</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-medium text-text-tertiary uppercase tracking-wider border-b border-border">Score</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-medium text-text-tertiary uppercase tracking-wider border-b border-border">Grade</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(scores.data?.prs ?? []).map((pr) => (
+                  <tr key={pr.pr} className="border-b border-border last:border-0">
+                    <td className="px-4 py-2.5 text-text-secondary">#{pr.pr} {pr.title}</td>
+                    <td className="px-4 py-2.5 font-mono text-text-primary">{pr.score}</td>
+                    <td className="px-4 py-2.5"><GradeChip grade={pr.grade} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
-
-      {/* Stale TODOs */}
-      {todoList.length > 0 && (
-        <div className="mb-8">
-          <div className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">
-            Stale Annotations
-          </div>
-          <div className="rounded-md border border-border bg-bg-surface">
-            <DataTable columns={todoColumns} data={todoList} keyFn={(r: any) => `${r.file}:${r.line}`} />
-          </div>
-        </div>
-      )}
-
-      {/* PR Scores */}
-      {scoreList.length > 0 && (
-        <div>
-          <div className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-3">
-            PR Quality Scores
-          </div>
-          <div className="rounded-md border border-border bg-bg-surface">
-            <DataTable columns={scoreColumns} data={scoreList} keyFn={(r: any) => `pr-${r.pr_number}`} />
-          </div>
-        </div>
-      )}
     </div>
   );
 }
-```
-
-**Step 2: Add route, commit**
-
-```bash
-cd /Users/gunnar/Documents/Dev/nightshift
-git add dashboard/src/views/Diagnostics.tsx dashboard/src/App.tsx
-git commit -m "feat: add Diagnostics view with doctor checks, TODOs, PR scores"
 ```
 
 ---
@@ -1859,104 +1523,84 @@ git commit -m "feat: add Diagnostics view with doctor checks, TODOs, PR scores"
 ### Task 14: Final App.tsx Wiring + Build Verification
 
 **Files:**
-- Modify: `dashboard/src/App.tsx` (ensure all routes registered)
+- Update: `dashboard/src/App.tsx`
 
-**Step 1: Verify all routes are wired**
-
-Final `App.tsx` should have all imports and routes:
+**Step 1: Replace placeholder App.tsx with wired version**
 
 ```tsx
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { Sidebar } from "./components/Sidebar";
-import { Overview } from "./views/Overview";
-import { Sessions } from "./views/Sessions";
-import { Health } from "./views/Health";
-import { Coverage } from "./views/Coverage";
-import { Dependencies } from "./views/Dependencies";
-import { BrainView } from "./views/BrainView";
-import { Diagnostics } from "./views/Diagnostics";
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchInterval: 30_000,
-      staleTime: 10_000,
-    },
-  },
-});
+import { Routes, Route } from 'react-router-dom';
+import { Sidebar } from './components/Sidebar';
+import { Overview } from './views/Overview';
+import { Sessions } from './views/Sessions';
+import { Health } from './views/Health';
+import { Coverage } from './views/Coverage';
+import { Dependencies } from './views/Dependencies';
+import { Brain } from './views/Brain';
+import { Diagnostics } from './views/Diagnostics';
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <div className="flex h-screen">
-          <Sidebar />
-          <main className="flex-1 overflow-y-auto p-8">
-            <Routes>
-              <Route path="/" element={<Navigate to="/overview" replace />} />
-              <Route path="/overview" element={<Overview />} />
-              <Route path="/sessions" element={<Sessions />} />
-              <Route path="/health" element={<Health />} />
-              <Route path="/coverage" element={<Coverage />} />
-              <Route path="/dependencies" element={<Dependencies />} />
-              <Route path="/brain" element={<BrainView />} />
-              <Route path="/diagnostics" element={<Diagnostics />} />
-            </Routes>
-          </main>
-        </div>
-      </BrowserRouter>
-    </QueryClientProvider>
+    <div className="flex min-h-screen bg-bg-primary">
+      <Sidebar />
+      <main className="ml-[200px] flex-1">
+        <Routes>
+          <Route path="/" element={<Overview />} />
+          <Route path="/sessions" element={<Sessions />} />
+          <Route path="/health" element={<Health />} />
+          <Route path="/coverage" element={<Coverage />} />
+          <Route path="/deps" element={<Dependencies />} />
+          <Route path="/brain" element={<Brain />} />
+          <Route path="/diagnostics" element={<Diagnostics />} />
+        </Routes>
+      </main>
+    </div>
   );
 }
 ```
 
-**Step 2: Full build check**
+**Step 2: TypeScript check**
 
-Run: `cd /Users/gunnar/Documents/Dev/nightshift/dashboard && npm run build`
-Expected: Build succeeds with no errors
+Run: `cd /Users/gunnar/Documents/Dev/awake/dashboard && npx tsc --noEmit`
+Expected: No TypeScript errors
 
-**Step 3: Run Python tests**
+**Step 3: Build**
 
-Run: `cd /Users/gunnar/Documents/Dev/nightshift && python -m pytest tests/ -v`
-Expected: All tests pass (existing + new server tests)
-
-**Step 4: Commit**
-
-```bash
-cd /Users/gunnar/Documents/Dev/nightshift
-git add dashboard/ src/
-git commit -m "feat: complete live dashboard with all 7 views"
-```
+Run: `cd /Users/gunnar/Documents/Dev/awake/dashboard && npm run build`
+Expected: `docs/dashboard/` created with `index.html` and assets
 
 ---
 
 ### Task 15: Integration Test — End to End
 
-**Step 1: Start the API server in background**
+**Step 1: Start API server in background**
 
 ```bash
-cd /Users/gunnar/Documents/Dev/nightshift
-python -c "from src.server import start_server; start_server(port=8710, open_browser=False)" &
+cd /Users/gunnar/Documents/Dev/awake
+python -m src.cli dashboard --no-browser &
 ```
 
-**Step 2: Verify API endpoints return JSON**
+**Step 2: Wait 2 seconds, then hit each endpoint**
 
 ```bash
-curl -s http://127.0.0.1:8710/api/stats | python -m json.tool
-curl -s http://127.0.0.1:8710/api/health | python -m json.tool
-curl -s http://127.0.0.1:8710/api/doctor | python -m json.tool
+sleep 2
+curl -s http://localhost:8710/api/health | python -m json.tool | head -20
+curl -s http://localhost:8710/api/stats | python -m json.tool | head -10
+curl -s http://localhost:8710/api/unknown
 ```
 
-Expected: Valid JSON from each endpoint
+Expected:
+- `/api/health` → JSON with `score` key
+- `/api/stats` → JSON with `nights_run` key
+- `/api/unknown` → `{"error": "Unknown route: /api/unknown"}` with 404
 
-**Step 3: Start Vite dev server and verify**
+**Step 3: Start Vite dev server**
 
 ```bash
-cd /Users/gunnar/Documents/Dev/nightshift/dashboard && npm run dev
+cd /Users/gunnar/Documents/Dev/awake/dashboard && npm run dev -- --port 5173
 ```
 
-Open `http://localhost:5173` — sidebar should render, data should populate from API.
+Expected: Vite starts, opens browser (or navigate to http://localhost:5173)
+Verify: All 7 nav items load without console errors
 
 **Step 4: Kill background server, commit any fixes**
 
@@ -1967,7 +1611,7 @@ kill %1
 **Step 5: Final commit**
 
 ```bash
-cd /Users/gunnar/Documents/Dev/nightshift
+cd /Users/gunnar/Documents/Dev/awake
 git add -A
 git commit -m "chore: integration verification complete"
 ```

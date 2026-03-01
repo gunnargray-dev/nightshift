@@ -1,4 +1,4 @@
-"""Self-stats engine for Nightshift.
+"""Self-stats engine for Awake.
 
 Analyzes git history (or GitHub API data) and computes repository statistics:
 - Total PRs merged
@@ -8,7 +8,7 @@ Analyzes git history (or GitHub API data) and computes repository statistics:
 - Active nights
 - Per-session stats
 
-These stats are used to update README.md and NIGHTSHIFT_LOG.md at the end
+These stats are used to update README.md and AWAKE_LOG.md at the end
 of each autonomous session.
 """
 
@@ -23,7 +23,7 @@ from typing import Optional
 
 @dataclass
 class RepoStats:
-    """Aggregate statistics for the Nightshift repository."""
+    """Aggregate statistics for the Awake repository."""
 
     nights_active: int = 0
     total_prs: int = 0
@@ -43,7 +43,7 @@ class RepoStats:
             ("Total commits", self.total_commits),
             ("Lines changed", self.lines_changed),
         ]
-        header = "| Metric | Count |\n|--------|-------|" 
+        header = "| Metric | Count |\n|--------|-------|"
         body = "\n".join(f"| {label} | {value} |" for label, value in rows)
         return f"{header}\n{body}"
 
@@ -104,27 +104,27 @@ def get_commit_messages(repo_path: Optional[Path] = None) -> list[str]:
     return [line.strip() for line in output.splitlines() if line.strip()]
 
 
-def count_nightshift_sessions(repo_path: Optional[Path] = None) -> int:
-    """Count unique Nightshift session numbers from commit messages.
+def count_awake_sessions(repo_path: Optional[Path] = None) -> int:
+    """Count unique Awake session numbers from commit messages.
 
-    Nightshift commits follow the format: [nightshift] <type>: <description>
-    Session entries in NIGHTSHIFT_LOG.md track session numbers.
+    Awake commits follow the format: [awake] <type>: <description>
+    Session entries in AWAKE_LOG.md track session numbers.
     """
     messages = get_commit_messages(repo_path)
-    nightshift_commits = [m for m in messages if m.startswith("[nightshift]")]
-    if not nightshift_commits:
+    awake_commits = [m for m in messages if m.startswith("[awake]")]
+    if not awake_commits:
         return 0
     # Each session produces multiple commits; deduplicate by Session: N in body
     output = _run_git(
-        ["log", "--pretty=format:%B", "--grep=\\[nightshift\\]"],
+        ["log", "--pretty=format:%B", "--grep=\\[awake\\]"],
         cwd=repo_path,
     )
     session_numbers = set(re.findall(r"Session:\s*(\d+)", output))
     return len(session_numbers)
 
 
-def parse_nightshift_log(log_path: Path) -> list[dict]:
-    """Parse NIGHTSHIFT_LOG.md and extract per-session metadata."""
+def parse_awake_log(log_path: Path) -> list[dict]:
+    """Parse AWAKE_LOG.md and extract per-session metadata."""
     if not log_path.exists():
         return []
 
@@ -173,17 +173,17 @@ def compute_stats(
 
     Args:
         repo_path: Path to the git repository root. Defaults to CWD.
-        log_path: Path to NIGHTSHIFT_LOG.md. Defaults to repo_path/NIGHTSHIFT_LOG.md.
+        log_path: Path to AWAKE_LOG.md. Defaults to repo_path/AWAKE_LOG.md.
         pr_count: Total PR count from GitHub API (since git doesn't track PRs locally).
 
     Returns:
         RepoStats populated with current values.
     """
     rp = repo_path or Path.cwd()
-    lp = log_path or (rp / "NIGHTSHIFT_LOG.md")
+    lp = log_path or (rp / "AWAKE_LOG.md")
 
-    sessions = parse_nightshift_log(lp)
-    nights = count_nightshift_sessions(rp)
+    sessions = parse_awake_log(lp)
+    nights = count_awake_sessions(rp)
     # Use session log count if git parsing returned zero (fresh clone with log)
     if nights == 0 and sessions:
         nights = len([s for s in sessions if s["session"] > 0])

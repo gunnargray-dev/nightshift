@@ -107,20 +107,20 @@ def test_enrich_snapshot_interpolates_middle():
 
 
 def test_parse_sessions_empty_log(tmp_path):
-    log = tmp_path / "NIGHTSHIFT_LOG.md"
-    log.write_text("# Nightshift Log\n\n")
+    log = tmp_path / "AWAKE_LOG.md"
+    log.write_text("# Awake Log\n\n")
     result = _parse_sessions_from_log(log)
     assert result == {}
 
 
 def test_parse_sessions_missing_log(tmp_path):
-    log = tmp_path / "NIGHTSHIFT_LOG.md"
+    log = tmp_path / "AWAKE_LOG.md"
     result = _parse_sessions_from_log(log)
     assert result == {}
 
 
 def test_parse_sessions_basic(tmp_path):
-    log = tmp_path / "NIGHTSHIFT_LOG.md"
+    log = tmp_path / "AWAKE_LOG.md"
     log.write_text("""
 ## Session 1 — January 10, 2025
 
@@ -149,7 +149,7 @@ def test_parse_sessions_basic(tmp_path):
 
 
 def test_parse_sessions_extracts_decisions(tmp_path):
-    log = tmp_path / "NIGHTSHIFT_LOG.md"
+    log = tmp_path / "AWAKE_LOG.md"
     log.write_text("""
 ## Session 5 — March 1, 2025
 
@@ -223,7 +223,7 @@ def test_compare_same_session(tmp_path):
 
 
 def test_compare_sessions_with_log(tmp_path):
-    log = tmp_path / "NIGHTSHIFT_LOG.md"
+    log = tmp_path / "AWAKE_LOG.md"
     log.write_text("""
 ## Session 1 — January 2025
 

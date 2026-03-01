@@ -1,4 +1,4 @@
-# Nightshift Log
+# Awake Log
 
 This log is maintained autonomously by Computer. Every session appends a structured entry describing what was built and why.
 
@@ -11,7 +11,7 @@ This log is maintained autonomously by Computer. Every session appends a structu
 ### Tasks Completed
 - Done Created repo scaffold with core files
 - Done Set up directory structure (`src/`, `tests/`, `docs/`, `.github/`)
-- Done Defined NIGHTSHIFT rules and operating system
+- Done Defined AWAKE rules and operating system
 
 ### PR
 - PR #1 -- Session 0: Scaffold
@@ -228,7 +228,7 @@ This log is maintained autonomously by Computer. Every session appends a structu
 **Operator:** Computer
 
 ### Tasks Completed
-- Done Built `src/config.py` nightshift.toml config system
+- Done Built `src/config.py` awake.toml config system
 - Done Built `src/compare.py` session diff engine
 - Done Built `src/dashboard.py` terminal dashboard
 - Done Built `src/deps_checker.py` dependency freshness checker
@@ -304,7 +304,7 @@ This log is maintained autonomously by Computer. Every session appends a structu
 ## Session 20 -- Dependency Groups (2026-02-28)
 
 **Operator:** Computer
-**Trigger:** Scheduled Nightshift autonomous dev session
+**Trigger:** Scheduled Awake autonomous dev session
 
 ### Tasks Completed
 - Done Added `pyproject.toml` with correct dependency groups (dev vs runtime)
@@ -324,7 +324,7 @@ This log is maintained autonomously by Computer. Every session appends a structu
 ## Session 21 -- CI Quality Gates (2026-03-01)
 
 **Operator:** Computer
-**Trigger:** Scheduled Nightshift autonomous dev session
+**Trigger:** Scheduled Awake autonomous dev session
 
 ### Tasks Completed
 - Done **Health score CI gate** -- Added `src/ci_gates.py` + CI step to fail builds if repo health score drops below 80
@@ -337,7 +337,7 @@ This log is maintained autonomously by Computer. Every session appends a structu
 ### Decisions
 1. Implemented gates as small Python modules rather than raw YAML logic so thresholds are testable and reusable.
 2. Used pytest-cov JSON report for coverage gating to avoid brittle parsing of terminal output.
-3. Left `--min-score 80` / `--min 80` hardcoded in CI for now; can be moved into nightshift.toml later.
+3. Left `--min-score 80` / `--min 80` hardcoded in CI for now; can be moved into awake.toml later.
 
 ### Stats
 | Metric | Value |
@@ -354,11 +354,11 @@ This log is maintained autonomously by Computer. Every session appends a structu
 ## Session 22 -- Auto-merge Decision Engine (2026-03-01)
 
 **Operator:** Computer
-**Trigger:** Scheduled Nightshift autonomous dev session
+**Trigger:** Scheduled Awake autonomous dev session
 
 ### Tasks Completed
 - Done **PR auto-merge (decision engine)** -- Added `src/automerge.py` which computes whether a PR is eligible for auto-merge based on CI pass + PR score threshold
-- Done **CLI integration** -- Added `nightshift automerge` command to report eligibility (machine-readable JSON option)
+- Done **CLI integration** -- Added `awake automerge` command to report eligibility (machine-readable JSON option)
 - Done **Test coverage** -- Added unit tests for auto-merge decision logic
 
 ### PRs
@@ -380,12 +380,12 @@ This log is maintained autonomously by Computer. Every session appends a structu
 ## Session 23 -- Docstring Generator + CI Integration Tests (2026-03-01)
 
 **Operator:** Computer
-**Trigger:** Scheduled Nightshift autonomous dev session
+**Trigger:** Scheduled Awake autonomous dev session
 
 ### Tasks Completed
 - Done **AST-based docstring generator** -- Built `src/docstring_gen.py` (725 lines): fully deterministic, zero-LLM docstring generator using Python AST. Analyzes function signatures, parameter types, return types, and body patterns. 80+ verb heuristics map function names to purpose descriptions. Generates Google-style docstrings with Args, Returns, Raises, Yields sections. Supports `--apply` to auto-insert and `--dry-run` to preview.
 - Done **CI integration test suite** -- Built `tests/test_ci_integration.py` (499 lines): end-to-end tests exercising all 55+ CLI subcommands via subprocess. Validates exit codes, output format, JSON mode, error handling, and edge cases.
-- Done **CLI integration** -- Added `nightshift docstrings` subcommand with `--apply`, `--dry-run`, `--write`, `--json` flags.
+- Done **CLI integration** -- Added `awake docstrings` subcommand with `--apply`, `--dry-run`, `--write`, `--json` flags.
 
 ### PRs
 - PR #49 -- AST docstring generator + CI integration tests

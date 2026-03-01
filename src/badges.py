@@ -1,4 +1,4 @@
-"""Automated README badge generator for Nightshift.
+"""Automated README badge generator for Awake.
 
 Generates shields.io badges for key repo metrics: test count, health score,
 session count, security grade, and maturity average.  Badges can be written
@@ -93,7 +93,7 @@ class BadgeBlock:
 
 
 def _get_session_count(repo_path: Path) -> int:
-    log = repo_path / "NIGHTSHIFT_LOG.md"
+    log = repo_path / "AWAKE_LOG.md"
     if not log.exists(): return 0
     text = log.read_text(errors="replace")
     return len(re.findall(r"^## Session \d+", text, re.MULTILINE))
@@ -146,7 +146,7 @@ def _get_maturity_avg(repo_path: Path) -> Optional[float]:
 
 
 def _get_pr_count(repo_path: Path) -> int:
-    log = repo_path / "NIGHTSHIFT_LOG.md"
+    log = repo_path / "AWAKE_LOG.md"
     if not log.exists(): return 0
     text = log.read_text(errors="replace")
     prs = re.findall(r"\[#(\d+)\]\(https://github\.com/[^)]+/pull/\d+\)", text)
@@ -161,7 +161,7 @@ def generate_badges(repo_path: Optional[Path] = None) -> BadgeBlock:
 
     sessions = _get_session_count(repo)
     badges.append(Badge(label="sessions", message=str(sessions), color="blueviolet",
-                        alt="Nightshift Sessions"))
+                        alt="Awake Sessions"))
 
     pr_count = _get_pr_count(repo)
     if pr_count:
@@ -240,7 +240,7 @@ def write_badges_to_readme(block: BadgeBlock, repo_path: Optional[Path] = None) 
 def save_badges_report(block: BadgeBlock, output_path: Path) -> None:
     """Write a Markdown badges report and JSON sidecar to *output_path*."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    md = "# Nightshift Badges\n\n"
+    md = "# Awake Badges\n\n"
     md += f"*Generated: {block.generated_at}*\n\n"
     md += "## Badge Preview\n\n" + block.to_markdown_block() + "\n\n"
     md += "## Raw Markdown\n\n```markdown\n" + block.to_markdown_block() + "```\n\n"

@@ -5,12 +5,12 @@
 ## Current Structure
 
 ```
-nightshift/
+awake/
 ├── README.md                  # Project overview + live stats
-├── NIGHTSHIFT_LOG.md          # Append-only session log
+├── AWAKE_LOG.md          # Append-only session log
 ├── ROADMAP.md                 # Computer's self-maintained roadmap
 ├── .github/
-│   └── NIGHTSHIFT_RULES.md    # Autonomous behavior constraints
+│   └── AWAKE_RULES.md    # Autonomous behavior constraints
 ├── src/                       # Source code
 │   ├── __init__.py
 │   └── stats.py               # Self-stats engine (planned)

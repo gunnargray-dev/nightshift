@@ -1,7 +1,7 @@
 """
 Tests for session_scorer.py — Session quality scoring.
 
-Session 18 — Nightshift
+Session 18 — Awake
 """
 
 import json

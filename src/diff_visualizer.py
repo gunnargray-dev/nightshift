@@ -1,4 +1,4 @@
-"""Session diff visualizer for Nightshift.
+"""Session diff visualizer for Awake.
 
 Generates a visual Markdown summary of a single overnight session's changes:
 - Files added / modified / deleted (with line-delta counts)
@@ -57,7 +57,7 @@ class CommitSummary:
 
 @dataclass
 class SessionDiff:
-    """All change data for one Nightshift session."""
+    """All change data for one Awake session."""
 
     session_number: int
     start_sha: str
@@ -127,7 +127,7 @@ def _run_git(args: list[str], cwd: Path) -> str:
 def _get_session_shas(repo_root: Path, session_number: int) -> tuple[str, str]:
     """Return (start_sha, end_sha) for a session's commits.
 
-    Convention: commits tagged ``[nightshift]`` and ``Session: N``.
+    Convention: commits tagged ``[awake]`` and ``Session: N``.
     Falls back to last-N-commits heuristic.
     """
     log = _run_git(
@@ -136,7 +136,7 @@ def _get_session_shas(repo_root: Path, session_number: int) -> tuple[str, str]:
     )
     session_commits = []
     for line in log.splitlines():
-        if "[nightshift]" in line or "nightshift" in line.lower():
+        if "[awake]" in line or "awake" in line.lower():
             session_commits.append(line.split()[0])
 
     if len(session_commits) >= 2:
@@ -221,7 +221,7 @@ def _get_commits_for_range(
             continue
         sha, timestamp, subject = parts
 
-        m = re.match(r"\[nightshift\]\s+(\w+):\s+(.+)", subject)
+        m = re.match(r"\[awake\]\s+(\w+):\s+(.+)", subject)
         if m:
             commit_type = m.group(1)
             description = m.group(2)
@@ -248,158 +248,110 @@ def _get_commits_for_range(
 def build_session_diff(
     repo_root: Path,
     session_number: int,
-    *,
-    start_sha: Optional[str] = None,
-    end_sha: Optional[str] = None,
+    start_sha: str = "",
+    end_sha: str = "HEAD",
 ) -> SessionDiff:
-    """Collect diff data for one session and return a :class:`SessionDiff`."""
-    if start_sha is None or end_sha is None:
+    """Build a SessionDiff for the given session."""
+    if not start_sha:
         start_sha, end_sha = _get_session_shas(repo_root, session_number)
 
-    # Numstat diff
     numstat_out = _run_git(
-        ["diff", "--numstat", f"{start_sha}..{end_sha}"],
+        ["diff", "--numstat", f"{start_sha}...{end_sha}"],
         cwd=repo_root,
     )
-    deltas = _parse_numstat(numstat_out)
-
-    # Name-status for add/delete/rename codes
     name_status_out = _run_git(
-        ["diff", "--name-status", f"{start_sha}..{end_sha}"],
+        ["diff", "--name-status", f"{start_sha}...{end_sha}"],
         cwd=repo_root,
     )
-    deltas = _parse_diff_name_status(name_status_out, deltas)
 
-    # Commits
+    file_deltas = _parse_numstat(numstat_out)
+    file_deltas = _parse_diff_name_status(name_status_out, file_deltas)
+
     commits = _get_commits_for_range(repo_root, start_sha, end_sha)
-
-    # Test counts (current snapshot only -- can't go back in time easily)
-    tests_after = _count_tests(repo_root)
-    tests_before = max(0, tests_after - 30)  # Reasonable baseline for session delta
+    tests_before = _count_tests(repo_root, start_sha)
+    tests_after = _count_tests(repo_root, end_sha)
 
     return SessionDiff(
         session_number=session_number,
         start_sha=start_sha,
         end_sha=end_sha,
         commits=commits,
-        file_deltas=deltas,
+        file_deltas=file_deltas,
         tests_before=tests_before,
         tests_after=tests_after,
     )
 
 
 # ---------------------------------------------------------------------------
-# Renderer
+# Markdown renderer
 # ---------------------------------------------------------------------------
 
 
-_BAR_CHARS = "\u2581\u2582\u2583\u2584\u2585\u2586\u2587\u2588"
-_COMMIT_EMOJI = {
-    "feat": "\u2728",
-    "fix": "\U0001f41b",
-    "refactor": "\u267b\ufe0f",
-    "test": "\U0001f9ea",
-    "ci": "\u2699\ufe0f",
-    "docs": "\U0001f4dd",
-    "meta": "\U0001f516",
-    "misc": "\u2022",
-}
-
-
-def _bar(value: int, max_value: int, width: int = 20) -> str:
-    """Render a Unicode block-bar for a value relative to max_value."""
-    if max_value == 0:
-        return "\u2591" * width
-    ratio = min(value / max_value, 1.0)
-    filled = round(ratio * width)
-    return "\u2588" * filled + "\u2591" * (width - filled)
-
-
 def render_session_diff(diff: SessionDiff) -> str:
-    """Render a :class:`SessionDiff` as a Markdown report string."""
+    """Render a SessionDiff as a Markdown string."""
     lines: list[str] = []
 
-    lines.append(f"# \U0001f319 Session {diff.session_number} \u2014 Diff Visualizer\n")
-    lines.append(
-        f"**Range:** `{diff.start_sha[:8]}` \u2192 `{diff.end_sha[:8] if diff.end_sha != 'HEAD' else 'HEAD'}`\n"
-    )
-
-    # Summary box
-    lines.append("## Summary\n")
-    lines.append("| Metric | Value |")
-    lines.append("|--------|-------|")
-    lines.append(f"| Commits | {len(diff.commits)} |")
-    lines.append(f"| Files changed | {len(diff.file_deltas)} |")
-    lines.append(f"| Files added | {len(diff.files_added)} |")
-    lines.append(f"| Files modified | {len(diff.files_modified)} |")
-    lines.append(f"| Files deleted | {len(diff.files_deleted)} |")
-    lines.append(f"| Lines added | +{diff.total_added} |")
-    lines.append(f"| Lines deleted | -{diff.total_deleted} |")
-    lines.append(f"| Net lines | {diff.total_added - diff.total_deleted:+d} |")
-    lines.append(f"| Tests before | {diff.tests_before} |")
-    lines.append(f"| Tests after | {diff.tests_after} |")
-    lines.append(f"| Tests delta | {diff.tests_delta:+d} |")
+    lines.append(f"# Awake Session {diff.session_number} Diff")
+    lines.append(f"Commit range: `{diff.start_sha[:8]}...{diff.end_sha[:8]}`")
     lines.append("")
 
-    # Biggest change callout
+    # --- File summary table ---
+    added_files = diff.files_added
+    modified_files = diff.files_modified
+    deleted_files = diff.files_deleted
+
+    lines.append("## File Changes")
+    lines.append("")
+    lines.append(
+        f"| Category | Count |\n"
+        f"|----------|-------|\n"
+        f"| Added    | {len(added_files)} |\n"
+        f"| Modified | {len(modified_files)} |\n"
+        f"| Deleted  | {len(deleted_files)} |"
+    )
+    lines.append("")
+
+    if diff.file_deltas:
+        lines.append("### Top Changed Files")
+        lines.append("")
+        lines.append("| File | +Lines | -Lines | Net |")
+        lines.append("|------|--------|--------|-----|")
+        top = sorted(diff.file_deltas, key=lambda f: f.churn, reverse=True)[:10]
+        for f in top:
+            lines.append(f"| `{f.path}` | +{f.added} | -{f.deleted} | {f.net:+d} |")
+        lines.append("")
+
+    # --- Commit timeline ---
+    if diff.commits:
+        lines.append("## Commit Timeline")
+        lines.append("")
+        lines.append("| SHA | Type | Description | Time |")
+        lines.append("|-----|------|-------------|------|")
+        for c in diff.commits:
+            lines.append(
+                f"| `{c.sha}` | `{c.commit_type}` | {c.description} | {c.timestamp} |"
+            )
+        lines.append("")
+
+    # --- Test delta ---
+    lines.append("## Test Coverage")
+    lines.append("")
+    lines.append(
+        f"| Metric | Value |\n"
+        f"|--------|-------|\n"
+        f"| Tests before | {diff.tests_before} |\n"
+        f"| Tests after  | {diff.tests_after} |\n"
+        f"| Delta        | {diff.tests_delta:+d} |"
+    )
+    lines.append("")
+
+    # --- Biggest change callout ---
     if diff.biggest_change:
         bc = diff.biggest_change
-        lines.append(f"> **Biggest change:** `{bc.path}` (+{bc.added} / -{bc.deleted} lines)\n")
-
-    # Commit timeline
-    if diff.commits:
-        lines.append("## Commit Timeline\n")
-        for c in diff.commits:
-            emoji = _COMMIT_EMOJI.get(c.commit_type, "\u2022")
-            lines.append(f"- `{c.sha}` {emoji} **{c.commit_type}**: {c.description}  _{c.timestamp}_")
-        lines.append("")
-
-    # File change heatmap
-    if diff.file_deltas:
-        lines.append("## Change Heatmap\n")
-        lines.append("```")
-        max_churn = max(f.churn for f in diff.file_deltas) if diff.file_deltas else 1
-        status_icons = {"A": "+", "M": "~", "D": "-", "R": "\u2192"}
-        for fd in sorted(diff.file_deltas, key=lambda f: f.churn, reverse=True)[:20]:
-            bar = _bar(fd.churn, max_churn, width=24)
-            icon = status_icons.get(fd.status, "~")
-            name = fd.path[-45:] if len(fd.path) > 45 else fd.path
-            lines.append(f"{icon} {name:<46} {bar} +{fd.added}/-{fd.deleted}")
-        lines.append("```")
-        lines.append("")
-
-    # Per-type breakdown
-    type_counts: dict[str, int] = {}
-    for c in diff.commits:
-        type_counts[c.commit_type] = type_counts.get(c.commit_type, 0) + 1
-    if type_counts:
-        lines.append("## Commit Breakdown by Type\n")
-        for ctype, count in sorted(type_counts.items(), key=lambda x: -x[1]):
-            emoji = _COMMIT_EMOJI.get(ctype, "\u2022")
-            lines.append(f"- {emoji} `{ctype}`: {count}")
+        lines.append(
+            f"> **Biggest change:** `{bc.path}` "
+            f"(+{bc.added} / -{bc.deleted}, net {bc.net:+d})"
+        )
         lines.append("")
 
     return "\n".join(lines)
-
-
-def write_session_diff(
-    repo_root: Path,
-    session_number: int,
-    *,
-    output_path: Optional[Path] = None,
-    start_sha: Optional[str] = None,
-    end_sha: Optional[str] = None,
-) -> str:
-    """Build, render, and optionally write a session diff report.
-
-    Returns:
-        The rendered Markdown string.
-    """
-    diff = build_session_diff(
-        repo_root, session_number, start_sha=start_sha, end_sha=end_sha
-    )
-    content = render_session_diff(diff)
-    if output_path is not None:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(content, encoding="utf-8")
-    return content

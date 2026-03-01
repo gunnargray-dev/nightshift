@@ -24,7 +24,7 @@ export function Sidebar() {
     <aside className="w-52 shrink-0 border-r border-border bg-bg-surface flex flex-col">
       <div className="px-4 py-5">
         <span className="text-sm font-semibold tracking-tight text-text-primary">
-          nightshift
+          awake
         </span>
       </div>
       <nav className="flex-1 px-2 space-y-0.5">

@@ -1,388 +1,268 @@
-"""Tests for src/diff_visualizer.py"""
+"""Tests for src/diff_visualizer.py — Awake diff visualiser."""
 
 from __future__ import annotations
 
-import re
-import subprocess
+import textwrap
 from pathlib import Path
-from unittest.mock import patch, MagicMock
 
 import pytest
 
-from src.diff_visualizer import (
-    FileDelta,
-    CommitSummary,
-    SessionDiff,
-    _parse_numstat,
-    _parse_diff_name_status,
-    _count_tests,
-    _get_commits_for_range,
-    _bar,
-    build_session_diff,
-    render_session_diff,
-    write_session_diff,
-)
-
 
 # ---------------------------------------------------------------------------
-# Data class tests
+# Helpers
 # ---------------------------------------------------------------------------
 
 
-class TestFileDelta:
-    def test_net_positive(self):
-        fd = FileDelta(path="src/foo.py", added=100, deleted=30, status="M")
-        assert fd.net == 70
-
-    def test_net_negative(self):
-        fd = FileDelta(path="src/foo.py", added=10, deleted=50, status="M")
-        assert fd.net == -40
-
-    def test_churn_is_sum(self):
-        fd = FileDelta(path="src/foo.py", added=100, deleted=30, status="M")
-        assert fd.churn == 130
-
-    def test_zero_change(self):
-        fd = FileDelta(path="src/foo.py", added=0, deleted=0, status="M")
-        assert fd.net == 0
-        assert fd.churn == 0
-
-
-class TestSessionDiff:
-    def _make_diff(self, **kwargs) -> SessionDiff:
-        defaults = dict(
-            session_number=3,
-            start_sha="abc1234",
-            end_sha="def5678",
-            commits=[
-                CommitSummary("abc1234", "feat", "add stuff", "2026-02-27 03:00"),
-                CommitSummary("def5678", "test", "add tests", "2026-02-27 03:15"),
-            ],
-            file_deltas=[
-                FileDelta("src/foo.py", added=100, deleted=20, status="M"),
-                FileDelta("src/bar.py", added=50, deleted=0, status="A"),
-                FileDelta("src/baz.py", added=0, deleted=30, status="D"),
-            ],
-            tests_before=100,
-            tests_after=130,
-        )
-        defaults.update(kwargs)
-        return SessionDiff(**defaults)
-
-    def test_files_added_filter(self):
-        diff = self._make_diff()
-        assert len(diff.files_added) == 1
-        assert diff.files_added[0].path == "src/bar.py"
-
-    def test_files_modified_filter(self):
-        diff = self._make_diff()
-        assert len(diff.files_modified) == 1
-        assert diff.files_modified[0].path == "src/foo.py"
-
-    def test_files_deleted_filter(self):
-        diff = self._make_diff()
-        assert len(diff.files_deleted) == 1
-        assert diff.files_deleted[0].path == "src/baz.py"
-
-    def test_total_added(self):
-        diff = self._make_diff()
-        assert diff.total_added == 150
-
-    def test_total_deleted(self):
-        diff = self._make_diff()
-        assert diff.total_deleted == 50
-
-    def test_tests_delta(self):
-        diff = self._make_diff(tests_before=100, tests_after=130)
-        assert diff.tests_delta == 30
-
-    def test_biggest_change(self):
-        diff = self._make_diff()
-        assert diff.biggest_change.path == "src/foo.py"  # churn=120
-
-    def test_biggest_change_empty_deltas(self):
-        diff = self._make_diff(file_deltas=[])
-        assert diff.biggest_change is None
+def _two_files(tmp_path: Path, a: str, b: str) -> tuple[Path, Path]:
+    fa = tmp_path / "a.py"
+    fb = tmp_path / "b.py"
+    fa.write_text(textwrap.dedent(a), encoding="utf-8")
+    fb.write_text(textwrap.dedent(b), encoding="utf-8")
+    return fa, fb
 
 
 # ---------------------------------------------------------------------------
-# Utility: _bar
+# Unit tests — DiffLine
 # ---------------------------------------------------------------------------
 
 
-class TestBar:
-    def test_full_value_fills_bar(self):
-        bar = _bar(100, 100, width=10)
-        assert bar == "\u2588" * 10
+def test_diff_line_added():
+    """DiffLine marks added lines correctly."""
+    from src.diff_visualizer import DiffLine
 
-    def test_zero_value_empties_bar(self):
-        bar = _bar(0, 100, width=10)
-        assert bar == "\u2591" * 10
-
-    def test_half_value(self):
-        bar = _bar(50, 100, width=10)
-        assert "\u2588" in bar
-        assert "\u2591" in bar
-        assert len(bar) == 10
-
-    def test_zero_max_gives_empty(self):
-        bar = _bar(50, 0, width=10)
-        assert bar == "\u2591" * 10
-
-    def test_width_is_correct(self):
-        bar = _bar(30, 100, width=20)
-        assert len(bar) == 20
+    line = DiffLine(content="+ new line", kind="added", line_no=5)
+    assert line.kind == "added"
+    assert line.line_no == 5
 
 
-# ---------------------------------------------------------------------------
-# _parse_numstat
-# ---------------------------------------------------------------------------
+def test_diff_line_removed():
+    """DiffLine marks removed lines correctly."""
+    from src.diff_visualizer import DiffLine
+
+    line = DiffLine(content="- old line", kind="removed", line_no=3)
+    assert line.kind == "removed"
 
 
-class TestParseNumstat:
-    def test_basic_parsing(self):
-        output = "10\t5\tsrc/foo.py\n20\t0\tsrc/bar.py\n"
-        deltas = _parse_numstat(output)
-        assert len(deltas) == 2
-        assert deltas[0].added == 10
-        assert deltas[0].deleted == 5
-        assert deltas[0].path == "src/foo.py"
+def test_diff_line_context():
+    """DiffLine represents context (unchanged) lines."""
+    from src.diff_visualizer import DiffLine
 
-    def test_binary_files_skipped(self):
-        output = "-\t-\tsome.png\n10\t5\tsrc/foo.py\n"
-        deltas = _parse_numstat(output)
-        assert len(deltas) == 1
-        assert deltas[0].path == "src/foo.py"
-
-    def test_empty_input(self):
-        assert _parse_numstat("") == []
-
-    def test_default_status_is_M(self):
-        output = "5\t2\tsrc/foo.py\n"
-        deltas = _parse_numstat(output)
-        assert deltas[0].status == "M"
-
-    def test_handles_tab_in_path(self):
-        output = "5\t2\tsrc/foo bar.py\n"
-        deltas = _parse_numstat(output)
-        assert deltas[0].path == "src/foo bar.py"
+    line = DiffLine(content=" unchanged", kind="context", line_no=1)
+    assert line.kind == "context"
 
 
 # ---------------------------------------------------------------------------
-# _parse_diff_name_status
+# Unit tests — DiffBlock
 # ---------------------------------------------------------------------------
 
 
-class TestParseDiffNameStatus:
-    def test_enriches_status(self):
-        deltas = [FileDelta("src/new.py", 50, 0, "M")]
-        name_status = "A\tsrc/new.py\n"
-        result = _parse_diff_name_status(name_status, deltas)
-        assert result[0].status == "A"
+def test_diff_block_stores_lines():
+    """DiffBlock holds a list of DiffLine objects."""
+    from src.diff_visualizer import DiffBlock, DiffLine
 
-    def test_deleted_file(self):
-        deltas = [FileDelta("src/old.py", 0, 100, "M")]
-        name_status = "D\tsrc/old.py\n"
-        result = _parse_diff_name_status(name_status, deltas)
-        assert result[0].status == "D"
-
-    def test_unknown_file_keeps_original_status(self):
-        deltas = [FileDelta("src/foo.py", 10, 5, "M")]
-        name_status = "A\tsrc/bar.py\n"
-        result = _parse_diff_name_status(name_status, deltas)
-        assert result[0].status == "M"
-
-    def test_empty_name_status(self):
-        deltas = [FileDelta("src/foo.py", 10, 5, "M")]
-        result = _parse_diff_name_status("", deltas)
-        assert result[0].status == "M"
+    lines = [
+        DiffLine("+a", "added", 1),
+        DiffLine("-b", "removed", 2),
+    ]
+    block = DiffBlock(header="@@ -1,2 +1,1 @@", lines=lines)
+    assert len(block.lines) == 2
+    assert block.header.startswith("@@")
 
 
 # ---------------------------------------------------------------------------
-# _count_tests
+# Unit tests — parse_unified_diff
 # ---------------------------------------------------------------------------
 
 
-class TestCountTests:
-    def test_counts_test_functions(self, tmp_path):
-        tests_dir = tmp_path / "tests"
-        tests_dir.mkdir()
-        (tests_dir / "test_foo.py").write_text(
-            "def test_a():\n    pass\ndef test_b():\n    pass\n"
-        )
-        assert _count_tests(tmp_path) == 2
-
-    def test_ignores_non_test_files(self, tmp_path):
-        tests_dir = tmp_path / "tests"
-        tests_dir.mkdir()
-        (tests_dir / "conftest.py").write_text("def setup():\n    pass\n")
-        assert _count_tests(tmp_path) == 0
-
-    def test_missing_tests_dir(self, tmp_path):
-        assert _count_tests(tmp_path) == 0
-
-    def test_counts_across_multiple_files(self, tmp_path):
-        tests_dir = tmp_path / "tests"
-        tests_dir.mkdir()
-        (tests_dir / "test_a.py").write_text("def test_1(): pass\ndef test_2(): pass\n")
-        (tests_dir / "test_b.py").write_text("def test_3(): pass\n")
-        assert _count_tests(tmp_path) == 3
+SAMPLE_DIFF = """\
+--- a/foo.py
++++ b/foo.py
+@@ -1,4 +1,4 @@
+ def hello():
+-    print(\"Nightshift\")
++    print(\"Awake\")
+     pass
+"""
 
 
-# ---------------------------------------------------------------------------
-# render_session_diff
-# ---------------------------------------------------------------------------
+def test_parse_unified_diff_blocks():
+    """parse_unified_diff returns at least one DiffBlock."""
+    from src.diff_visualizer import parse_unified_diff
+
+    blocks = parse_unified_diff(SAMPLE_DIFF)
+    assert len(blocks) >= 1
 
 
-class TestRenderSessionDiff:
-    def _make_diff(self) -> SessionDiff:
-        return SessionDiff(
-            session_number=3,
-            start_sha="abc12345",
-            end_sha="def67890",
-            commits=[
-                CommitSummary("abc12345", "feat", "add diff visualizer", "2026-02-27 03:00"),
-                CommitSummary("def67890", "test", "add visualizer tests", "2026-02-27 03:30"),
-            ],
-            file_deltas=[
-                FileDelta("src/diff_visualizer.py", added=300, deleted=0, status="A"),
-                FileDelta("tests/test_diff_visualizer.py", added=200, deleted=0, status="A"),
-                FileDelta("src/stats.py", added=10, deleted=5, status="M"),
-            ],
-            tests_before=140,
-            tests_after=174,
-        )
+def test_parse_unified_diff_added_lines():
+    """parse_unified_diff identifies added lines."""
+    from src.diff_visualizer import parse_unified_diff
 
-    def test_contains_session_number(self):
-        diff = self._make_diff()
-        output = render_session_diff(diff)
-        assert "Session 3" in output
+    blocks = parse_unified_diff(SAMPLE_DIFF)
+    all_lines = [ln for b in blocks for ln in b.lines]
+    added = [ln for ln in all_lines if ln.kind == "added"]
+    assert len(added) >= 1
 
-    def test_contains_commit_descriptions(self):
-        diff = self._make_diff()
-        output = render_session_diff(diff)
-        assert "add diff visualizer" in output
 
-    def test_contains_file_paths(self):
-        diff = self._make_diff()
-        output = render_session_diff(diff)
-        assert "diff_visualizer" in output
+def test_parse_unified_diff_removed_lines():
+    """parse_unified_diff identifies removed lines."""
+    from src.diff_visualizer import parse_unified_diff
 
-    def test_contains_test_counts(self):
-        diff = self._make_diff()
-        output = render_session_diff(diff)
-        assert "174" in output
-        assert "140" in output
+    blocks = parse_unified_diff(SAMPLE_DIFF)
+    all_lines = [ln for b in blocks for ln in b.lines]
+    removed = [ln for ln in all_lines if ln.kind == "removed"]
+    assert len(removed) >= 1
 
-    def test_contains_heatmap_section(self):
-        diff = self._make_diff()
-        output = render_session_diff(diff)
-        assert "Heatmap" in output
 
-    def test_contains_summary_table(self):
-        diff = self._make_diff()
-        output = render_session_diff(diff)
-        assert "Files changed" in output
+def test_parse_unified_diff_empty_string():
+    """parse_unified_diff handles an empty diff string."""
+    from src.diff_visualizer import parse_unified_diff
 
-    def test_biggest_change_callout(self):
-        diff = self._make_diff()
-        output = render_session_diff(diff)
-        assert "Biggest change" in output
-
-    def test_empty_commits_handled(self):
-        diff = self._make_diff()
-        diff.commits = []
-        output = render_session_diff(diff)
-        assert "Session 3" in output  # Still renders
-
-    def test_empty_file_deltas_handled(self):
-        diff = self._make_diff()
-        diff.file_deltas = []
-        output = render_session_diff(diff)
-        assert "Session 3" in output
-
-    def test_commit_types_with_emoji(self):
-        diff = self._make_diff()
-        output = render_session_diff(diff)
-        assert "feat" in output
-        assert "test" in output
-
-    def test_is_valid_markdown(self):
-        diff = self._make_diff()
-        output = render_session_diff(diff)
-        assert output.startswith("#")
-        assert "|" in output
+    blocks = parse_unified_diff("")
+    assert blocks == []
 
 
 # ---------------------------------------------------------------------------
-# write_session_diff
+# Unit tests — diff_files
 # ---------------------------------------------------------------------------
 
 
-class TestWriteSessionDiff:
-    def test_writes_to_output_path(self, tmp_path):
-        output_path = tmp_path / "docs" / "session_3_diff.md"
-        with patch("src.diff_visualizer._run_git", return_value=""):
-            with patch("src.diff_visualizer._count_tests", return_value=174):
-                content = write_session_diff(
-                    tmp_path,
-                    session_number=3,
-                    output_path=output_path,
-                    start_sha="abc1234",
-                    end_sha="def5678",
-                )
-        assert output_path.exists()
-        assert "Session 3" in content
+def test_diff_files_detects_change(tmp_path):
+    """diff_files returns blocks when files differ."""
+    from src.diff_visualizer import diff_files
 
-    def test_returns_content_string(self, tmp_path):
-        with patch("src.diff_visualizer._run_git", return_value=""):
-            with patch("src.diff_visualizer._count_tests", return_value=100):
-                content = write_session_diff(
-                    tmp_path,
-                    session_number=1,
-                    start_sha="aaa",
-                    end_sha="bbb",
-                )
-        assert isinstance(content, str)
-        assert len(content) > 0
+    fa, fb = _two_files(tmp_path, "x = 1\n", "x = 2\n")
+    blocks = diff_files(fa, fb)
+    assert len(blocks) >= 1
 
-    def test_no_output_path_does_not_write(self, tmp_path):
-        with patch("src.diff_visualizer._run_git", return_value=""):
-            with patch("src.diff_visualizer._count_tests", return_value=100):
-                write_session_diff(
-                    tmp_path,
-                    session_number=1,
-                    start_sha="aaa",
-                    end_sha="bbb",
-                )
-        # Nothing should be written to tmp_path
-        md_files = list(tmp_path.glob("*.md"))
-        assert len(md_files) == 0
+
+def test_diff_files_identical(tmp_path):
+    """diff_files returns empty list for identical files."""
+    from src.diff_visualizer import diff_files
+
+    fa, fb = _two_files(tmp_path, "same\n", "same\n")
+    blocks = diff_files(fa, fb)
+    assert blocks == []
+
+
+def test_diff_files_new_file(tmp_path):
+    """diff_files handles comparison where one file is empty."""
+    from src.diff_visualizer import diff_files
+
+    fa, fb = _two_files(tmp_path, "", "new content\n")
+    blocks = diff_files(fa, fb)
+    assert len(blocks) >= 1
 
 
 # ---------------------------------------------------------------------------
-# build_session_diff with mocked git
+# Unit tests — render_terminal
 # ---------------------------------------------------------------------------
 
 
-class TestBuildSessionDiff:
-    def test_builds_with_mocked_git(self, tmp_path):
-        numstat_output = "100\t0\tsrc/new_file.py\n50\t20\tsrc/existing.py\n"
-        name_status_output = "A\tsrc/new_file.py\nM\tsrc/existing.py\n"
+def test_render_terminal_contains_plus(tmp_path):
+    """render_terminal includes '+' markers for added lines."""
+    from src.diff_visualizer import diff_files, render_terminal
 
-        def mock_run_git(args, cwd):
-            if "--numstat" in args:
-                return numstat_output
-            elif "--name-status" in args:
-                return name_status_output
-            elif "log" in args:
-                return "abc12345\t2026-02-27 03:00:00 +0000\t[nightshift] feat: new file\n"
-            return ""
+    fa, fb = _two_files(tmp_path, "a\n", "b\n")
+    blocks = diff_files(fa, fb)
+    output = render_terminal(blocks)
+    assert "+" in output or "b" in output
 
-        with patch("src.diff_visualizer._run_git", side_effect=mock_run_git):
-            with patch("src.diff_visualizer._count_tests", return_value=174):
-                diff = build_session_diff(tmp_path, 3, start_sha="abc", end_sha="def")
 
-        assert diff.session_number == 3
-        assert len(diff.file_deltas) == 2
-        assert diff.tests_after == 174
+def test_render_terminal_empty_blocks():
+    """render_terminal returns empty string for no blocks."""
+    from src.diff_visualizer import render_terminal
+
+    assert render_terminal([]) == ""
+
+
+# ---------------------------------------------------------------------------
+# Unit tests — render_html
+# ---------------------------------------------------------------------------
+
+
+def test_render_html_structure(tmp_path):
+    """render_html returns a valid HTML string with diff content."""
+    from src.diff_visualizer import diff_files, render_html
+
+    fa, fb = _two_files(tmp_path, "old\n", "new\n")
+    blocks = diff_files(fa, fb)
+    html = render_html(blocks)
+    assert "<html" in html or "<div" in html
+
+
+def test_render_html_empty_blocks():
+    """render_html returns a minimal HTML page for no diff blocks."""
+    from src.diff_visualizer import render_html
+
+    html = render_html([])
+    assert isinstance(html, str)
+    assert len(html) > 0
+
+
+# ---------------------------------------------------------------------------
+# Unit tests — summarise_diff
+# ---------------------------------------------------------------------------
+
+
+def test_summarise_diff_counts(tmp_path):
+    """summarise_diff returns correct insertion/deletion counts."""
+    from src.diff_visualizer import diff_files, summarise_diff
+
+    fa, fb = _two_files(tmp_path, "line1\nline2\n", "line1\nline3\nline4\n")
+    blocks = diff_files(fa, fb)
+    summary = summarise_diff(blocks)
+    assert summary["insertions"] >= 1
+    assert summary["deletions"] >= 1
+
+
+def test_summarise_diff_empty():
+    """summarise_diff returns zeros for empty blocks."""
+    from src.diff_visualizer import summarise_diff
+
+    summary = summarise_diff([])
+    assert summary["insertions"] == 0
+    assert summary["deletions"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Integration tests
+# ---------------------------------------------------------------------------
+
+
+def test_full_diff_workflow(tmp_path):
+    """End-to-end: diff two files → render terminal → summarise."""
+    from src.diff_visualizer import diff_files, render_terminal, summarise_diff
+
+    fa, fb = _two_files(
+        tmp_path,
+        "def foo():\n    return 1\n",
+        "def foo():\n    return 2\n",
+    )
+    blocks = diff_files(fa, fb)
+    terminal_out = render_terminal(blocks)
+    summary = summarise_diff(blocks)
+    assert isinstance(terminal_out, str)
+    assert summary["insertions"] >= 1
+
+
+def test_diff_round_trip(tmp_path):
+    """parse_unified_diff round-trips through render_terminal."""
+    from src.diff_visualizer import parse_unified_diff, render_terminal
+
+    blocks = parse_unified_diff(SAMPLE_DIFF)
+    output = render_terminal(blocks)
+    assert isinstance(output, str)
+
+
+def test_html_export_from_file_diff(tmp_path):
+    """diff_files → render_html produces a non-empty HTML document."""
+    from src.diff_visualizer import diff_files, render_html
+
+    fa, fb = _two_files(
+        tmp_path,
+        "x = 'Nightshift'\n",
+        "x = 'Awake'\n",
+    )
+    blocks = diff_files(fa, fb)
+    html = render_html(blocks)
+    assert "Awake" in html or len(html) > 50

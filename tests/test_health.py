@@ -1,4 +1,4 @@
-"""Tests for the Nightshift code health monitor (src/health.py)."""
+"""Tests for the Awake code health monitor (src/health.py)."""
 
 from __future__ import annotations
 

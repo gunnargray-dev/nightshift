@@ -47,13 +47,13 @@ def healthy_repo(tmp_path) -> Path:
     (ci / "ci.yml").write_text(
         "jobs:\n  test:\n    strategy:\n      matrix:\n        python-version: ['3.10', '3.11', '3.12']\n"
     )
-    (tmp_path / "README.md").write_text("# Nightshift\n\nA self-improving system.\n" * 10)
+    (tmp_path / "README.md").write_text("# Awake\n\nA self-improving system.\n" * 10)
     (tmp_path / "ROADMAP.md").write_text("## Backlog\n\n- [ ] Item 1\n- [ ] Item 2\n")
-    (tmp_path / "NIGHTSHIFT_LOG.md").write_text(
-        "# Nightshift Log\n\n## Session 1 — Feb 2026\n**Operator:** Computer\n"
+    (tmp_path / "AWAKE_LOG.md").write_text(
+        "# Awake Log\n\n## Session 1 — Feb 2026\n**Operator:** Computer\n"
     )
     (tmp_path / "pyproject.toml").write_text(
-        "[project]\nname = 'nightshift'\nrequires-python = '>=3.10'\n"
+        "[project]\nname = 'awake'\nrequires-python = '>=3.10'\n"
     )
     return tmp_path
 
@@ -233,7 +233,7 @@ class TestRenderReport:
     def test_has_title(self, healthy_repo):
         report = diagnose(healthy_repo)
         result = render_report(report)
-        assert "# Nightshift Doctor Report" in result
+        assert "# Awake Doctor Report" in result
 
     def test_has_grade(self, healthy_repo):
         report = diagnose(healthy_repo)
@@ -262,7 +262,7 @@ class TestSaveReport:
         out = tmp_path / "doctor.md"
         save_report(report, out)
         assert out.exists()
-        assert "Nightshift Doctor" in out.read_text()
+        assert "Awake Doctor" in out.read_text()
 
     def test_creates_json_sidecar(self, healthy_repo, tmp_path):
         report = diagnose(healthy_repo)

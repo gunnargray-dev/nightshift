@@ -1,4 +1,4 @@
-"""Tests for src/server.py — the Nightshift dashboard API server.
+"""Tests for src/server.py — the Awake dashboard API server.
 
 Extends original tests with coverage for all Session 15 endpoints.
 """
@@ -16,7 +16,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.server import NightshiftHandler, ROUTE_MAP, PARAMETERIZED_ROUTES
+from src.server import AwakeHandler, ROUTE_MAP, PARAMETERIZED_ROUTES
 
 
 class MockRequest:
@@ -27,8 +27,8 @@ class MockRequest:
         return BytesIO()
 
 
-def make_handler(path: str) -> NightshiftHandler:
-    handler = NightshiftHandler.__new__(NightshiftHandler)
+def make_handler(path: str) -> AwakeHandler:
+    handler = AwakeHandler.__new__(AwakeHandler)
     handler.path = path
     handler.headers = {}
     handler.command = "GET"

@@ -14,7 +14,7 @@ from unittest.mock import patch, MagicMock
 # ---------------------------------------------------------------------------
 
 def _run(args: list[str]) -> tuple[int, str]:
-    """Run nightshift CLI and capture stdout."""
+    """Run awake CLI and capture stdout."""
     import io
     from src.cli import build_parser, main
 
@@ -45,7 +45,7 @@ def _extract_json(output: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# nightshift audit
+# awake audit
 # ---------------------------------------------------------------------------
 
 class TestCLIAudit:
@@ -71,7 +71,7 @@ class TestCLIAudit:
     def test_audit_markdown_output(self, tmp_path):
         mock_report = MagicMock()
         mock_report.to_dict.return_value = {}
-        mock_report.to_markdown.return_value = "# Nightshift Comprehensive Audit\n"
+        mock_report.to_markdown.return_value = "# Awake Comprehensive Audit\n"
         mock_report.overall_grade = "B"
         mock_report.overall_score = 78.5
         mock_report.overall_status = "healthy"
@@ -94,7 +94,7 @@ class TestCLIAudit:
 
 
 # ---------------------------------------------------------------------------
-# nightshift semver
+# awake semver
 # ---------------------------------------------------------------------------
 
 class TestCLISemver:
@@ -139,13 +139,13 @@ class TestCLISemver:
 
 
 # ---------------------------------------------------------------------------
-# nightshift init
+# awake init
 # ---------------------------------------------------------------------------
 
 class TestCLIInit:
     def test_init_creates_files(self, tmp_path):
         mock_result = MagicMock()
-        mock_result.messages = ["Created nightshift.toml", "Created CHANGELOG.md"]
+        mock_result.messages = ["Created awake.toml", "Created CHANGELOG.md"]
         mock_result.warnings = []
 
         with patch("src.init_cmd.init_project", create=True, return_value=mock_result) as mock_init:
@@ -156,7 +156,7 @@ class TestCLIInit:
 
     def test_init_force_flag(self, tmp_path):
         mock_result = MagicMock()
-        mock_result.messages = ["Created nightshift.toml"]
+        mock_result.messages = ["Created awake.toml"]
         mock_result.warnings = []
 
         with patch("src.init_cmd.init_project", create=True, return_value=mock_result) as mock_init:
@@ -178,7 +178,7 @@ class TestCLIInit:
 
 
 # ---------------------------------------------------------------------------
-# nightshift predict
+# awake predict
 # ---------------------------------------------------------------------------
 
 class TestCLIPredict:

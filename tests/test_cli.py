@@ -1,4 +1,4 @@
-"""Tests for src/cli.py — the unified Nightshift CLI entry point."""
+"""Tests for src/cli.py — the unified Awake CLI entry point."""
 
 from __future__ import annotations
 
@@ -145,7 +145,7 @@ class TestHelperFunctions:
         _print_header("Test Title")
         out = capsys.readouterr().out
         assert "Test Title" in out
-        assert "Nightshift" in out
+        assert "Awake" in out
 
     def test_print_ok(self, capsys):
         _print_ok("all good")
@@ -169,7 +169,7 @@ class TestHelperFunctions:
 
 
 class TestMainHealth:
-    """Integration tests for `nightshift health`."""
+    """Integration tests for `awake health`."""
 
     def test_health_calls_generate_report(self, tmp_path):
         mock_report = MagicMock()
@@ -198,7 +198,7 @@ class TestMainHealth:
 
 
 class TestMainStats:
-    """Integration tests for `nightshift stats`."""
+    """Integration tests for `awake stats`."""
 
     def test_stats_renders_table(self, tmp_path, capsys):
         mock_stats = MagicMock()
@@ -228,7 +228,7 @@ class TestMainStats:
 
 
 class TestMainChangelog:
-    """Integration tests for `nightshift changelog`."""
+    """Integration tests for `awake changelog`."""
 
     def test_changelog_prints_markdown(self, tmp_path, capsys):
         mock_cl = MagicMock()
@@ -251,7 +251,7 @@ class TestMainChangelog:
 
 
 class TestMainCoverage:
-    """Integration tests for `nightshift coverage`."""
+    """Integration tests for `awake coverage`."""
 
     def test_coverage_missing_history_returns_1(self, tmp_path):
         result = main(["coverage", "--repo", str(tmp_path)])
@@ -278,7 +278,7 @@ class TestMainCoverage:
 
 
 class TestMainArch:
-    """Integration tests for `nightshift arch`."""
+    """Integration tests for `awake arch`."""
 
     def test_arch_prints_doc(self, tmp_path, capsys):
         with patch("src.arch_generator.generate_architecture_doc", return_value="# Architecture\n"):
@@ -297,7 +297,7 @@ class TestMainArch:
 
 
 class TestMainRefactor:
-    """Integration tests for `nightshift refactor`."""
+    """Integration tests for `awake refactor`."""
 
     def test_refactor_prints_report(self, tmp_path, capsys):
         mock_engine = MagicMock()
@@ -323,7 +323,7 @@ class TestMainRefactor:
 
 
 class TestMainRun:
-    """Integration tests for `nightshift run` (full pipeline)."""
+    """Integration tests for `awake run` (full pipeline)."""
 
     def test_run_succeeds_with_mocks(self, tmp_path):
         mock_report = MagicMock()
@@ -382,7 +382,7 @@ class TestEdgeCases:
 
 
 class TestTimelineSubcommand:
-    """Tests for nightshift timeline."""
+    """Tests for awake timeline."""
 
     def test_timeline_parses(self):
         parser = build_parser()
@@ -400,8 +400,8 @@ class TestTimelineSubcommand:
         assert args.write is True
 
     def test_timeline_renders_output(self, tmp_path, capsys):
-        (tmp_path / "NIGHTSHIFT_LOG.md").write_text(
-            "# Nightshift Log\n\n## Session 1 — February 27, 2026\n\n"
+        (tmp_path / "AWAKE_LOG.md").write_text(
+            "# Awake Log\n\n## Session 1 — February 27, 2026\n\n"
             "**Operator:** Computer\n\n- ✅ Stats → PR #1 — src/stats.py\n",
             encoding="utf-8",
         )
@@ -411,8 +411,8 @@ class TestTimelineSubcommand:
         assert "Session" in captured.out
 
     def test_timeline_json_output(self, tmp_path, capsys):
-        (tmp_path / "NIGHTSHIFT_LOG.md").write_text(
-            "# Nightshift Log\n\n## Session 1 — Feb 27, 2026\n\n"
+        (tmp_path / "AWAKE_LOG.md").write_text(
+            "# Awake Log\n\n## Session 1 — Feb 27, 2026\n\n"
             "- ✅ Something\n",
             encoding="utf-8",
         )
@@ -431,8 +431,8 @@ class TestTimelineSubcommand:
         assert "sessions" in data
 
     def test_timeline_write_creates_file(self, tmp_path):
-        (tmp_path / "NIGHTSHIFT_LOG.md").write_text(
-            "# Nightshift Log\n\n## Session 1 — Feb 27, 2026\n\n"
+        (tmp_path / "AWAKE_LOG.md").write_text(
+            "# Awake Log\n\n## Session 1 — Feb 27, 2026\n\n"
             "- ✅ Something\n",
             encoding="utf-8",
         )
@@ -442,7 +442,7 @@ class TestTimelineSubcommand:
 
 
 class TestCouplingSubcommand:
-    """Tests for nightshift coupling."""
+    """Tests for awake coupling."""
 
     def test_coupling_parses(self):
         parser = build_parser()
@@ -469,7 +469,7 @@ class TestCouplingSubcommand:
 
 
 class TestComplexitySubcommand:
-    """Tests for nightshift complexity."""
+    """Tests for awake complexity."""
 
     def test_complexity_parses(self):
         parser = build_parser()
@@ -500,7 +500,7 @@ class TestComplexitySubcommand:
 
 
 class TestExportSubcommand:
-    """Tests for nightshift export."""
+    """Tests for awake export."""
 
     def test_export_parses(self):
         parser = build_parser()

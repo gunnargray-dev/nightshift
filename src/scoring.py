@@ -1,4 +1,4 @@
-"""Shared scoring abstraction for Nightshift.
+"""Shared scoring abstraction for Awake.
 
 Provides a unified Grade/Score system used across analysis modules so that
 letter grades, tier labels, colour coding, and serialisation are handled in

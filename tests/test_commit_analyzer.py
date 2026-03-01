@@ -98,11 +98,11 @@ def test_score_wip_penalised():
     assert "WIP commit" in rec.quality_issues
 
 
-def test_score_nightshift_bonus():
-    rec = _make_record("[nightshift] session 17 improvements")
-    rec.is_nightshift = True
+def test_score_awake_bonus():
+    rec = _make_record("[awake] session 17 improvements")
+    rec.is_awake = True
     _score_commit(rec)
-    assert "nightshift" in rec.quality_badges
+    assert "awake" in rec.quality_badges
 
 
 def test_score_clamps_to_0_100():
@@ -164,7 +164,7 @@ def test_report_to_markdown_with_commits():
         avg_quality_score=75.0,
         quality_grade="B",
         commits=[rec1, rec2],
-        patterns=CommitPatterns(conventional_count=2, nightshift_count=0),
+        patterns=CommitPatterns(conventional_count=2, awake_count=0),
         top_commits=[rec1],
         bottom_commits=[rec2],
     )
@@ -222,9 +222,9 @@ def test_commit_record_to_dict():
     assert d["quality_score"] == 85.0
 
 
-def test_nightshift_pattern_detection():
-    rec = _make_record("[nightshift] session 17 — add plugins")
+def test_awake_pattern_detection():
+    rec = _make_record("[awake] session 17 — add plugins")
     _score_commit(rec)
-    # The is_nightshift flag is set during _git_log, not _score_commit
+    # The is_awake flag is set during _git_log, not _score_commit
     # but the score should still be computed
     assert 0 <= rec.quality_score <= 100

@@ -1,4 +1,4 @@
-"""Auto-merge command for Nightshift CLI.
+"""Auto-merge command for Awake CLI.
 
 This is a thin wrapper around :mod:`src.automerge`.
 

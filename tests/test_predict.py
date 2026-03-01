@@ -20,12 +20,12 @@ def _import():
 class TestParseSessionLog:
     def test_missing_log(self, tmp_path):
         p = _import()
-        result = p._parse_session_log(tmp_path / "NIGHTSHIFT_LOG.md")
+        result = p._parse_session_log(tmp_path / "AWAKE_LOG.md")
         assert result == []
 
     def test_parses_sessions(self, tmp_path):
         p = _import()
-        log = tmp_path / "NIGHTSHIFT_LOG.md"
+        log = tmp_path / "AWAKE_LOG.md"
         log.write_text(
             "## Session 1\n\n`src/health.py` `src/stats.py`\n\n"
             "Total PRs: 5\nTest suite: 100 tests\n\n"
@@ -39,7 +39,7 @@ class TestParseSessionLog:
 
     def test_extracts_module_names(self, tmp_path):
         p = _import()
-        log = tmp_path / "NIGHTSHIFT_LOG.md"
+        log = tmp_path / "AWAKE_LOG.md"
         log.write_text(
             "## Session 3\n\n`src/brain.py` `src/dna.py`\n\nTotal PRs: 10\n",
             encoding="utf-8",
@@ -50,7 +50,7 @@ class TestParseSessionLog:
 
     def test_no_duplicate_modules(self, tmp_path):
         p = _import()
-        log = tmp_path / "NIGHTSHIFT_LOG.md"
+        log = tmp_path / "AWAKE_LOG.md"
         log.write_text(
             "## Session 1\n\n`src/health.py` `src/health.py`\n\nTotal PRs: 1\n",
             encoding="utf-8",
@@ -187,7 +187,7 @@ class TestPredictNextSession:
         src.mkdir()
         (src / "health.py").write_text("def check(): pass\n", encoding="utf-8")
         (src / "security.py").write_text("def audit(): pass\n", encoding="utf-8")
-        log = tmp_path / "NIGHTSHIFT_LOG.md"
+        log = tmp_path / "AWAKE_LOG.md"
         log.write_text(
             "## Session 1\n\n`src/health.py`\n\nTotal PRs: 5\nTest suite: 100\n",
             encoding="utf-8",
@@ -287,7 +287,7 @@ class TestPredictionReport:
                     p.PredictionSignal("Coverage", 90.0, 0.25, "only 5 tests"),
                 ],
                 recommendation="High priority, improve coverage",
-                suggested_command="nightshift coveragemap",
+                suggested_command="awake coveragemap",
             ),
             p.PredictionItem(
                 rank=2,
@@ -298,7 +298,7 @@ class TestPredictionReport:
                     p.PredictionSignal("Complexity", 70.0, 0.20, "avg CC 8.2"),
                 ],
                 recommendation="Medium priority",
-                suggested_command="nightshift refactor",
+                suggested_command="awake refactor",
             ),
         ]
         return p.PredictionReport(

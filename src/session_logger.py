@@ -1,6 +1,6 @@
-"""Session logger for Nightshift.
+"""Session logger for Awake.
 
-Generates structured, append-only entries for NIGHTSHIFT_LOG.md at the end
+Generates structured, append-only entries for AWAKE_LOG.md at the end
 of each autonomous development session. Records decisions, outcomes, and
 metadata that make the log machine-readable and human-meaningful.
 """
@@ -67,7 +67,7 @@ class SessionEntry:
         return asdict(self)
 
     def to_markdown(self) -> str:
-        """Render the session entry as a Markdown section for NIGHTSHIFT_LOG.md."""
+        """Render the session entry as a Markdown section for AWAKE_LOG.md."""
         lines = [
             f"## Session {self.session_number} — {self.date}",
             "",
@@ -93,7 +93,7 @@ class SessionEntry:
             lines += ["", "**Pull requests:**", ""]
             for pr in self.prs:
                 url_part = f"[#{pr.number}]({pr.url})" if pr.url else f"#{pr.number}"
-                lines.append(f"- {url_part} — {pr.title} (`{pr.branch}`))")
+                lines.append(f"- {url_part} — {pr.title} (`{pr.branch}`))"
 
         # Decisions
         if self.decisions:
@@ -122,7 +122,7 @@ def append_session_to_log(
     *,
     dry_run: bool = False,
 ) -> str:
-    """Append a session entry to NIGHTSHIFT_LOG.md.
+    """Append a session entry to AWAKE_LOG.md.
 
     Args:
         log_path: Path to the log file.
@@ -135,7 +135,7 @@ def append_session_to_log(
     if log_path.exists():
         existing = log_path.read_text(encoding="utf-8")
     else:
-        existing = "# Nightshift Log\n\nAppend-only record of every autonomous development session.\n\n---\n\n"
+        existing = "# Awake Log\n\nAppend-only record of every autonomous development session.\n\n---\n\n"
 
     new_section = entry.to_markdown()
 

@@ -25,7 +25,7 @@ from src.brain import (
 # ---------------------------------------------------------------------------
 
 SAMPLE_ROADMAP = """
-# Nightshift Roadmap
+# Awake Roadmap
 
 ## Active Sprint
 

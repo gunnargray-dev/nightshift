@@ -45,7 +45,7 @@ def _c(text: str, color: str) -> str:
 def _print_header(title: str) -> None:
     bar = "─" * 60
     print("\n" + bar)
-    print(f"  🌙 Nightshift  ·  {title}")
+    print(f"  🌙 Awake  ·  {title}")
     print(bar + "\n")
 
 

@@ -1,4 +1,4 @@
-"""Tools command group for Nightshift CLI.
+"""Tools command group for Awake CLI.
 
 Commands: doctor, todos, benchmark, gitstats, badges, audit, predict, teach,
 dna, report, export, coverage, score, test_quality, refactor, commits,
@@ -21,7 +21,7 @@ from src.commands import _repo, _print_header, _print_ok, _print_warn, _print_in
 def cmd_doctor(args) -> int:
     """Run full repo health diagnostic."""
     from src.doctor import diagnose, render_report, save_report
-    _print_header("Nightshift Doctor")
+    _print_header("Awake Doctor")
     repo = _repo(getattr(args, "repo", None))
     report = diagnose(repo)
     if args.write:
@@ -324,7 +324,7 @@ def cmd_coverage(args) -> int:
     history_path = repo / "docs" / "coverage_history.json"
     if not history_path.exists():
         _print_warn(f"No coverage history found at {history_path}")
-        _print_info("Run `nightshift run` to generate initial coverage data.")
+        _print_info("Run `awake run` to generate initial coverage data.")
         return 1
     with history_path.open() as f:
         history = CoverageHistory.from_dict(json.load(f))
@@ -351,7 +351,7 @@ def cmd_score(args) -> int:
     scores_path = repo / "docs" / "pr_scores.json"
     if not scores_path.exists():
         _print_warn(f"No PR scores found at {scores_path}")
-        _print_info("Run `nightshift run` to score the latest PRs.")
+        _print_info("Run `awake run` to score the latest PRs.")
         return 1
     scores = load_scores(scores_path)
     if args.json:

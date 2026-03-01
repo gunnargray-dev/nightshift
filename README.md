@@ -1,19 +1,19 @@
-# Nightshift
+# Awake
 
 <!-- badges:start -->
-[![Sessions](https://img.shields.io/badge/sessions-23-blueviolet?style=flat-square)](https://github.com/gunnargray-dev/nightshift/blob/main/NIGHTSHIFT_LOG.md)
-[![PRs](https://img.shields.io/badge/PRs-49-blue?style=flat-square)](https://github.com/gunnargray-dev/nightshift/pulls)
-[![Tests](https://img.shields.io/badge/tests-2214%2B-brightgreen?style=flat-square)](https://github.com/gunnargray-dev/nightshift/tree/main/tests)
-[![Modules](https://img.shields.io/badge/modules-65-orange?style=flat-square)](https://github.com/gunnargray-dev/nightshift/tree/main/src)
-[![CLI](https://img.shields.io/badge/CLI_commands-51-cyan?style=flat-square)](https://github.com/gunnargray-dev/nightshift/blob/main/src/cli.py)
-[![API](https://img.shields.io/badge/API_endpoints-39-teal?style=flat-square)](https://github.com/gunnargray-dev/nightshift/blob/main/src/server.py)
+[![Sessions](https://img.shields.io/badge/sessions-23-blueviolet?style=flat-square)](https://github.com/gunnargray-dev/awake/blob/main/AWAKE_LOG.md)
+[![PRs](https://img.shields.io/badge/PRs-49-blue?style=flat-square)](https://github.com/gunnargray-dev/awake/pulls)
+[![Tests](https://img.shields.io/badge/tests-2214%2B-brightgreen?style=flat-square)](https://github.com/gunnargray-dev/awake/tree/main/tests)
+[![Modules](https://img.shields.io/badge/modules-65-orange?style=flat-square)](https://github.com/gunnargray-dev/awake/tree/main/src)
+[![CLI](https://img.shields.io/badge/CLI_commands-51-cyan?style=flat-square)](https://github.com/gunnargray-dev/awake/blob/main/src/cli.py)
+[![API](https://img.shields.io/badge/API_endpoints-39-teal?style=flat-square)](https://github.com/gunnargray-dev/awake/blob/main/src/server.py)
 [![Python](https://img.shields.io/badge/python-3.10%2B-yellow?style=flat-square)](https://python.org)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square)](LICENSE)
 <!-- badges:end -->
 
 > **An AI that improves its own codebase -- autonomously, every session.**
 
-Nightshift is a self-improving autonomous development system. An AI runs overnight, analyzes the repo, identifies what matters most, ships features, writes tests, and opens a pull request -- all without human input. Then it does it again the next session, learning from what it built.
+Awake is a self-improving autonomous development system. An AI runs overnight, analyzes the repo, identifies what matters most, ships features, writes tests, and opens a pull request -- all without human input. Then it does it again the next session, learning from what it built.
 
 **23 sessions. 49 PRs. 65 modules. 2,214+ tests. Zero human commits.**
 
@@ -23,16 +23,16 @@ Nightshift is a self-improving autonomous development system. An AI runs overnig
 
 ```
 +---------------------------------------------------------------------+
-|                        NIGHTSHIFT PIPELINE                          |
+|                        AWAKE PIPELINE                          |
 |                                                                     |
 |   1. ANALYZE          2. DECIDE           3. BUILD                  |
 |   ----------         ----------          -------                    |
 |                                                                     |
-|   nightshift stats --> brain.py      --> write code                 |
-|   nightshift health    (5-dimension       write tests               |
-|   nightshift audit     scoring:           update CLI                |
-|   nightshift predict   . complexity       update API                |
-|   nightshift dna       . coverage                                   |
+|   awake stats --> brain.py      --> write code                 |
+|   awake health    (5-dimension       write tests               |
+|   awake audit     scoring:           update CLI                |
+|   awake predict   . complexity       update API                |
+|   awake dna       . coverage                                   |
 |                        . churn         4. VERIFY                    |
 |                        . debt          -------                      |
 |                        . momentum)     pytest (all green)           |
@@ -46,17 +46,17 @@ Nightshift is a self-improving autonomous development system. An AI runs overnig
 
   METACOGNITION LAYER (new in Session 18)
   ----------------------------------------
-  nightshift reflect  --> analyzes ALL past sessions, scores quality,
+  awake reflect  --> analyzes ALL past sessions, scores quality,
                           identifies patterns, surfaces what the AI
                           learned and how it has improved over time
 
-  nightshift evolve   --> gap analysis + next evolution proposals
+  awake evolve   --> gap analysis + next evolution proposals
                           based on system's own growth trajectory
 
-  nightshift status   --> one-command comprehensive health snapshot
+  awake status   --> one-command comprehensive health snapshot
 ```
 
-The system is entirely self-contained. Every module is pure Python stdlib -- no runtime dependencies. The AI reads `NIGHTSHIFT_LOG.md` as memory, uses `brain.py` as its decision engine, and leaves behind a PR as evidence of its work.
+The system is entirely self-contained. Every module is pure Python stdlib -- no runtime dependencies. The AI reads `AWAKE_LOG.md` as memory, uses `brain.py` as its decision engine, and leaves behind a PR as evidence of its work.
 
 ---
 
@@ -64,32 +64,32 @@ The system is entirely self-contained. Every module is pure Python stdlib -- no 
 
 ```bash
 # Clone and install
-git clone https://github.com/gunnargray-dev/nightshift
-cd nightshift
+git clone https://github.com/gunnargray-dev/awake
+cd awake
 pip install -e .
 
 # Run a health check
-nightshift health
+awake health
 
 # See what the AI would do next
-nightshift brain
+awake brain
 
 # View the full status dashboard (new in Session 18)
-nightshift status
+awake status
 
 # Launch the React dashboard
-nightshift dashboard
+awake dashboard
 # -> http://localhost:5173
 
 # Read the AI's self-analysis
-nightshift reflect
+awake reflect
 
 # Ask the AI what it should become
-nightshift evolve
+awake evolve
 
 # Auto-generate missing docstrings (new in Session 23)
-nightshift docstrings --dry-run
-nightshift docstrings --apply
+awake docstrings --dry-run
+awake docstrings --apply
 ```
 
 ---
@@ -101,7 +101,7 @@ nightshift docstrings --apply
 The brain is a five-dimension scoring engine. Every module in the codebase gets scored against five independent signals, and the results are ranked into a prioritized action queue for the next session.
 
 ```
-$ nightshift brain
+$ awake brain
 
   BRAIN ANALYSIS -- Session 18 context
   ---------------------------------------------------------
@@ -126,7 +126,7 @@ The system can now reflect on its own history -- scoring past sessions, identify
 Run:
 
 ```bash
-nightshift reflect
+awake reflect
 ```
 
 ...and it will produce:
@@ -141,7 +141,7 @@ nightshift reflect
 Run:
 
 ```bash
-nightshift evolve
+awake evolve
 ```
 
 ...and it will produce:
@@ -162,7 +162,7 @@ You can also browse the full project dashboard:
 
 ## Philosophy
 
-Nightshift is an experiment in recursive improvement.
+Awake is an experiment in recursive improvement.
 
 - AI builds the system
 - The system measures itself

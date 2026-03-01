@@ -1,4 +1,4 @@
-"""Dependency freshness checker for Nightshift.
+"""Dependency freshness checker for Awake.
 
 Inspects the project's dependency specification files (pyproject.toml,
 requirements.txt, requirements*.txt) and checks each declared dependency
@@ -6,9 +6,9 @@ against the PyPI JSON API to determine whether a newer version is available.
 
 CLI usage
 ---------
-    nightshift deps
-    nightshift deps --offline      # skip PyPI queries; list deps only
-    nightshift deps --json         # raw JSON output
+    awake deps
+    awake deps --offline      # skip PyPI queries; list deps only
+    awake deps --json         # raw JSON output
 
 This module is named ``deps_checker.py`` so that the CLI can import it as
 ``from src.deps_checker import check_freshness``.
@@ -275,7 +275,7 @@ def _get_latest_version(package_name: str) -> tuple[str, str]:
     """
     url = PYPI_API.format(package=package_name)
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "nightshift-dep-checker/1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "awake-dep-checker/1.0"})
         with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT) as resp:
             data = _json.loads(resp.read())
         version = data["info"]["version"]

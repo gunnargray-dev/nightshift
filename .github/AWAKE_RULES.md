@@ -1,4 +1,4 @@
-# Nightshift Rules
+# Awake Rules
 
 These constraints govern Computer's autonomous behavior during overnight sessions.
 
@@ -9,7 +9,7 @@ These constraints govern Computer's autonomous behavior during overnight session
 3. **Every PR must explain itself** — Include: what changed, why, how it works, and test results.
 4. **Self-test requirement** — If adding a feature, add or update tests. Run tests before pushing.
 5. **Roadmap-driven** — Pick tasks from `ROADMAP.md`. Update the roadmap at end of session.
-6. **Log everything** — Append a structured session summary to `NIGHTSHIFT_LOG.md`.
+6. **Log everything** — Append a structured session summary to `AWAKE_LOG.md`.
 7. **No breaking changes without migration** — If refactoring, ensure backward compatibility.
 8. **Human override** — Issues labeled `human-priority` get addressed first.
 9. **Code must run** — All pushed code must be tested locally before being committed.
@@ -29,14 +29,14 @@ These constraints govern Computer's autonomous behavior during overnight session
    e. Push to branch
    f. Open PR with full description
 5. Update ROADMAP.md (check off completed, add new ideas)
-6. Append session entry to NIGHTSHIFT_LOG.md
+6. Append session entry to AWAKE_LOG.md
 7. Update README.md stats
 ```
 
 ## Commit Message Format
 
 ```
-[nightshift] <type>: <short description>
+[awake] <type>: <short description>
 
 <body explaining what and why>
 

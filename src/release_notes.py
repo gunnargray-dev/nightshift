@@ -1,17 +1,18 @@
-"""Enhanced changelog generator with --release flag for GitHub Releases.
+"""Release notes generator for Awake.
 
-Extends the existing src/changelog.py module to produce polished, GitHub
-Releases-compatible release notes in Markdown.
+Builds a structured RELEASE_NOTES.md from the git log, grouping commits
+by session and conventional-commit type. Supports:
+- Automatic version bump suggestions (major / minor / patch)
+- Per-session changelogs with date stamps
+- Machine-readable JSON export for downstream tooling
+- GitHub-flavoured Markdown output
 
-CLI
----
-    nightshift changelog --release              # Generate release notes to stdout
-    nightshift changelog --release --write      # Write RELEASE_NOTES.md
-    nightshift changelog --release --version v0.17.0
+Run at the end of a session or as part of the CI release pipeline.
 """
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 from dataclasses import dataclass, field
@@ -20,227 +21,296 @@ from pathlib import Path
 from typing import Optional
 
 
-_SECTION_MAP = {
-    "feat":     ("Features", 1),
-    "fix":      ("Bug Fixes", 2),
-    "perf":     ("Performance", 3),
-    "refactor": ("Code Quality", 4),
-    "test":     ("Tests", 5),
-    "docs":     ("Documentation", 6),
-    "ci":       ("CI / Build", 7),
-    "build":    ("CI / Build", 7),
-    "chore":    ("Chores", 8),
-    "style":    ("Style", 9),
-    "revert":   ("Reverts", 10),
-}
-
-_NIGHTSHIFT_PATTERN = re.compile(
-    r"(\[nightshift\]|nightshift session \d+|autonomous)", re.IGNORECASE
-)
+# ---------------------------------------------------------------------------
+# Types
+# ---------------------------------------------------------------------------
 
 
 @dataclass
-class ReleaseEntry:
-    """Represent a single parsed conventional commit for release notes"""
+class RawCommit:
+    """Parsed fields from a single git log entry."""
+
     sha: str
+    date: str         # ISO-8601 UTC
     subject: str
-    cc_type: str
-    scope: str
-    description: str
-    is_breaking: bool
-    is_nightshift: bool
-    pr_refs: list[str]
-    author: str
-
-    def format_line(self) -> str:
-        """Format this entry as a Markdown bullet point"""
-        scope_str = f"**{self.scope}:** " if self.scope else ""
-        breaking = " **BREAKING**" if self.is_breaking else ""
-        pr_str = " ".join(f"({r})" for r in self.pr_refs)
-        ns_badge = " [nightshift]" if self.is_nightshift else ""
-        return f"- {scope_str}{self.description}{breaking}{ns_badge} {pr_str}".rstrip()
+    body: str
 
 
 @dataclass
-class ReleaseSection:
-    """Group release entries under a conventional commit category"""
-    title: str
-    order: int
-    entries: list[ReleaseEntry] = field(default_factory=list)
+class ConventionalCommit:
+    """A commit decoded according to the Awake conventional-commit schema."""
 
-    def to_markdown(self) -> str:
-        """Render this section as a Markdown heading with entry list"""
-        lines = [f"### {self.title}", ""]
-        for e in sorted(self.entries, key=lambda x: (not x.is_breaking, x.scope)):
-            lines.append(e.format_line())
-        return "\n".join(lines)
+    sha: str
+    date: str
+    commit_type: str   # feat | fix | refactor | test | ci | docs | meta
+    scope: Optional[str]
+    description: str
+    session: Optional[int]
+    breaking: bool
+
+
+@dataclass
+class SessionBlock:
+    """All commits belonging to one Awake session."""
+
+    session: int
+    date: str
+    commits: list[ConventionalCommit]
+
+    # Derived
+    feats: list[ConventionalCommit] = field(default_factory=list)
+    fixes: list[ConventionalCommit] = field(default_factory=list)
+    refactors: list[ConventionalCommit] = field(default_factory=list)
+    tests: list[ConventionalCommit] = field(default_factory=list)
+    meta: list[ConventionalCommit] = field(default_factory=list)
+    other: list[ConventionalCommit] = field(default_factory=list)
+    has_breaking: bool = False
+
+    def __post_init__(self) -> None:
+        for c in self.commits:
+            if c.commit_type == "feat":
+                self.feats.append(c)
+            elif c.commit_type == "fix":
+                self.fixes.append(c)
+            elif c.commit_type == "refactor":
+                self.refactors.append(c)
+            elif c.commit_type == "test":
+                self.tests.append(c)
+            elif c.commit_type in ("meta", "docs", "ci", "chore"):
+                self.meta.append(c)
+            else:
+                self.other.append(c)
+            if c.breaking:
+                self.has_breaking = True
 
 
 @dataclass
 class ReleaseNotes:
-    """Represent a complete set of GitHub-compatible release notes"""
-    version: str
-    date: str
-    repo_url: str
-    sections: list[ReleaseSection] = field(default_factory=list)
-    breaking_changes: list[ReleaseEntry] = field(default_factory=list)
-    contributors: list[str] = field(default_factory=list)
-    stats: dict = field(default_factory=dict)
-    previous_version: str = ""
-    nightshift_session: int = 0
+    """Full release notes structure ready for rendering."""
 
-    def to_markdown(self) -> str:
-        """Render the full release notes as a Markdown document"""
-        lines = [f"# Release {self.version}", "", f"> **Released:** {self.date}", ""]
-        if self.nightshift_session:
-            lines += [f"> **Nightshift Session:** {self.nightshift_session}", "> Built autonomously by Perplexity Computer", ""]
-        if self.stats:
-            lines += ["## Release Stats", "", "| Metric | Value |", "|--------|-------|"]
-            for k, v in self.stats.items():
-                lines.append(f"| {k} | **{v}** |")
-            lines.append("")
-        if self.breaking_changes:
-            lines += ["## Breaking Changes", "", "> **These changes may require action before upgrading.**", ""]
-            for bc in self.breaking_changes:
-                lines.append(f"- {bc.description}")
-            lines.append("")
-        for sec in sorted(self.sections, key=lambda s: s.order):
-            if sec.entries:
-                lines += [sec.to_markdown(), ""]
-        if self.previous_version and self.repo_url:
-            compare_url = f"{self.repo_url}/compare/{self.previous_version}...{self.version}"
-            lines += ["## Full Changelog", "", f"**{self.previous_version} -> {self.version}:** {compare_url}", ""]
-        if self.contributors:
-            lines += ["## Contributors", ""]
-            for c in sorted(set(self.contributors)):
-                lines.append(f"- @{c}")
-            lines.append("")
-        return "\n".join(lines)
-
-    def to_dict(self) -> dict:
-        """Return a dictionary representation of the release notes"""
-        return {
-            "version": self.version,
-            "date": self.date,
-            "sections": {s.title: [e.format_line() for e in s.entries] for s in self.sections if s.entries},
-            "stats": self.stats,
-            "previous_version": self.previous_version,
-            "nightshift_session": self.nightshift_session,
-        }
-
-    def save(self, path: Path) -> None:
-        """Write the release notes as Markdown to the given path"""
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(self.to_markdown(), encoding="utf-8")
+    project: str
+    current_version: str
+    suggested_bump: str   # major | minor | patch
+    new_version: str
+    generated_at: str
+    sessions: list[SessionBlock]
 
 
-def _git_log_range(repo_root: Path, since_tag: Optional[str] = None, max_count: int = 200) -> list[dict]:
-    sep = "\x1e"
-    fmt = f"{sep}%H{sep}%s{sep}%b{sep}%an{sep}%ae"
-    cmd = ["git", "log", f"--format={fmt}"]
-    if since_tag:
-        cmd.append(f"{since_tag}..HEAD")
-    else:
-        cmd += [f"--max-count={max_count}"]
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(repo_root), timeout=30)
-        if result.returncode != 0:
-            return []
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return []
+# ---------------------------------------------------------------------------
+# Git log parsing
+# ---------------------------------------------------------------------------
+
+
+SEP = "|||---|||"
+_LOG_FORMAT = f"%h{SEP}%aI{SEP}%s{SEP}%b{SEP}---END---"
+
+_CC_PATTERN = re.compile(
+    r"^\[awake\]\s+(?P<type>feat|fix|refactor|test|ci|docs|meta|chore)"
+    r"(?:\((?P<scope>[^)]+)\))?(?P<breaking>!)?:\s+(?P<desc>.+)$"
+)
+_SESSION_RE = re.compile(r"session[\s-]*(\d+)", re.IGNORECASE)
+
+
+def _fetch_git_log(repo_root: Path) -> list[RawCommit]:
+    """Return all commits as RawCommit objects."""
+    out = subprocess.run(
+        ["git", "log", "--pretty=format:" + _LOG_FORMAT],
+        capture_output=True, text=True, cwd=repo_root, check=False
+    ).stdout
     commits = []
-    raw = result.stdout.split(sep)[1:]
-    it = iter(raw)
-    for sha, subject, body, author_name, author_email in zip(it, it, it, it, it):
-        commits.append({"sha": sha.strip(), "subject": subject.strip(), "body": body.strip(), "author": author_name.strip(), "email": author_email.strip()})
+    for block in out.split("---END---"):
+        block = block.strip()
+        if not block:
+            continue
+        parts = block.split(SEP)
+        if len(parts) < 4:
+            continue
+        sha, date, subject, body = parts[0], parts[1], parts[2], parts[3]
+        commits.append(RawCommit(sha=sha.strip(), date=date.strip(), subject=subject.strip(), body=body.strip()))
     return commits
 
 
-def _latest_tag(repo_root: Path) -> Optional[str]:
-    try:
-        result = subprocess.run(["git", "describe", "--tags", "--abbrev=0"], capture_output=True, text=True, cwd=str(repo_root), timeout=10)
-        if result.returncode == 0:
-            return result.stdout.strip()
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
-    return None
+def _parse_conventional(raw: RawCommit) -> ConventionalCommit:
+    """Attempt to decode subject as a conventional commit."""
+    m = _CC_PATTERN.match(raw.subject)
+    if m:
+        return ConventionalCommit(
+            sha=raw.sha,
+            date=raw.date,
+            commit_type=m.group("type"),
+            scope=m.group("scope"),
+            description=m.group("desc"),
+            session=_extract_session(raw.subject),
+            breaking=bool(m.group("breaking")),
+        )
+    return ConventionalCommit(
+        sha=raw.sha,
+        date=raw.date,
+        commit_type="misc",
+        scope=None,
+        description=raw.subject,
+        session=_extract_session(raw.subject),
+        breaking=False,
+    )
 
 
-def _repo_url(repo_root: Path) -> str:
-    try:
-        result = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True, cwd=str(repo_root), timeout=10)
-        if result.returncode == 0:
-            url = result.stdout.strip()
-            url = re.sub(r"git@github\.com:(.+?)\.git", r"https://github.com/\1", url)
-            return url.rstrip(".git")
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
-    return "https://github.com/gunnargray-dev/nightshift"
+def _extract_session(text: str) -> Optional[int]:
+    m = _SESSION_RE.search(text)
+    return int(m.group(1)) if m else None
 
 
-_CC_RE = re.compile(
-    r"^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert|wip)(\([^)]+\))?(!)?:\s+(.+)$",
-    re.IGNORECASE,
-)
-_PR_RE = re.compile(r"#(\d+)")
+def _group_by_session(commits: list[ConventionalCommit]) -> list[SessionBlock]:
+    """Group commits into SessionBlock objects. Commits without a session go into session 0."""
+    buckets: dict[int, list[ConventionalCommit]] = {}
+    for c in commits:
+        key = c.session if c.session is not None else 0
+        buckets.setdefault(key, []).append(c)
+    blocks = []
+    for session_num in sorted(buckets, reverse=True):
+        group = buckets[session_num]
+        date = group[0].date[:10] if group else "unknown"
+        blocks.append(SessionBlock(session=session_num, date=date, commits=group))
+    return blocks
 
 
-def _parse_commit(raw: dict) -> Optional[ReleaseEntry]:
-    subject = raw["subject"]
-    m = _CC_RE.match(subject)
-    if not m:
-        return None
-    cc_type = m.group(1).lower()
-    scope = (m.group(2) or "").strip("()")
-    is_breaking = bool(m.group(3)) or "BREAKING CHANGE" in raw.get("body", "")
-    description = m.group(4)
-    pr_refs = [f"#{n}" for n in _PR_RE.findall(subject + " " + raw.get("body", ""))]
-    is_ns = bool(_NIGHTSHIFT_PATTERN.search(subject + " " + raw.get("body", "")))
-    return ReleaseEntry(sha=raw["sha"], subject=subject, cc_type=cc_type, scope=scope, description=description, is_breaking=is_breaking, is_nightshift=is_ns, pr_refs=pr_refs, author=raw.get("author", ""))
+# ---------------------------------------------------------------------------
+# Version logic
+# ---------------------------------------------------------------------------
 
 
-def generate_release_notes(repo_root: Path, version: Optional[str] = None, since_tag: Optional[str] = None) -> ReleaseNotes:
-    """Generate polished GitHub-Releases-ready release notes."""
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    latest_tag = _latest_tag(repo_root)
-    prev_version = since_tag or latest_tag or "v0.0.0"
-    if version is None:
-        pp = repo_root / "pyproject.toml"
-        if pp.exists():
-            m = re.search(r'version\s*=\s*"([^"]+)"', pp.read_text())
-            version = m.group(1) if m else "0.17.0"
+def _bump_version(current: str, sessions: list[SessionBlock]) -> tuple[str, str]:
+    """Return (bump_type, new_version)."""
+    breaking = any(s.has_breaking for s in sessions)
+    has_feat = any(c for s in sessions for c in s.feats)
+    if breaking:
+        parts = current.lstrip("v").split(".")
+        major = int(parts[0]) + 1
+        return "major", f"{major}.0.0"
+    if has_feat:
+        parts = current.lstrip("v").split(".")
+        minor = int(parts[1]) + 1
+        return "minor", f"{parts[0]}.{minor}.0"
+    parts = current.lstrip("v").split(".")
+    patch = int(parts[2]) + 1
+    return "patch", f"{parts[0]}.{parts[1]}.{patch}"
+
+
+# ---------------------------------------------------------------------------
+# Builder
+# ---------------------------------------------------------------------------
+
+
+def build_release_notes(repo_root: Path) -> ReleaseNotes:
+    """Collect git log and return a fully populated ReleaseNotes object."""
+    raw_commits = _fetch_git_log(repo_root)
+    conventional = [_parse_conventional(r) for r in raw_commits]
+    sessions = _group_by_session(conventional)
+
+    # Current version from latest git tag
+    current_version = subprocess.run(
+        ["git", "describe", "--tags", "--abbrev=0"],
+        capture_output=True, text=True, cwd=repo_root, check=False
+    ).stdout.strip() or "0.1.0"
+
+    bump_type, new_version = _bump_version(current_version, sessions)
+
+    return ReleaseNotes(
+        project="Awake",
+        current_version=current_version,
+        suggested_bump=bump_type,
+        new_version=new_version,
+        generated_at=datetime.now(timezone.utc).isoformat(),
+        sessions=sessions,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Renderers
+# ---------------------------------------------------------------------------
+
+
+def _render_section(title: str, commits: list[ConventionalCommit]) -> str:
+    if not commits:
+        return ""
+    lines = [f"### {title}", ""]
+    for c in commits:
+        scope = f"**{c.scope}**: " if c.scope else ""
+        breaking = " ⚠ BREAKING" if c.breaking else ""
+        lines.append(f"- {scope}{c.description}{breaking} (`{c.sha}`)")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def render_markdown(notes: ReleaseNotes) -> str:
+    """Render ReleaseNotes as GitHub-flavoured Markdown."""
+    lines = [
+        f"# {notes.project} Release Notes",
+        "",
+        f"> Generated {notes.generated_at} · "
+        f"suggested bump: **{notes.suggested_bump}** → v{notes.new_version}",
+        "",
+    ]
+    for block in notes.sessions:
+        if block.session == 0:
+            heading = "## Untagged commits"
         else:
-            version = "0.17.0"
-    if not version.startswith("v"):
-        version = f"v{version}"
-    repo_url_val = _repo_url(repo_root)
-    log_path = repo_root / "NIGHTSHIFT_LOG.md"
-    session_num = 0
-    if log_path.exists():
-        matches = re.findall(r"## Session (\d+)", log_path.read_text())
-        session_num = int(matches[-1]) if matches else 0
-    raw_commits = _git_log_range(repo_root, since_tag=since_tag, max_count=300)
-    sections_map: dict = {}
-    for title, order in _SECTION_MAP.values():
-        sections_map[title] = ReleaseSection(title=title, order=order)
-    breaking: list = []
-    contributors: list = []
-    nightshift_count = 0
-    for raw in raw_commits:
-        entry = _parse_commit(raw)
-        if not entry:
-            continue
-        if entry.is_breaking:
-            breaking.append(entry)
-        if entry.author and entry.author not in contributors:
-            contributors.append(entry.author)
-        if entry.is_nightshift:
-            nightshift_count += 1
-        title, order = _SECTION_MAP.get(entry.cc_type, ("Chores", 8))
-        if title not in sections_map:
-            sections_map[title] = ReleaseSection(title=title, order=order)
-        sections_map[title].entries.append(entry)
-    total_commits = len(raw_commits)
-    parsed_commits = sum(1 for s in sections_map.values() for _ in s.entries)
-    stats = {"Commits in release": total_commits, "Conventional Commits": parsed_commits, "Breaking changes": len(breaking), "Nightshift contributions": nightshift_count, "Contributors": len(set(contributors))}
-    return ReleaseNotes(version=version, date=now, repo_url=repo_url_val, sections=list(sections_map.values()), breaking_changes=breaking, contributors=contributors, stats=stats, previous_version=prev_version, nightshift_session=session_num)
+            heading = f"## Session {block.session}  ·  {block.date}"
+        lines += [heading, ""]
+        lines.append(_render_section("Features", block.feats))
+        lines.append(_render_section("Bug fixes", block.fixes))
+        lines.append(_render_section("Refactors", block.refactors))
+        lines.append(_render_section("Tests", block.tests))
+        lines.append(_render_section("Meta / docs / CI", block.meta))
+        lines.append(_render_section("Other", block.other))
+    return "\n".join(lines)
+
+
+def render_json(notes: ReleaseNotes) -> str:
+    """Render ReleaseNotes as a JSON string for downstream tooling."""
+    def _cc_dict(c: ConventionalCommit) -> dict:
+        return {
+            "sha": c.sha, "date": c.date, "type": c.commit_type,
+            "scope": c.scope, "description": c.description,
+            "session": c.session, "breaking": c.breaking,
+        }
+    payload = {
+        "project": notes.project,
+        "current_version": notes.current_version,
+        "suggested_bump": notes.suggested_bump,
+        "new_version": notes.new_version,
+        "generated_at": notes.generated_at,
+        "sessions": [
+            {
+                "session": b.session,
+                "date": b.date,
+                "has_breaking": b.has_breaking,
+                "commits": [_cc_dict(c) for c in b.commits],
+            }
+            for b in notes.sessions
+        ],
+    }
+    return json.dumps(payload, indent=2)
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+
+def main() -> None:
+    """CLI: python -m src.release_notes [--json]"""
+    import sys
+    repo_root = Path(__file__).resolve().parent.parent
+    notes = build_release_notes(repo_root)
+    if "--json" in sys.argv:
+        print(render_json(notes))
+    else:
+        output = render_markdown(notes)
+        out_path = repo_root / "RELEASE_NOTES.md"
+        out_path.write_text(output, encoding="utf-8")
+        print(f"Release notes written to {out_path}")
+        print(f"Suggested version bump: {notes.suggested_bump} → v{notes.new_version}")
+
+
+if __name__ == "__main__":
+    main()

@@ -96,7 +96,7 @@ def test_four():
 '''
 
 SAMPLE_LOG = """\
-# Nightshift Log
+# Awake Log
 
 ---
 
@@ -134,7 +134,7 @@ def tests_dir(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def log_file(tmp_path: Path) -> Path:
-    p = tmp_path / "NIGHTSHIFT_LOG.md"
+    p = tmp_path / "AWAKE_LOG.md"
     p.write_text(SAMPLE_LOG)
     return p
 

@@ -17,7 +17,7 @@ from src.commands.tools import cmd_teach, cmd_dna
 # ---------------------------------------------------------------------------
 
 SAMPLE_LOG = """\
-# Nightshift Log
+# Awake Log
 
 ---
 
@@ -25,7 +25,7 @@ SAMPLE_LOG = """\
 
 **Tasks completed:**
 
-- ✅ **Stats engine** → [PR #1](https://github.com/gunnargray-dev/nightshift/pull/1) — `src/stats.py`.
+- ✅ **Stats engine** → [PR #1](https://github.com/gunnargray-dev/awake/pull/1) — `src/stats.py`.
 
 **Stats snapshot:**
 
@@ -78,7 +78,7 @@ def test_three(): assert True
 
 @pytest.fixture()
 def repo(tmp_path: Path) -> Path:
-    (tmp_path / "NIGHTSHIFT_LOG.md").write_text(SAMPLE_LOG)
+    (tmp_path / "AWAKE_LOG.md").write_text(SAMPLE_LOG)
     src = tmp_path / "src"
     src.mkdir()
     (src / "__init__.py").write_text("")

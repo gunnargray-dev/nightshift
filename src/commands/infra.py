@@ -1,4 +1,4 @@
-"""Infrastructure command group for Nightshift CLI.
+"""Infrastructure command group for Awake CLI.
 
 Commands: dashboard (terminal), server (web), init, deps, config, plugins, openapi.
 """
@@ -19,7 +19,7 @@ from src.commands import _repo, _print_header, _print_ok, _print_warn, _print_in
 def cmd_dashboard(args) -> int:
     """Launch the live React dashboard (API server + UI)."""
     from src.server import start_server
-    _print_header("Nightshift Dashboard")
+    _print_header("Awake Dashboard")
     repo = _repo(getattr(args, "repo", None))
     port = getattr(args, "port", 8710)
     _print_ok(f"Starting API server on port {port} ...")
@@ -35,9 +35,9 @@ def cmd_dashboard(args) -> int:
 
 
 def cmd_init(args) -> int:
-    """Bootstrap project scaffolding and nightshift.toml."""
+    """Bootstrap project scaffolding and awake.toml."""
     from src.init_cmd import init_project
-    _print_header("Nightshift Init")
+    _print_header("Awake Init")
     repo = _repo(getattr(args, "repo", None))
     result = init_project(repo, force=getattr(args, "force", False))
     for msg in result.messages:
@@ -80,11 +80,11 @@ def cmd_deps(args) -> int:
 
 
 def cmd_config(args) -> int:
-    """Show or write nightshift.toml configuration."""
-    from src.config import NightshiftConfig, DEFAULT_CONFIG_TOML
-    _print_header("Nightshift Config")
+    """Show or write awake.toml configuration."""
+    from src.config import AwakeConfig, DEFAULT_CONFIG_TOML
+    _print_header("Awake Config")
     repo = _repo(getattr(args, "repo", None))
-    config_path = repo / "nightshift.toml"
+    config_path = repo / "awake.toml"
     if args.write:
         if config_path.exists():
             _print_warn(f"Config already exists at {config_path}")
@@ -94,14 +94,14 @@ def cmd_config(args) -> int:
         _print_ok(f"Written default config to {config_path}")
         return 0
     if config_path.exists():
-        cfg = NightshiftConfig.from_toml(config_path)
+        cfg = AwakeConfig.from_toml(config_path)
         if args.json:
             print(json.dumps(cfg.to_dict(), indent=2))
             return 0
         print(cfg.to_markdown())
     else:
-        _print_warn(f"No nightshift.toml found at {config_path}")
-        _print_info("Run `nightshift config --write` to create a default config.")
+        _print_warn(f"No awake.toml found at {config_path}")
+        _print_info("Run `awake config --write` to create a default config.")
     return 0
 
 
@@ -111,7 +111,7 @@ def cmd_config(args) -> int:
 
 
 def cmd_plugins(args) -> int:
-    """Manage plugin/hook registry from nightshift.toml."""
+    """Manage plugin/hook registry from awake.toml."""
     from src.plugins import load_plugin_definitions, list_plugins, run_plugins, EXAMPLE_TOML_SNIPPET
     _print_header("Plugin Registry")
     repo = _repo(getattr(args, "repo", None))
@@ -181,7 +181,7 @@ def cmd_run(args) -> int:
     from src.health import generate_health_report
     _print_header(f"Full Pipeline — Session {args.session}")
     repo = _repo(getattr(args, "repo", None))
-    log_path = repo / "NIGHTSHIFT_LOG.md"
+    log_path = repo / "AWAKE_LOG.md"
     _print_info("Running health analysis ...")
     health_report = generate_health_report(repo_path=repo)
     _print_ok(f"Health score: {health_report.overall_health_score}/100")

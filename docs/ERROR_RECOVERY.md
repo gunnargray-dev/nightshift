@@ -1,12 +1,12 @@
 # Error Recovery Documentation
 
-> How Nightshift handles failures, degrades gracefully, and heals itself.
+> How Awake handles failures, degrades gracefully, and heals itself.
 
 ---
 
 ## Overview
 
-Nightshift is designed with a "fail gracefully, never silently" philosophy. Every module is expected to:
+Awake is designed with a "fail gracefully, never silently" philosophy. Every module is expected to:
 
 1. Return meaningful output even when the environment is incomplete
 2. Log what went wrong and why
@@ -22,7 +22,7 @@ Nightshift is designed with a "fail gracefully, never silently" philosophy. Ever
 Each analysis module is independent. If `security.py` fails, `health.py`, `brain.py`, and all other modules continue running. The pipeline reports a partial result rather than aborting.
 
 ```
-$ nightshift health
+$ awake health
   health.py      ✓  82/100
   dead_code.py   ✓  74/100
   security.py    ✗  Error: subprocess timeout (git log took >30s)
@@ -75,7 +75,7 @@ if not src.exists():
     return {"error": "src/ directory not found", "score": 0, "grade": "F"}
 ```
 
-The `nightshift doctor` command validates the entire environment before any analysis.
+The `awake doctor` command validates the entire environment before any analysis.
 
 ---
 
@@ -90,7 +90,7 @@ The `nightshift doctor` command validates the entire environment before any anal
 **Recovery:**
 ```bash
 # Verify git is available
-nightshift doctor
+awake doctor
 
 # Initialize git if needed
 git init
@@ -98,7 +98,7 @@ git add .
 git commit -m "Initial commit"
 
 # Re-run analysis
-nightshift gitstats
+awake gitstats
 ```
 
 ### No Test Files
@@ -110,7 +110,7 @@ nightshift gitstats
 **Recovery:**
 ```bash
 # Bootstrap the test structure
-nightshift init --src
+awake init --src
 
 # Check what was created
 ls tests/
@@ -118,28 +118,28 @@ ls tests/
 
 ### Health Score Below 60
 
-**Symptom:** `nightshift status` shows RED.
+**Symptom:** `awake status` shows RED.
 
 **Cause:** Multiple modules have quality issues accumulating.
 
 **Recovery:**
 ```bash
 # Get prioritized action list
-nightshift brain
+awake brain
 
 # Run full diagnostic
-nightshift doctor --verbose
+awake doctor --verbose
 
 # See which modules need attention most
-nightshift health --sort score
+awake health --sort score
 
 # Let the AI propose specific fixes
-nightshift predict
+awake predict
 ```
 
 ### API Server Won't Start
 
-**Symptom:** `nightshift dashboard` fails; dashboard shows "Connection refused".
+**Symptom:** `awake dashboard` fails; dashboard shows "Connection refused".
 
 **Cause:** Port 8710 already in use, or permissions issue.
 
@@ -149,28 +149,28 @@ nightshift predict
 lsof -i :8710
 
 # Use an alternate port
-nightshift dashboard --port 8711
+awake dashboard --port 8711
 
 # Or kill the existing process
 kill $(lsof -t -i:8710)
-nightshift dashboard
+awake dashboard
 ```
 
 ### Plugin Fails to Load
 
-**Symptom:** `nightshift plugins` shows ERROR for a registered plugin.
+**Symptom:** `awake plugins` shows ERROR for a registered plugin.
 
 **Cause:** Plugin module not found on PYTHONPATH, or function signature mismatch.
 
 **Recovery:**
 ```bash
 # Validate all plugins
-nightshift plugins --validate
+awake plugins --validate
 
 # Run a specific plugin in debug mode
-nightshift plugins --run pre_health --debug
+awake plugins --run pre_health --debug
 
-# Disable the failing plugin in nightshift.toml
+# Disable the failing plugin in awake.toml
 # Set enabled = false
 ```
 
@@ -183,13 +183,13 @@ nightshift plugins --run pre_health --debug
 **Recovery:**
 ```bash
 # Use the benchmark to identify slow modules
-nightshift benchmark
+awake benchmark
 
 # Limit analysis to recent history
-nightshift gitstats --max-commits 100
+awake gitstats --max-commits 100
 
 # Skip slow modules
-nightshift health --skip blame,gitstats
+awake health --skip blame,gitstats
 ```
 
 ---
@@ -200,11 +200,11 @@ nightshift health --skip blame,gitstats
 
 `health_trend.py` tracks the health score session-over-session. If the trend is declining:
 ```
-$ nightshift health-trend
+$ awake health-trend
   S15: 78  S16: 80  S17: 83  S18: 81  ← minor decline
 
   Warning: Score declined 2 pts since last session.
-  Recommendation: Run 'nightshift predict' to identify root cause.
+  Recommendation: Run 'awake predict' to identify root cause.
 ```
 
 ### Predict as Early Warning
@@ -219,17 +219,17 @@ $ nightshift health-trend
 | TODO debt | Unresolved markers that indicate incomplete work |
 | Health trend | Modules whose score has been declining |
 
-Run `nightshift predict` before each session to get ahead of issues.
+Run `awake predict` before each session to get ahead of issues.
 
 ### Audit as Final Gate
 
-`nightshift audit` produces a composite A–F grade combining health (25%), security (25%), dead code (20%), coverage (20%), and complexity (10%). This can be used as a merge gate:
+`awake audit` produces a composite A–F grade combining health (25%), security (25%), dead code (20%), coverage (20%), and complexity (10%). This can be used as a merge gate:
 
 ```yaml
-# .github/workflows/nightshift.yml
-- name: Nightshift audit gate
+# .github/workflows/awake.yml
+- name: Awake audit gate
   run: |
-    grade=$(nightshift audit --json | jq -r .grade)
+    grade=$(awake audit --json | jq -r .grade)
     if [ "$grade" == "D" ] || [ "$grade" == "F" ]; then
       echo "Quality gate failed: $grade"
       exit 1
@@ -243,23 +243,23 @@ Run `nightshift predict` before each session to get ahead of issues.
 When something goes wrong, follow this sequence:
 
 ```
-1. nightshift doctor           → validate environment
-2. nightshift status           → see overall state
-3. nightshift health           → identify which modules have issues
-4. nightshift predict          → get prioritized fix list
-5. nightshift brain            → let the AI decide what to fix first
+1. awake doctor           → validate environment
+2. awake status           → see overall state
+3. awake health           → identify which modules have issues
+4. awake predict          → get prioritized fix list
+5. awake brain            → let the AI decide what to fix first
 6. [fix the issue]
-7. nightshift audit            → verify the fix improved the grade
-8. nightshift status           → confirm GREEN
+7. awake audit            → verify the fix improved the grade
+8. awake status           → confirm GREEN
 ```
 
 ---
 
 ## Data Preservation
 
-Nightshift never deletes data. All runs produce additive records:
+Awake never deletes data. All runs produce additive records:
 
-- `NIGHTSHIFT_LOG.md` — append-only session log
+- `AWAKE_LOG.md` — append-only session log
 - `docs/*.json` — cached analysis results (overwritten per session, not deleted)
 - `docs/benchmark_history.json` — rolling history of last 20 benchmark runs
 - `docs/health_trend.json` — health score history
@@ -267,7 +267,7 @@ Nightshift never deletes data. All runs produce additive records:
 To reset all cached data:
 ```bash
 rm docs/*.json
-nightshift health --no-cache  # rebuilds from source
+awake health --no-cache  # rebuilds from source
 ```
 
 ---
@@ -275,9 +275,9 @@ nightshift health --no-cache  # rebuilds from source
 ## Getting Help
 
 ```bash
-nightshift doctor --verbose     # detailed environment check
-nightshift health --debug       # verbose health scoring
-nightshift --help               # full CLI reference
+awake doctor --verbose     # detailed environment check
+awake health --debug       # verbose health scoring
+awake --help               # full CLI reference
 ```
 
-*This document is maintained by the AI. Run `nightshift reflect` to see how error patterns have evolved over sessions.*
+*This document is maintained by the AI. Run `awake reflect` to see how error patterns have evolved over sessions.*

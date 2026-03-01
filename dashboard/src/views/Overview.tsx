@@ -43,7 +43,7 @@ export function Overview() {
     <div className="max-w-5xl">
       <PageHeader
         title="Overview"
-        description="Real-time snapshot of the nightshift autonomous development system."
+        description="Real-time snapshot of the awake autonomous development system."
       />
 
       <div className="grid grid-cols-5 gap-4 mb-8">
@@ -55,76 +55,76 @@ export function Overview() {
               label="Sessions"
               value={s?.nights_active ?? "\u2014"}
               sub="Nights active"
-              icon={<Clock size={15} />}
+              icon={<Clock size={16} />}
             />
             <StatCard
               label="PRs"
               value={s?.total_prs ?? "\u2014"}
-              sub="Merged"
-              icon={<GitPullRequest size={15} />}
+              sub="All time"
+              icon={<GitPullRequest size={16} />}
             />
             <StatCard
               label="Modules"
-              value={fileList.length || "\u2014"}
-              sub="in src/"
-              icon={<Blocks size={15} />}
+              value={s?.total_modules ?? "\u2014"}
+              sub="Source files"
+              icon={<Blocks size={16} />}
             />
             <StatCard
-              label="Commits"
-              value={s?.total_commits ?? "\u2014"}
-              sub="Total"
-              icon={<TestTubeDiagonal size={15} />}
+              label="Tests"
+              value={s?.total_tests ?? "\u2014"}
+              sub="In test suite"
+              icon={<TestTubeDiagonal size={16} />}
             />
             <StatCard
               label="Health"
-              value={overallHealth != null ? `${overallHealth}` : "\u2014"}
-              icon={<TrendingUp size={15} />}
+              value={overallHealth !== null ? `${overallHealth}` : "\u2014"}
+              sub={overallHealth !== null ? healthBadge(overallHealth) : ""}
+              icon={<TrendingUp size={16} />}
             />
           </>
         )}
       </div>
 
-      {overallHealth != null && (
-        <div className="rounded-md border border-border bg-bg-surface p-5 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-sm font-medium text-text-primary">Overall Health</span>
-            {healthBadge(overallHealth)}
-          </div>
-          <div className="h-2 rounded-full bg-bg-elevated overflow-hidden">
-            <div
-              className="h-full rounded-full bg-accent transition-all duration-500"
-              style={{ width: `${overallHealth}%` }}
-            />
-          </div>
-          <div className="mt-2 text-xs text-text-tertiary tabular-nums">
-            {overallHealth} / 100
-          </div>
-        </div>
-      )}
-
-      {s?.sessions && s.sessions.length > 0 && (
-        <div className="rounded-md border border-border bg-bg-surface">
-          <div className="px-4 py-3 border-b border-border">
-            <span className="text-xs font-medium uppercase tracking-wider text-text-tertiary">
-              Recent Sessions
-            </span>
-          </div>
-          <div className="divide-y divide-border">
-            {[...s.sessions].reverse().slice(0, 5).map((session: any, i: number) => (
-              <div key={i} className="flex items-center gap-3 px-4 py-3">
-                <span className="shrink-0 rounded bg-bg-elevated px-2 py-0.5 text-[11px] font-semibold text-accent tabular-nums">
-                  S{session.session ?? i}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13px] text-text-primary truncate">
-                    {session.title ?? `Session ${session.session ?? i}`}
-                  </div>
-                  <div className="text-xs text-text-tertiary">
-                    {session.date ?? "\u2014"} {"\u2014"} {session.prs ?? 0} PRs
-                  </div>
-                </div>
-              </div>
-            ))}
+      {health.isLoading ? (
+        <p className="text-sm text-text-muted">Loading health data...</p>
+      ) : (
+        <div>
+          <h2 className="text-sm font-semibold text-text-primary mb-3">Module Health</h2>
+          <div className="rounded-lg border border-border overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-bg-elevated border-b border-border">
+                  <th className="px-4 py-2.5 text-left font-medium text-text-secondary">Module</th>
+                  <th className="px-4 py-2.5 text-right font-medium text-text-secondary">Score</th>
+                  <th className="px-4 py-2.5 text-right font-medium text-text-secondary">Long lines</th>
+                  <th className="px-4 py-2.5 text-right font-medium text-text-secondary">TODOs</th>
+                  <th className="px-4 py-2.5 text-right font-medium text-text-secondary">Docstrings</th>
+                  <th className="px-4 py-2.5 text-left font-medium text-text-secondary">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fileList.map((f, i) => {
+                  const score = computeScore(f);
+                  return (
+                    <tr
+                      key={i}
+                      className="border-b border-border last:border-0 hover:bg-bg-elevated/50"
+                    >
+                      <td className="px-4 py-2.5 font-mono text-xs text-text-primary">{f.file}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">{score}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-text-secondary">{f.long_lines ?? 0}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-text-secondary">{f.todo_count ?? 0}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-text-secondary">
+                        {f.docstring_coverage !== undefined
+                          ? `${Math.round(f.docstring_coverage * 100)}%`
+                          : "n/a"}
+                      </td>
+                      <td className="px-4 py-2.5">{healthBadge(score)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

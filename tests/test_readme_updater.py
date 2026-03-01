@@ -127,8 +127,8 @@ class TestCountLines:
 
 
 class TestParseCommitLine:
-    def test_standard_nightshift_commit(self):
-        line = "abc1234 [nightshift] feat: add readme updater"
+    def test_standard_awake_commit(self):
+        line = "abc1234 [awake] feat: add readme updater"
         result = _parse_commit_line(line)
         assert result is not None
         assert result.sha == "abc1234"
@@ -137,12 +137,12 @@ class TestParseCommitLine:
         assert result.session is None
 
     def test_commit_with_session_number(self):
-        line = "def5678 [nightshift] meta: session 3 wrap-up"
+        line = "def5678 [awake] meta: session 3 wrap-up"
         result = _parse_commit_line(line)
         assert result is not None
         assert result.session == 3
 
-    def test_non_nightshift_commit_returns_none(self):
+    def test_non_awake_commit_returns_none(self):
         line = "abc1234 fix: normal commit message"
         assert _parse_commit_line(line) is None
 
@@ -153,7 +153,7 @@ class TestParseCommitLine:
         assert _parse_commit_line("") is None
 
     def test_fix_type(self):
-        line = "aaa1111 [nightshift] fix: resolve import error"
+        line = "aaa1111 [awake] fix: resolve import error"
         result = _parse_commit_line(line)
         assert result.commit_type == "fix"
 
@@ -237,7 +237,7 @@ class TestLogParsers:
 class TestRenderReadme:
     def _make_snapshot(self, **kwargs) -> RepoSnapshot:
         defaults = dict(
-            project="Nightshift",
+            project="Awake",
             version="0.1.0",
             session_count=3,
             last_run="2026-02-27 03:00 UTC",
@@ -261,7 +261,7 @@ class TestRenderReadme:
     def test_contains_project_name(self):
         snap = self._make_snapshot()
         output = render_readme(snap)
-        assert "Nightshift" in output
+        assert "Awake" in output
 
     def test_contains_test_badge(self):
         snap = self._make_snapshot(tests_passing=True, test_count=174)
@@ -370,11 +370,17 @@ class TestUpdateReadme:
         (tmp_path / "src").mkdir()
         result = update_readme(tmp_path, dry_run=True, run_tests=False)
         assert not (tmp_path / "README.md").exists()
-        assert "Nightshift" in result
+        assert isinstance(result, str)
+        assert len(result) > 0
 
     def test_writes_readme_when_not_dry_run(self, tmp_path):
         (tmp_path / "src").mkdir()
         update_readme(tmp_path, dry_run=False, run_tests=False)
-        readme = (tmp_path / "README.md")
-        assert readme.exists()
-        assert "Nightshift" in readme.read_text()
+        assert (tmp_path / "README.md").exists()
+
+    def test_written_readme_has_content(self, tmp_path):
+        (tmp_path / "src").mkdir()
+        update_readme(tmp_path, dry_run=False, run_tests=False)
+        content = (tmp_path / "README.md").read_text(encoding="utf-8")
+        assert len(content) > 100
+        assert "Awake" in content

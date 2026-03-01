@@ -68,7 +68,7 @@ def test_parse_log_missing(tmp_path):
 
 def test_parse_log_empty(tmp_path):
     log = tmp_path / "log.md"
-    log.write_text("# Nightshift Log\n\n")
+    log.write_text("# Awake Log\n\n")
     result = _parse_log(log)
     assert result == []
 
@@ -169,7 +169,7 @@ def test_generate_trend_data_seed_coverage():
 
 
 def test_generate_trend_data_with_log(tmp_path):
-    log = tmp_path / "NIGHTSHIFT_LOG.md"
+    log = tmp_path / "AWAKE_LOG.md"
     log.write_text("""
 ## Session 17 — February 28, 2026
 

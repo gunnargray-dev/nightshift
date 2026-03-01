@@ -1,7 +1,7 @@
 """
 status.py — Comprehensive one-command status dashboard.
 
-`nightshift status` gives an at-a-glance view of everything:
+`awake status` gives an at-a-glance view of everything:
   - Current session number and date
   - Code health score (current and trend)
   - Test count and coverage
@@ -10,7 +10,7 @@ status.py — Comprehensive one-command status dashboard.
   - Active issues / red flags
   - Next recommended action
 
-CLI: nightshift status [--json] [--brief]
+CLI: awake status [--json] [--brief]
 API: GET /api/status
 """
 
@@ -135,12 +135,12 @@ def _get_health_info(src):
 
 def _get_top_recommendation(src):
     """Get brain's top recommendation."""
-    return "Run `nightshift brain` to get prioritized recommendations for next session"
+    return "Run `awake brain` to get prioritized recommendations for next session"
 
 
 def _get_pr_count(src):
     """Read PR count from log or use known value."""
-    log = Path(src).parent / "NIGHTSHIFT_LOG.md"
+    log = Path(src).parent / "AWAKE_LOG.md"
     if log.exists():
         try:
             import re
@@ -189,7 +189,7 @@ def generate_status(root=None):
 
     src   = root / "src"
     tests = root / "tests"
-    log   = root / "NIGHTSHIFT_LOG.md"
+    log   = root / "AWAKE_LOG.md"
 
     source_modules   = _count_source_modules(src)
     test_files, test_count = _count_tests(tests)
@@ -248,7 +248,7 @@ def format_status(report):
     """Render a StatusReport as a terminal string."""
     icon = STATUS_ICONS.get(report.overall_status, "[??]")
     lines = []
-    lines.append("NIGHTSHIFT STATUS")
+    lines.append("AWAKE STATUS")
     lines.append("=" * 60)
     lines.append(f"  {icon}  {report.summary}")
     lines.append(f"  Generated: {report.generated_at}")
@@ -293,11 +293,11 @@ def format_status(report):
 
     lines.append("")
     lines.append("  Quick commands:")
-    lines.append("    nightshift brain      # what to build next")
-    lines.append("    nightshift reflect    # analyze past sessions")
-    lines.append("    nightshift evolve     # what the system should become")
-    lines.append("    nightshift health     # full health breakdown")
-    lines.append("    nightshift dashboard  # launch React UI")
+    lines.append("    awake brain      # what to build next")
+    lines.append("    awake reflect    # analyze past sessions")
+    lines.append("    awake evolve     # what the system should become")
+    lines.append("    awake health     # full health breakdown")
+    lines.append("    awake dashboard  # launch React UI")
 
     return "\n".join(lines)
 

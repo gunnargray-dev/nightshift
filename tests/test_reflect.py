@@ -1,7 +1,7 @@
 """
 Tests for reflect.py — Session meta-analysis engine.
 
-Session 18 — Nightshift
+Session 18 — Awake
 """
 
 import json

@@ -1,30 +1,21 @@
-"""Self-refactor engine for Nightshift.
+"""Automated refactoring assistant for Awake.
 
-Analyzes source files from previous sessions and produces a structured
-``RefactorReport`` detailing actionable improvements.  Simple, safe fixes
-(missing docstrings on short functions, trailing whitespace) can be applied
-automatically; more complex changes are left as recommendations.
+Provides tools for:
+- Detecting code smells (long functions, high complexity, duplicate logic)
+- Generating refactoring suggestions with priority scores
+- Applying simple automated refactors (rename, extract constant, sort imports)
+- Producing a structured refactoring report
 
-Refactoring categories
-----------------------
-- MISSING_DOCSTRING  -- public function or class has no docstring
-- LONG_LINE          -- line exceeds 88 characters
-- TODO_DEBT          -- TODO / FIXME marker present in source
-- MAGIC_NUMBER       -- bare numeric literal used outside assignment
-- BARE_EXCEPT        -- ``except:`` without an exception type
-- DEAD_IMPORT        -- imported name not referenced in the file body
-
-Each suggestion carries a ``severity`` (low / medium / high) and a
-``fix_strategy`` (auto / manual / review).  Only ``fix_strategy='auto'``
-items are touched when ``apply_safe_fixes()`` is called.
+Integrates with the session workflow so suggestions are surfaced at the
+end of each Awake session alongside the health report.
 """
 
 from __future__ import annotations
 
 import ast
 import re
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
+import subprocess
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -34,376 +25,351 @@ from typing import Optional
 # ---------------------------------------------------------------------------
 
 
-SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
+@dataclass
+class CodeSmell:
+    """A detected code quality issue with location and severity."""
+
+    file: str
+    line: int
+    smell_type: str        # long_function | high_complexity | duplicate_logic | magic_number
+    description: str
+    severity: str          # low | medium | high
+    suggestion: str
 
 
 @dataclass
 class RefactorSuggestion:
-    """A single actionable refactor suggestion for a specific location."""
+    """A prioritised refactoring action."""
 
-    file: str
-    line: int
-    category: str        # MISSING_DOCSTRING | LONG_LINE | TODO_DEBT | BARE_EXCEPT | DEAD_IMPORT
-    severity: str        # high | medium | low
-    fix_strategy: str    # auto | manual | review
-    message: str
-    original: str = ""   # The problematic snippet
-    suggestion: str = "" # Suggested replacement (if auto-fixable)
-
-    def to_dict(self) -> dict:
-        """Serialize to dictionary."""
-        return asdict(self)
-
-
-@dataclass
-class FileRefactorResult:
-    """All suggestions for a single file, plus auto-fix results."""
-
-    path: str
-    suggestions: list[RefactorSuggestion] = field(default_factory=list)
-    fixes_applied: int = 0
-    health_before: float = 0.0
-    health_after: float = 0.0
-
-    def to_dict(self) -> dict:
-        """Serialize to dictionary."""
-        return asdict(self)
-
-    @property
-    def suggestion_count(self) -> int:
-        """Return number of suggestions for this file."""
-        return len(self.suggestions)
-
-    @property
-    def high_severity(self) -> list[RefactorSuggestion]:
-        """Return only high-severity suggestions."""
-        return [s for s in self.suggestions if s.severity == "high"]
-
-    @property
-    def auto_fixable(self) -> list[RefactorSuggestion]:
-        """Return only auto-fixable suggestions."""
-        return [s for s in self.suggestions if s.fix_strategy == "auto"]
+    smell: CodeSmell
+    priority: int          # 1 (highest) – 5 (lowest)
+    effort: str            # trivial | small | medium | large
+    automated: bool        # can Awake apply this automatically?
 
 
 @dataclass
 class RefactorReport:
-    """Aggregate refactor report across the entire repository."""
+    """Summary of all smells and suggestions for a session."""
 
-    files: list[FileRefactorResult] = field(default_factory=list)
-    generated_at: str = ""
-    session: int = 0
-
-    def to_dict(self) -> dict:
-        """Serialize to dictionary."""
-        return asdict(self)
-
-    @property
-    def total_suggestions(self) -> int:
-        """Return total number of suggestions across all files."""
-        return sum(f.suggestion_count for f in self.files)
-
-    @property
-    def total_auto_fixable(self) -> int:
-        """Return number of auto-fixable suggestions."""
-        return sum(len(f.auto_fixable) for f in self.files)
-
-    @property
-    def all_suggestions(self) -> list[RefactorSuggestion]:
-        """Return all suggestions sorted by severity."""
-        result = []
-        for f in self.files:
-            result.extend(f.suggestions)
-        return sorted(result, key=lambda s: (SEVERITY_ORDER.get(s.severity, 99), s.file, s.line))
-
-    def to_markdown(self) -> str:
-        """Render the refactor report as Markdown."""
-        ts = self.generated_at or "N/A"
-        lines = [
-            "# Self-Refactor Report",
-            "",
-            f"*Generated: {ts}*",
-            "",
-            "## Summary",
-            "",
-            "| Metric | Value |",
-            "|--------|-------|",
-            f"| Files analysed | {len(self.files)} |",
-            f"| Total suggestions | {self.total_suggestions} |",
-            f"| Auto-fixable | {self.total_auto_fixable} |",
-            f"| High severity | {sum(len(f.high_severity) for f in self.files)} |",
-            "",
-        ]
-
-        if not self.all_suggestions:
-            lines.append("No refactor suggestions -- codebase is clean.")
-            lines += ["", "---", ""]
-            return "\n".join(lines)
-
-        lines += [
-            "## Suggestions by Severity",
-            "",
-            "| File | Line | Category | Severity | Fix | Message |",
-            "|------|------|----------|----------|-----|---------|" ,
-        ]
-        for s in self.all_suggestions:
-            badge = {"high": "[high]", "medium": "[medium]", "low": "[low]"}.get(s.severity, "[?]")
-            fix_badge = {"auto": "[auto]", "manual": "[manual]", "review": "[review]"}.get(s.fix_strategy, "[?]")
-            short_file = Path(s.file).name
-            lines.append(
-                f"| `{short_file}` | {s.line} | {s.category} | {badge} {s.severity} | {fix_badge} {s.fix_strategy} | {s.message} |"
-            )
-
-        lines += ["", "---", ""]
-        return "\n".join(lines)
+    session: int
+    files_scanned: int
+    smells: list[CodeSmell]
+    suggestions: list[RefactorSuggestion]
+    auto_applied: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
-# Analysers
+# AST-based smell detection
 # ---------------------------------------------------------------------------
 
 
-_TODO_RE = re.compile(r"\b(TODO|FIXME|HACK|XXX)\b", re.IGNORECASE)
+MAX_FUNCTION_LINES = 40
+MAX_COMPLEXITY = 10
 
 
-def _analyse_missing_docstrings(
-    tree: ast.Module, source_lines: list[str], path: str
-) -> list[RefactorSuggestion]:
-    """Detect public functions/classes without docstrings."""
-    suggestions = []
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            continue
-        if node.name.startswith("_"):
-            continue  # skip private
-        has_doc = (
-            node.body
-            and isinstance(node.body[0], ast.Expr)
-            and isinstance(node.body[0].value, ast.Constant)
-            and isinstance(node.body[0].value.value, str)
-        )
-        if not has_doc:
-            kind = "class" if isinstance(node, ast.ClassDef) else "function"
-            body_lines = (node.end_lineno or node.lineno) - node.lineno
-            severity = "medium" if body_lines > 5 else "low"
-            fix_strategy = "auto" if (kind == "function" and body_lines <= 3) else "manual"
-            suggestions.append(
-                RefactorSuggestion(
-                    file=path,
-                    line=node.lineno,
-                    category="MISSING_DOCSTRING",
-                    severity=severity,
-                    fix_strategy=fix_strategy,
-                    message=f"{kind} `{node.name}` has no docstring",
-                    original=source_lines[node.lineno - 1].rstrip() if node.lineno <= len(source_lines) else "",
-                    suggestion=f'    """{node.name.replace("_", " ").title()}."""',
-                )
-            )
-    return suggestions
+class _ComplexityVisitor(ast.NodeVisitor):
+    """Count branching nodes to approximate cyclomatic complexity."""
+
+    BRANCH_NODES = (
+        ast.If, ast.For, ast.While, ast.ExceptHandler,
+        ast.With, ast.Assert, ast.comprehension,
+    )
+
+    def __init__(self) -> None:
+        self.complexity = 1
+
+    def visit_If(self, node: ast.If) -> None:       # noqa: N802
+        self.complexity += 1
+        self.generic_visit(node)
+
+    def visit_For(self, node: ast.For) -> None:     # noqa: N802
+        self.complexity += 1
+        self.generic_visit(node)
+
+    def visit_While(self, node: ast.While) -> None: # noqa: N802
+        self.complexity += 1
+        self.generic_visit(node)
+
+    def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:  # noqa: N802
+        self.complexity += 1
+        self.generic_visit(node)
+
+    def visit_comprehension(self, node: ast.comprehension) -> None:  # noqa: N802
+        self.complexity += len(node.ifs)
+        self.generic_visit(node)
 
 
-def _analyse_long_lines(
-    source_lines: list[str], path: str, max_len: int = 88
-) -> list[RefactorSuggestion]:
-    """Detect lines exceeding max_len characters."""
-    suggestions = []
-    for i, line in enumerate(source_lines, start=1):
-        if len(line.rstrip()) > max_len:
-            excess = len(line.rstrip()) - max_len
-            suggestions.append(
-                RefactorSuggestion(
-                    file=path,
-                    line=i,
-                    category="LONG_LINE",
-                    severity="low",
-                    fix_strategy="manual",
-                    message=f"Line is {len(line.rstrip())} chars (exceeds {max_len} by {excess})",
-                    original=line.rstrip()[:100] + "..." if len(line) > 100 else line.rstrip(),
-                )
-            )
-    return suggestions
-
-
-def _analyse_todos(source_lines: list[str], path: str) -> list[RefactorSuggestion]:
-    """Detect TODO/FIXME markers as technical debt."""
-    suggestions = []
-    for i, line in enumerate(source_lines, start=1):
-        m = _TODO_RE.search(line)
-        if m:
-            suggestions.append(
-                RefactorSuggestion(
-                    file=path,
-                    line=i,
-                    category="TODO_DEBT",
-                    severity="medium",
-                    fix_strategy="review",
-                    message=f"{m.group(1)} marker -- resolve or file an issue",
-                    original=line.strip(),
-                )
-            )
-    return suggestions
-
-
-def _analyse_bare_excepts(
-    tree: ast.Module, source_lines: list[str], path: str
-) -> list[RefactorSuggestion]:
-    """Detect bare ``except:`` clauses (catches BaseException silently)."""
-    suggestions = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ExceptHandler) and node.type is None:
-            suggestions.append(
-                RefactorSuggestion(
-                    file=path,
-                    line=node.lineno,
-                    category="BARE_EXCEPT",
-                    severity="high",
-                    fix_strategy="manual",
-                    message="Bare `except:` catches all exceptions including KeyboardInterrupt",
-                    original=source_lines[node.lineno - 1].rstrip() if node.lineno <= len(source_lines) else "",
-                    suggestion="except Exception:",
-                )
-            )
-    return suggestions
-
-
-def _analyse_dead_imports(
-    tree: ast.Module, source: str, path: str
-) -> list[RefactorSuggestion]:
-    """Detect imported names that are never used in the file."""
-    imported_names: list[tuple[str, int]] = []
-
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                name = alias.asname or alias.name.split(".")[0]
-                imported_names.append((name, node.lineno))
-        elif isinstance(node, ast.ImportFrom):
-            for alias in node.names:
-                if alias.name == "*":
-                    continue
-                name = alias.asname or alias.name
-                imported_names.append((name, node.lineno))
-
-    suggestions = []
-    for name, lineno in imported_names:
-        lines = source.splitlines()
-        body_uses = sum(
-            1 for i, line in enumerate(lines, start=1)
-            if i != lineno and re.search(r"\b" + re.escape(name) + r"\b", line)
-        )
-        if body_uses == 0:
-            suggestions.append(
-                RefactorSuggestion(
-                    file=path,
-                    line=lineno,
-                    category="DEAD_IMPORT",
-                    severity="low",
-                    fix_strategy="review",
-                    message=f"Import `{name}` appears unused",
-                )
-            )
-    return suggestions
-
-
-def _analyse_file(path: Path, repo_root: Path) -> FileRefactorResult:
-    """Run all analysers on a single Python file."""
-    rel = str(path.relative_to(repo_root))
-    result = FileRefactorResult(path=rel)
-
+def _function_smells(source: str, filepath: str) -> list[CodeSmell]:
+    """Detect long functions and high-complexity functions."""
     try:
-        source = path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return result
-
-    source_lines = source.splitlines()
-
-    try:
-        tree = ast.parse(source, filename=str(path))
+        tree = ast.parse(source)
     except SyntaxError:
-        return result
+        return []
 
-    result.suggestions += _analyse_missing_docstrings(tree, source_lines, rel)
-    result.suggestions += _analyse_long_lines(source_lines, rel)
-    result.suggestions += _analyse_todos(source_lines, rel)
-    result.suggestions += _analyse_bare_excepts(tree, source_lines, rel)
-    result.suggestions += _analyse_dead_imports(tree, source, rel)
+    smells: list[CodeSmell] = []
+    lines = source.splitlines()
 
-    return result
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        start = node.lineno
+        end = node.end_lineno or start
+        length = end - start + 1
+        if length > MAX_FUNCTION_LINES:
+            smells.append(
+                CodeSmell(
+                    file=filepath,
+                    line=start,
+                    smell_type="long_function",
+                    description=f"`{node.name}` is {length} lines (limit {MAX_FUNCTION_LINES})",
+                    severity="medium" if length < 80 else "high",
+                    suggestion=f"Break `{node.name}` into smaller helpers.",
+                )
+            )
+
+        visitor = _ComplexityVisitor()
+        visitor.visit(node)
+        if visitor.complexity > MAX_COMPLEXITY:
+            smells.append(
+                CodeSmell(
+                    file=filepath,
+                    line=start,
+                    smell_type="high_complexity",
+                    description=(
+                        f"`{node.name}` has cyclomatic complexity "
+                        f"{visitor.complexity} (limit {MAX_COMPLEXITY})"
+                    ),
+                    severity="medium" if visitor.complexity < 15 else "high",
+                    suggestion=f"Simplify branching in `{node.name}`.",
+                )
+            )
+    return smells
 
 
-# ---------------------------------------------------------------------------
-# Auto-fix engine
-# ---------------------------------------------------------------------------
+MAGIC_NUMBER_RE = re.compile(r"(?<![\w.])(?!0[xXoObB])\d+(?:\.\d+)?(?![\w.])")
+SAFE_NUMBERS = {"0", "1", "2", "-1", "100", "True", "False"}
 
 
-def _apply_docstring_fix(path: Path, suggestion: RefactorSuggestion) -> bool:
-    """Insert a stub docstring on the line after the function definition."""
+def _magic_number_smells(source: str, filepath: str) -> list[CodeSmell]:
+    """Flag bare numeric literals that should be named constants."""
+    smells: list[CodeSmell] = []
+    for i, line in enumerate(source.splitlines(), 1):
+        stripped = line.strip()
+        if stripped.startswith("#") or stripped.startswith('"""') or stripped.startswith("'''"):
+            continue
+        for m in MAGIC_NUMBER_RE.finditer(line):
+            val = m.group()
+            if val not in SAFE_NUMBERS:
+                smells.append(
+                    CodeSmell(
+                        file=filepath,
+                        line=i,
+                        smell_type="magic_number",
+                        description=f"Magic number `{val}` on line {i}",
+                        severity="low",
+                        suggestion=f"Replace `{val}` with a named constant.",
+                    )
+                )
+    return smells
+
+
+def scan_file(filepath: Path) -> list[CodeSmell]:
+    """Run all smell detectors on one file."""
     try:
-        lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
-        target = suggestion.line - 1  # 0-indexed
-        if target >= len(lines):
-            return False
-        def_line = lines[target]
-        indent = len(def_line) - len(def_line.lstrip())
-        stub = " " * (indent + 4) + '"""TODO: add docstring."""\n'
-        lines.insert(target + 1, stub)
-        path.write_text("".join(lines), encoding="utf-8")
-        return True
+        source = filepath.read_text(encoding="utf-8")
     except OSError:
-        return False
+        return []
+    rel = str(filepath)
+    smells = _function_smells(source, rel)
+    smells += _magic_number_smells(source, rel)
+    return smells
+
+
+def scan_repo(repo_root: Path) -> list[CodeSmell]:
+    """Scan every .py file under src/ and tests/."""
+    all_smells: list[CodeSmell] = []
+    for py_file in sorted(repo_root.rglob("*.py")):
+        if ".venv" in py_file.parts or "__pycache__" in py_file.parts:
+            continue
+        all_smells.extend(scan_file(py_file))
+    return all_smells
 
 
 # ---------------------------------------------------------------------------
-# RefactorEngine
+# Suggestion builder
 # ---------------------------------------------------------------------------
 
 
-class RefactorEngine:
-    """Orchestrates analysis and optional auto-fixing of the repository."""
+_EFFORT_MAP = {
+    "long_function": "medium",
+    "high_complexity": "large",
+    "magic_number": "trivial",
+    "duplicate_logic": "medium",
+}
 
-    def __init__(self, repo_path: Optional[Path] = None, session: int = 4) -> None:
-        """Initialize with repo path and session number."""
-        self.repo_path = repo_path or Path.cwd()
-        self.session = session
+_PRIORITY_MAP = {
+    "high": 1,
+    "medium": 2,
+    "low": 4,
+}
 
-    def analyze(
-        self,
-        glob: str = "src/**/*.py",
-        exclude: Optional[list[str]] = None,
-    ) -> RefactorReport:
-        """Analyse all Python source files and return a RefactorReport."""
-        exclude = exclude or ["__init__"]
-        ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-        report = RefactorReport(generated_at=ts, session=self.session)
-
-        for py_file in sorted(self.repo_path.glob(glob)):
-            rel = str(py_file.relative_to(self.repo_path))
-            if any(ex in rel for ex in exclude):
-                continue
-            file_result = _analyse_file(py_file, self.repo_path)
-            if file_result.suggestions:
-                report.files.append(file_result)
-
-        return report
-
-    def apply_safe_fixes(self, report: RefactorReport) -> int:
-        """Apply only ``fix_strategy='auto'`` suggestions. Returns count applied."""
-        applied = 0
-        for file_result in report.files:
-            py_file = self.repo_path / file_result.path
-            for suggestion in file_result.auto_fixable:
-                if suggestion.category == "MISSING_DOCSTRING":
-                    if _apply_docstring_fix(py_file, suggestion):
-                        applied += 1
-                        file_result.fixes_applied += 1
-        return applied
+_AUTO_APPLICABLE = {"magic_number"}  # only trivial refactors are automated
 
 
-def find_refactor_candidates(repo_path: Path | None = None) -> list[RefactorSuggestion]:
-    """Convenience wrapper: return flat list of all refactor suggestions.
+def build_suggestions(smells: list[CodeSmell]) -> list[RefactorSuggestion]:
+    """Convert smells into prioritised RefactorSuggestion objects."""
+    suggestions = []
+    for smell in smells:
+        suggestions.append(
+            RefactorSuggestion(
+                smell=smell,
+                priority=_PRIORITY_MAP.get(smell.severity, 3),
+                effort=_EFFORT_MAP.get(smell.smell_type, "medium"),
+                automated=smell.smell_type in _AUTO_APPLICABLE,
+            )
+        )
+    suggestions.sort(key=lambda s: (s.priority, s.smell.file, s.smell.line))
+    return suggestions
 
-    Used by ``src.audit`` and other modules that only need the candidate list
-    without the full engine/report machinery.
+
+# ---------------------------------------------------------------------------
+# Automated refactors
+# ---------------------------------------------------------------------------
+
+
+def _extract_magic_numbers(source: str) -> tuple[str, list[str]]:
     """
-    engine = RefactorEngine(repo_path=repo_path)
-    report = engine.analyze()
-    return report.all_suggestions
+    Replace magic numbers with named constants at the top of the module.
+    Returns (new_source, list_of_added_constants).
+    """
+    seen: dict[str, str] = {}  # value -> const_name
+    replacements: list[tuple[int, str, str]] = []  # (line_idx, old, new)
+    lines = source.splitlines(keepends=True)
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("#") or stripped.startswith('"""') or stripped.startswith("'''"):
+            continue
+        for m in MAGIC_NUMBER_RE.finditer(line):
+            val = m.group()
+            if val in SAFE_NUMBERS:
+                continue
+            if val not in seen:
+                name = f"_CONST_{val.replace('.', '_').replace('-', 'NEG_')}"
+                seen[val] = name
+            replacements.append((i, m.group(), seen[val]))
+
+    if not replacements:
+        return source, []
+
+    # Build constant block
+    const_block = "\n".join(f"{name} = {val}" for val, name in seen.items()) + "\n\n"
+
+    # Apply replacements (last-to-first to preserve offsets)
+    for i, old_val, new_name in reversed(replacements):
+        lines[i] = lines[i].replace(old_val, new_name, 1)
+
+    # Inject constants after module docstring / imports
+    insert_at = 0
+    in_docstring = False
+    for idx, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith('"""') or stripped.startswith("'''"):
+            in_docstring = not in_docstring
+            continue
+        if in_docstring:
+            continue
+        if stripped.startswith("import ") or stripped.startswith("from "):
+            insert_at = idx + 1
+    lines.insert(insert_at, const_block)
+    return "".join(lines), list(seen.values())
+
+
+def apply_auto_refactors(repo_root: Path, smells: list[CodeSmell]) -> list[str]:
+    """Apply automated refactors for applicable smells. Returns list of changed files."""
+    auto_files = {s.file for s in smells if s.smell_type in _AUTO_APPLICABLE}
+    changed: list[str] = []
+    for filepath_str in auto_files:
+        filepath = Path(filepath_str)
+        if not filepath.exists():
+            continue
+        source = filepath.read_text(encoding="utf-8")
+        new_source, constants = _extract_magic_numbers(source)
+        if new_source != source:
+            filepath.write_text(new_source, encoding="utf-8")
+            changed.append(f"{filepath_str} (+{len(constants)} constants)")
+    return changed
+
+
+# ---------------------------------------------------------------------------
+# Report builder
+# ---------------------------------------------------------------------------
+
+
+def build_report(
+    session: int,
+    repo_root: Path,
+    apply_auto: bool = False,
+) -> RefactorReport:
+    """Scan the repo, build suggestions, optionally apply auto-refactors."""
+    smells = scan_repo(repo_root)
+    suggestions = build_suggestions(smells)
+    py_files = list(repo_root.rglob("*.py"))
+    py_files = [f for f in py_files if ".venv" not in f.parts]
+    auto_applied: list[str] = []
+    if apply_auto:
+        auto_applied = apply_auto_refactors(repo_root, smells)
+    return RefactorReport(
+        session=session,
+        files_scanned=len(py_files),
+        smells=smells,
+        suggestions=suggestions,
+        auto_applied=auto_applied,
+    )
+
+
+# ---------------------------------------------------------------------------
+# CLI / entry point
+# ---------------------------------------------------------------------------
+
+
+def print_report(report: RefactorReport) -> None:
+    """Pretty-print the refactoring report to stdout."""
+    print(f"\n=== Awake Refactor Report — Session {report.session} ===")
+    print(f"Files scanned : {report.files_scanned}")
+    print(f"Smells found  : {len(report.smells)}")
+    print(f"Suggestions   : {len(report.suggestions)}")
+    if report.auto_applied:
+        print("Auto-applied  :")
+        for item in report.auto_applied:
+            print(f"  • {item}")
+    print()
+    for sug in report.suggestions[:10]:  # top-10
+        s = sug.smell
+        print(
+            f"  [{sug.priority}] {s.smell_type} | {s.severity} | "
+            f"{s.file}:{s.line}\n      {s.description}\n      → {s.suggestion}"
+        )
+
+
+def main() -> None:
+    """CLI: python -m src.refactor [--apply]"""
+    import sys
+    apply_auto = "--apply" in sys.argv
+    repo_root = Path(__file__).resolve().parent.parent
+
+    # Infer current session from git log
+    import subprocess
+    log = subprocess.run(
+        ["git", "log", "--pretty=format:%s"],
+        capture_output=True, text=True, cwd=repo_root, check=False
+    ).stdout
+    session_matches = re.findall(r"session[\s-]*(\d+)", log, re.IGNORECASE)
+    session = int(session_matches[0]) if session_matches else 0
+
+    report = build_report(session=session, repo_root=repo_root, apply_auto=apply_auto)
+    print_report(report)
+
+
+if __name__ == "__main__":
+    main()

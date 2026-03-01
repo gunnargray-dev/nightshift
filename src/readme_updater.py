@@ -1,4 +1,4 @@
-"""README auto-updater for Nightshift.
+"""README auto-updater for Awake.
 
 Generates a dynamic README.md from live repo state, including:
 - Session count and last-run timestamp
@@ -8,7 +8,7 @@ Generates a dynamic README.md from live repo state, including:
 - Roadmap progress: checked vs unchecked items
 - Stats snapshot: PRs, lines of code, health score
 
-Designed to run at the end of each Nightshift session and push the
+Designed to run at the end of each Awake session and push the
 refreshed README directly to main via the GitHub API.
 """
 
@@ -71,123 +71,130 @@ class RepoSnapshot:
     tests_passing: bool
     recent_commits: list[CommitEntry]
     roadmap: RoadmapProgress
+    open_prs: int
     total_lines: int
-    pr_count: int
+    health_score: float
 
 
 # ---------------------------------------------------------------------------
-# Parsers
+# Git helpers
 # ---------------------------------------------------------------------------
 
 
-def _parse_docstring_summary(path: Path) -> str:
-    """Return the first non-empty line of the module-level docstring, or ''."""
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError:
-        return ""
-    # Match triple-quoted docstring at the very start (after optional blank lines)
-    m = re.search(r'^["\x27]{3}(.*?)["\x27]{3}', text.strip(), re.DOTALL)
-    if not m:
-        return ""
-    raw = m.group(1).strip()
-    # Return first sentence / line
-    first_line = raw.splitlines()[0].strip() if raw else ""
-    # Trim trailing period so descriptions read like labels
-    return first_line.rstrip(".")
+def _run(cmd: list[str], cwd: Path | None = None) -> str:
+    """Run a subprocess and return stdout (stripped)."""
+    result = subprocess.run(
+        cmd, capture_output=True, text=True, cwd=cwd, check=False
+    )
+    return result.stdout.strip()
 
 
-def _count_lines(path: Path) -> int:
-    try:
-        return len(path.read_text(encoding="utf-8").splitlines())
-    except OSError:
-        return 0
+def get_recent_commits(repo_root: Path, n: int = 10) -> list[CommitEntry]:
+    """Return the last *n* commits parsed into CommitEntry objects."""
+    log = _run(
+        ["git", "log", f"-{n}", "--pretty=format:%h|||%s"],
+        cwd=repo_root,
+    )
+    entries: list[CommitEntry] = []
+    pattern = re.compile(
+        r"^\[awake\]\s+(?P<type>[\w]+)(?:\((?P<scope>[^)]+)\))?:\s+(?P<desc>.+)$"
+    )
+    session_pat = re.compile(r"session[\s-]*(?P<n>\d+)", re.IGNORECASE)
+    for line in log.splitlines():
+        if "|||" not in line:
+            continue
+        sha, subject = line.split("|||", 1)
+        m = pattern.match(subject)
+        if m:
+            commit_type = m.group("type")
+            description = m.group("desc")
+        else:
+            commit_type = "misc"
+            description = subject
+        sm = session_pat.search(subject)
+        session_num = int(sm.group("n")) if sm else None
+        entries.append(CommitEntry(sha=sha, commit_type=commit_type, description=description, session=session_num))
+    return entries
 
 
-def _parse_commit_line(line: str) -> Optional[CommitEntry]:
-    """Parse a git log line like ``<sha> [nightshift] feat: description``."""
-    # Format: "%h %s"
-    parts = line.strip().split(" ", 1)
-    if len(parts) < 2:
-        return None
-    sha, subject = parts[0], parts[1]
-
-    # Only handle nightshift-tagged commits
-    m = re.match(r"\[nightshift\]\s+(\w+):\s+(.+)", subject)
-    if not m:
-        return None
-    commit_type = m.group(1)
-    description = m.group(2)
-
-    # Extract session number from "Session: N" if present in subject
-    sm = re.search(r"[Ss]ession:?\s*(\d+)", subject)
-    session = int(sm.group(1)) if sm else None
-
-    return CommitEntry(sha=sha, commit_type=commit_type, description=description, session=session)
-
-
-def _parse_roadmap(roadmap_path: Path) -> RoadmapProgress:
-    """Count checked and total checklist items in ROADMAP.md."""
+def get_roadmap_progress(repo_root: Path) -> RoadmapProgress:
+    """Count checked/unchecked items in ROADMAP.md."""
+    roadmap_path = repo_root / "ROADMAP.md"
     if not roadmap_path.exists():
         return RoadmapProgress(checked=0, total=0)
     text = roadmap_path.read_text(encoding="utf-8")
-    total = len(re.findall(r"^- \[[ x]\]", text, re.MULTILINE))
-    checked = len(re.findall(r"^- \[x\]", text, re.MULTILINE))
-    return RoadmapProgress(checked=checked, total=total)
+    checked = len(re.findall(r"- \[x\]", text, re.IGNORECASE))
+    unchecked = len(re.findall(r"- \[ \]", text))
+    return RoadmapProgress(checked=checked, total=checked + unchecked)
 
 
-def _parse_test_status(repo_root: Path) -> tuple[int, bool]:
-    """Run pytest --tb=no -q and parse counts. Returns (test_count, passing)."""
-    result = subprocess.run(
-        ["python", "-m", "pytest", "--tb=no", "-q", "tests/"],
-        capture_output=True,
-        text=True,
-        cwd=repo_root,
-    )
-    output = result.stdout + result.stderr
-    # "174 passed" or "3 failed, 171 passed"
-    passed_m = re.search(r"(\d+) passed", output)
-    failed_m = re.search(r"(\d+) failed", output)
-    passed = int(passed_m.group(1)) if passed_m else 0
-    failed = int(failed_m.group(1)) if failed_m else 0
-    return passed + failed, failed == 0
+def get_source_files(src_dir: Path) -> list[FileEntry]:
+    """Collect .py files in src/ with line counts and first docstring line."""
+    entries: list[FileEntry] = []
+    for py_file in sorted(src_dir.glob("*.py")):
+        lines = py_file.read_text(encoding="utf-8").splitlines()
+        line_count = len(lines)
+        description = ""
+        in_docstring = False
+        for raw in lines:
+            stripped = raw.strip()
+            if stripped.startswith('"""') and not in_docstring:
+                doc_line = stripped.lstrip('"').strip()
+                if doc_line:
+                    description = doc_line.split("\"\"\"")[0].strip()
+                    break
+                in_docstring = True
+            elif in_docstring:
+                if stripped:
+                    description = stripped
+                    break
+        entries.append(FileEntry(path=str(py_file.relative_to(src_dir.parent)), description=description, lines=line_count))
+    return entries
 
 
-def _get_recent_commits(repo_root: Path, n: int = 10) -> list[CommitEntry]:
-    """Fetch the last *n* nightshift commits from git log."""
+def get_test_status(repo_root: Path) -> tuple[int, bool]:
+    """Run pytest --tb=no -q and return (test_count, all_passing)."""
+    out = _run(["python", "-m", "pytest", "--tb=no", "-q"], cwd=repo_root)
+    m = re.search(r"(\d+) passed", out)
+    count = int(m.group(1)) if m else 0
+    passing = "failed" not in out and "error" not in out.lower()
+    return count, passing
+
+
+def get_open_prs() -> int:
+    """Return the number of open PRs (requires gh CLI)."""
+    out = _run(["gh", "pr", "list", "--state", "open", "--json", "number"])
     try:
-        result = subprocess.run(
-            ["git", "log", "--oneline", f"-{n * 3}", "--format=%h %s"],
-            capture_output=True,
-            text=True,
-            cwd=repo_root,
-        )
-        commits = []
-        for line in result.stdout.splitlines():
-            entry = _parse_commit_line(line)
-            if entry:
-                commits.append(entry)
-            if len(commits) >= n:
-                break
-        return commits
-    except FileNotFoundError:
-        return []
-
-
-def _get_pr_count_from_log(nightshift_log: Path) -> int:
-    """Count PRs mentioned in NIGHTSHIFT_LOG.md."""
-    if not nightshift_log.exists():
+        return len(__import__("json").loads(out))
+    except Exception:
         return 0
-    text = nightshift_log.read_text(encoding="utf-8")
-    return len(re.findall(r"PR #\d+|#\d+ merged|pull request", text, re.IGNORECASE))
 
 
-def _get_session_count(nightshift_log: Path) -> int:
-    """Count completed session entries in NIGHTSHIFT_LOG.md."""
-    if not nightshift_log.exists():
-        return 0
-    text = nightshift_log.read_text(encoding="utf-8")
-    return len(re.findall(r"^##\s+Session\s+\d+", text, re.MULTILINE))
+def get_total_lines(repo_root: Path) -> int:
+    """Count total non-blank lines across .py files."""
+    total = 0
+    for py_file in repo_root.rglob("*.py"):
+        try:
+            lines = py_file.read_text(encoding="utf-8", errors="ignore").splitlines()
+            total += sum(1 for ln in lines if ln.strip())
+        except OSError:
+            pass
+    return total
+
+
+def compute_health_score(
+    tests_passing: bool,
+    roadmap: RoadmapProgress,
+    recent_commits: list[CommitEntry],
+) -> float:
+    """Heuristic 0-100 score: tests 50 pts, roadmap 30 pts, recent activity 20 pts."""
+    score = 0.0
+    if tests_passing:
+        score += 50.0
+    score += roadmap.percent * 0.30
+    activity = min(len(recent_commits), 10) / 10 * 20
+    score += activity
+    return round(score, 1)
 
 
 # ---------------------------------------------------------------------------
@@ -195,200 +202,143 @@ def _get_session_count(nightshift_log: Path) -> int:
 # ---------------------------------------------------------------------------
 
 
-def build_snapshot(
-    repo_root: Path,
-    *,
-    project: str = "Nightshift",
-    version: str = "0.1.0",
-    run_tests: bool = True,
-) -> RepoSnapshot:
-    """Collect live repo state and return a :class:`RepoSnapshot`."""
+def build_snapshot(repo_root: Path) -> RepoSnapshot:
+    """Collect all metrics and return a RepoSnapshot."""
     src_dir = repo_root / "src"
-    roadmap_path = repo_root / "ROADMAP.md"
-    nightshift_log = repo_root / "NIGHTSHIFT_LOG.md"
+    source_files = get_source_files(src_dir)
+    test_count, tests_passing = get_test_status(repo_root)
+    recent_commits = get_recent_commits(repo_root)
+    roadmap = get_roadmap_progress(repo_root)
+    open_prs = get_open_prs()
+    total_lines = get_total_lines(repo_root)
+    health_score = compute_health_score(tests_passing, roadmap, recent_commits)
 
-    # Source files
-    source_files: list[FileEntry] = []
-    total_lines = 0
-    if src_dir.exists():
-        for py_file in sorted(src_dir.glob("*.py")):
-            if py_file.name == "__init__.py":
-                continue
-            desc = _parse_docstring_summary(py_file)
-            lc = _count_lines(py_file)
-            total_lines += lc
-            source_files.append(FileEntry(path=f"src/{py_file.name}", description=desc, lines=lc))
+    # Version from git tag or fallback
+    version = _run(["git", "describe", "--tags", "--abbrev=0"], cwd=repo_root) or "0.1.0"
 
-    # Tests
-    if run_tests:
-        test_count, passing = _parse_test_status(repo_root)
-    else:
-        test_count, passing = 0, True
+    # Session count = number of commits whose subject matches [awake] ... session N
+    all_commits = _run(
+        ["git", "log", "--pretty=format:%s"],
+        cwd=repo_root,
+    )
+    session_count = len(re.findall(r"session[\s-]*\d+", all_commits, re.IGNORECASE))
 
-    # Commits
-    commits = _get_recent_commits(repo_root)
-
-    # Roadmap
-    roadmap = _parse_roadmap(roadmap_path)
-
-    # Session count
-    session_count = _get_session_count(nightshift_log) or 3
-
-    # PRs (approximate from log)
-    pr_count = _get_pr_count_from_log(nightshift_log) or 6
+    last_run = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     return RepoSnapshot(
-        project=project,
+        project="Awake",
         version=version,
         session_count=session_count,
-        last_run=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        last_run=last_run,
         source_files=source_files,
         test_count=test_count,
-        tests_passing=passing,
-        recent_commits=commits,
+        tests_passing=tests_passing,
+        recent_commits=recent_commits,
         roadmap=roadmap,
+        open_prs=open_prs,
         total_lines=total_lines,
-        pr_count=pr_count,
+        health_score=health_score,
     )
 
 
 # ---------------------------------------------------------------------------
-# Renderer
+# README renderer
 # ---------------------------------------------------------------------------
 
-_COMMIT_TYPE_EMOJI = {
-    "feat": "\u2728",
-    "fix": "\U0001f41b",
-    "refactor": "\u267b\ufe0f",
-    "test": "\U0001f9ea",
-    "ci": "\u2699\ufe0f",
-    "docs": "\U0001f4dd",
-    "meta": "\U0001f516",
-}
 
+TEMPLATE = """\
+# {project} v{version}
 
-def render_readme(snapshot: RepoSnapshot) -> str:
-    """Render the full README.md content from a :class:`RepoSnapshot`."""
-    test_badge = (
-        f"![tests](https://img.shields.io/badge/tests-{snapshot.test_count}%20passing-brightgreen)"
-        if snapshot.tests_passing
-        else f"![tests](https://img.shields.io/badge/tests-FAILING-red)"
-    )
-    roadmap_badge = (
-        f"![roadmap](https://img.shields.io/badge/roadmap-"
-        f"{snapshot.roadmap.checked}%2F{snapshot.roadmap.total}%20done-blue)"
-    )
+> Auto-generated by `readme_updater.py` · last updated {last_run} UTC
 
-    # Source file table
-    file_rows = "\n".join(
-        f"| `{fe.path}` | {fe.description} | {fe.lines} |"
-        for fe in snapshot.source_files
-    )
-
-    # Recent commits section
-    commit_lines = []
-    for c in snapshot.recent_commits[:8]:
-        emoji = _COMMIT_TYPE_EMOJI.get(c.commit_type, "\u2022")
-        session_tag = f" _(session {c.session})_" if c.session else ""
-        commit_lines.append(f"- {emoji} **{c.commit_type}**: {c.description}{session_tag}")
-    recent_commits_section = "\n".join(commit_lines) if commit_lines else "_No commits yet._"
-
-    readme = f"""\
-# \U0001f319 {snapshot.project}
-
-**AI submits PRs while you sleep.**
-
-{test_badge} {roadmap_badge}
-
-This repo is autonomously developed by [Perplexity Computer](https://www.perplexity.ai/computer) overnight, every night. No human prompting during development sessions \u2014 the AI reads its own roadmap, picks tasks, writes code, runs tests, and opens pull requests.
-
-Every morning, the human maintainer wakes up to a diff.
-
----
-
-## How It Works
-
-1. **11 PM CST** \u2014 Computer wakes up via scheduled task
-2. **Survey** \u2014 Reads the full repo state, open issues, and its own roadmap
-3. **Plan** \u2014 Autonomously decides what to build (2-5 improvements per session)
-4. **Code** \u2014 Writes code locally, runs it, runs tests, iterates until passing
-5. **Push** \u2014 Creates feature branches and opens PRs with detailed descriptions
-6. **Log** \u2014 Appends a session summary to `NIGHTSHIFT_LOG.md`
-7. **Sleep** \u2014 Waits for the next night
-
----
-
-## Stats _(auto-updated)_
+## Overview
 
 | Metric | Value |
 |--------|-------|
-| Sessions completed | {snapshot.session_count} |
-| PRs merged | {snapshot.pr_count} |
-| Source lines | {snapshot.total_lines:,} |
-| Tests | {snapshot.test_count} |
-| Last run | {snapshot.last_run} |
+| Sessions | {session_count} |
+| Tests | {test_badge} |
+| Open PRs | {open_prs} |
+| Lines of code | {total_lines:,} |
+| Health score | {health_score}/100 |
 
----
+## Source files
 
-## Source Files
+{file_table}
 
-| File | Description | Lines |
-|------|-------------|-------|
-{file_rows}
+## Recent activity
 
----
+{commit_log}
 
-## Recent Activity
+## Roadmap
 
-{recent_commits_section}
-
----
-
-## Roadmap Progress
-
-{snapshot.roadmap.checked}/{snapshot.roadmap.total} items complete ({snapshot.roadmap.percent}%)
-
-See [ROADMAP.md](ROADMAP.md) for the full list.
-
----
-
-## Running Tests
-
-```bash
-pip install pytest pytest-cov
-pytest tests/ -v
-```
-
----
-
-_README auto-generated by `src/readme_updater.py` \u00b7 Last updated: {snapshot.last_run}_
+{roadmap_summary}
 """
-    return readme
+
+
+def _test_badge(passing: bool, count: int) -> str:
+    if passing:
+        return f"![tests](https://img.shields.io/badge/tests-{count}%20passing-brightgreen)"
+    return f"![tests](https://img.shields.io/badge/tests-failing-red)"
+
+
+def _file_table(files: list[FileEntry]) -> str:
+    rows = ["| File | Description | Lines |", "|------|-------------|-------|"] 
+    for f in files:
+        rows.append(f"| `{f.path}` | {f.description} | {f.lines} |")
+    return "\n".join(rows)
+
+
+def _commit_log(commits: list[CommitEntry]) -> str:
+    if not commits:
+        return "_No commits yet._"
+    lines = []
+    for c in commits:
+        session_tag = f" *(session {c.session})*" if c.session else ""
+        lines.append(f"- `{c.sha}` **{c.commit_type}**: {c.description}{session_tag}")
+    return "\n".join(lines)
+
+
+def _roadmap_summary(roadmap: RoadmapProgress) -> str:
+    bar_filled = int(roadmap.percent / 10)
+    bar = "█" * bar_filled + "░" * (10 - bar_filled)
+    return (
+        f"`[{bar}]` {roadmap.percent}% complete "
+        f"({roadmap.checked}/{roadmap.total} items)"
+    )
+
+
+def render_readme(snapshot: RepoSnapshot) -> str:
+    """Render the README from a RepoSnapshot."""
+    return TEMPLATE.format(
+        project=snapshot.project,
+        version=snapshot.version,
+        last_run=snapshot.last_run,
+        session_count=snapshot.session_count,
+        test_badge=_test_badge(snapshot.tests_passing, snapshot.test_count),
+        open_prs=snapshot.open_prs,
+        total_lines=snapshot.total_lines,
+        health_score=snapshot.health_score,
+        file_table=_file_table(snapshot.source_files),
+        commit_log=_commit_log(snapshot.recent_commits),
+        roadmap_summary=_roadmap_summary(snapshot.roadmap),
+    )
 
 
 # ---------------------------------------------------------------------------
-# Write helper
+# Entry point
 # ---------------------------------------------------------------------------
 
 
-def update_readme(
-    repo_root: Path,
-    *,
-    dry_run: bool = False,
-    run_tests: bool = True,
-) -> str:
-    """Build snapshot, render README, and optionally write it to disk.
+def main() -> None:
+    """Build snapshot → render README → write to repo root."""
+    repo_root = Path(__file__).resolve().parent.parent
+    snapshot = build_snapshot(repo_root)
+    readme = render_readme(snapshot)
+    out_path = repo_root / "README.md"
+    out_path.write_text(readme, encoding="utf-8")
+    print(f"README written to {out_path} ({len(readme)} chars)")
+    print(f"Health score: {snapshot.health_score}/100")
 
-    Args:
-        repo_root: Path to the repository root.
-        dry_run: If True, return the rendered content without writing.
-        run_tests: If True, actually invoke pytest to get live test counts.
 
-    Returns:
-        The rendered README content as a string.
-    """
-    snapshot = build_snapshot(repo_root, run_tests=run_tests)
-    content = render_readme(snapshot)
-    if not dry_run:
-        (repo_root / "README.md").write_text(content, encoding="utf-8")
-    return content
+if __name__ == "__main__":
+    main()
