@@ -64,14 +64,14 @@ def test_parse_commit_pr_reference():
     assert "#42" in entry.pr_refs
 
 
-def test_parse_commit_nightshift():
-    # [nightshift] prefix breaks CC regex, so _parse_commit returns None
-    entry = _parse_commit(_raw("[nightshift] feat: add openapi generator"))
+def test_parse_commit_awake():
+    # [awake] prefix breaks CC regex, so _parse_commit returns None
+    entry = _parse_commit(_raw("[awake] feat: add openapi generator"))
     assert entry is None
-    # But a CC commit with nightshift in the body is detected
-    entry2 = _parse_commit(_raw("feat: add openapi generator", body="[nightshift] session 17"))
+    # But a CC commit with awake in the body is detected
+    entry2 = _parse_commit(_raw("feat: add openapi generator", body="[awake] session 17"))
     assert entry2 is not None
-    assert entry2.is_nightshift is True
+    assert entry2.is_awake is True
 
 
 # ---------------------------------------------------------------------------
@@ -82,7 +82,7 @@ def test_parse_commit_nightshift():
 def test_release_entry_format_line_simple():
     entry = ReleaseEntry(
         sha="abc", subject="feat: add plugin", cc_type="feat", scope="",
-        description="add plugin", is_breaking=False, is_nightshift=False,
+        description="add plugin", is_breaking=False, is_awake=False,
         pr_refs=[], author="Alice",
     )
     line = entry.format_line()
@@ -93,7 +93,7 @@ def test_release_entry_format_line_simple():
 def test_release_entry_format_line_scoped():
     entry = ReleaseEntry(
         sha="abc", subject="fix(health): score fix", cc_type="fix", scope="health",
-        description="score fix", is_breaking=False, is_nightshift=False,
+        description="score fix", is_breaking=False, is_awake=False,
         pr_refs=["#42"], author="Alice",
     )
     line = entry.format_line()
@@ -105,21 +105,21 @@ def test_release_entry_format_line_scoped():
 def test_release_entry_format_line_breaking():
     entry = ReleaseEntry(
         sha="abc", subject="feat!: overhaul", cc_type="feat", scope="",
-        description="overhaul", is_breaking=True, is_nightshift=False,
+        description="overhaul", is_breaking=True, is_awake=False,
         pr_refs=[], author="Alice",
     )
     line = entry.format_line()
     assert "BREAKING" in line
 
 
-def test_release_entry_format_line_nightshift():
+def test_release_entry_format_line_awake():
     entry = ReleaseEntry(
-        sha="abc", subject="feat: add nightshift feature", cc_type="feat", scope="",
-        description="add nightshift feature", is_breaking=False, is_nightshift=True,
+        sha="abc", subject="feat: add awake feature", cc_type="feat", scope="",
+        description="add awake feature", is_breaking=False, is_awake=True,
         pr_refs=[], author="Computer",
     )
     line = entry.format_line()
-    assert "[nightshift]" in line
+    assert "[awake]" in line
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +130,7 @@ def test_release_entry_format_line_nightshift():
 def test_release_section_to_markdown():
     entry = ReleaseEntry(
         sha="abc", subject="feat: add x", cc_type="feat", scope="",
-        description="add x", is_breaking=False, is_nightshift=False,
+        description="add x", is_breaking=False, is_awake=False,
         pr_refs=[], author="Alice",
     )
     sec = ReleaseSection(title="✨ Features", order=1, entries=[entry])
@@ -153,26 +153,26 @@ def test_release_section_empty():
 def _sample_notes() -> ReleaseNotes:
     feat_entry = ReleaseEntry(
         sha="abc", subject="feat: add plugin system", cc_type="feat", scope="",
-        description="add plugin system", is_breaking=False, is_nightshift=True,
+        description="add plugin system", is_breaking=False, is_awake=True,
         pr_refs=["#40"], author="Computer",
     )
     fix_entry = ReleaseEntry(
         sha="def", subject="fix: correct health score", cc_type="fix", scope="health",
-        description="correct health score", is_breaking=False, is_nightshift=False,
+        description="correct health score", is_breaking=False, is_awake=False,
         pr_refs=["#41"], author="Alice",
     )
     return ReleaseNotes(
         version="v0.17.0",
         date="2026-02-28",
-        repo_url="https://github.com/gunnargray-dev/nightshift",
+        repo_url="https://github.com/gunnargray-dev/awake",
         sections=[
             ReleaseSection(title="✨ Features", order=1, entries=[feat_entry]),
             ReleaseSection(title="🐛 Bug Fixes", order=2, entries=[fix_entry]),
         ],
         contributors=["Computer", "Alice"],
-        stats={"Commits in release": 25, "Nightshift contributions": 20},
+        stats={"Commits in release": 25, "Awake contributions": 20},
         previous_version="v0.16.0",
-        nightshift_session=17,
+        awake_session=17,
     )
 
 
@@ -184,7 +184,7 @@ def test_release_notes_to_markdown():
     assert "🐛 Bug Fixes" in md
     assert "add plugin system" in md
     assert "correct health score" in md
-    assert "Nightshift Session" in md and "17" in md
+    assert "Awake Session" in md and "17" in md
 
 
 def test_release_notes_version_prefix():
@@ -203,7 +203,7 @@ def test_release_notes_breaking_change_callout():
     notes = _sample_notes()
     bc = ReleaseEntry(
         sha="ghi", subject="feat!: breaking", cc_type="feat", scope="",
-        description="major API change", is_breaking=True, is_nightshift=False,
+        description="major API change", is_breaking=True, is_awake=False,
         pr_refs=[], author="Alice",
     )
     notes.breaking_changes = [bc]
@@ -231,7 +231,7 @@ def test_release_notes_to_dict():
     d = notes.to_dict()
     assert d["version"] == "v0.17.0"
     assert "✨ Features" in d["sections"]
-    assert d["nightshift_session"] == 17
+    assert d["awake_session"] == 17
 
 
 def test_release_notes_save(tmp_path):
@@ -267,7 +267,7 @@ def test_generate_release_notes_version_prefix(tmp_path):
 
 
 def test_generate_release_notes_detects_session(tmp_path):
-    log = tmp_path / "NIGHTSHIFT_LOG.md"
+    log = tmp_path / "AWAKE_LOG.md"
     log.write_text("## Session 17 — February 2026\n\n---\n")
     notes = generate_release_notes(tmp_path)
-    assert notes.nightshift_session == 17
+    assert notes.awake_session == 17
