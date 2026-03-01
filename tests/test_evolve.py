@@ -1,7 +1,7 @@
 """
 Tests for evolve.py — Evolution proposal engine.
 
-Session 18 — Nightshift
+Session 18 — Awake
 """
 
 import json
@@ -154,7 +154,7 @@ class TestFormatEvolution:
         report = generate_evolution()
         out = format_evolution(report)
         # At least one example command should appear
-        assert "nightshift" in out.lower()
+        assert "awake" in out.lower()
 
 
 # ---------------------------------------------------------------------------
