@@ -1,7 +1,7 @@
 """
 Tests for status.py — Comprehensive status dashboard.
 
-Session 18 — Nightshift
+Session 18 — Awake
 """
 
 import json
@@ -66,9 +66,9 @@ def mock_repo(tmp_path):
     )
 
     # Create log
-    (tmp_path / "NIGHTSHIFT_LOG.md").write_text(
+    (tmp_path / "AWAKE_LOG.md").write_text(
         "# Session 18\n"
-        "Session 18 of the Nightshift series.\n"
+        "Session 18 of the Awake series.\n"
     )
 
     return tmp_path
@@ -156,7 +156,7 @@ class TestCountApiEndpoints:
 
 class TestGetSessionNumber:
     def test_reads_session_from_log(self, mock_repo):
-        session = _get_session_number(mock_repo / "NIGHTSHIFT_LOG.md")
+        session = _get_session_number(mock_repo / "AWAKE_LOG.md")
         assert session == 18
 
     def test_fallback_for_missing_log(self, tmp_path):
@@ -164,7 +164,7 @@ class TestGetSessionNumber:
         assert session >= 1
 
     def test_finds_highest_session_number(self, tmp_path):
-        log = tmp_path / "NIGHTSHIFT_LOG.md"
+        log = tmp_path / "AWAKE_LOG.md"
         log.write_text("Session 5\nSession 12\nSession 8\n")
         session = _get_session_number(log)
         assert session == 12
@@ -248,7 +248,7 @@ class TestFormatStatus:
     def test_output_contains_header(self, mock_repo):
         report = generate_status(mock_repo)
         out = format_status(report)
-        assert "NIGHTSHIFT STATUS" in out
+        assert "AWAKE STATUS" in out
 
     def test_output_contains_codebase_section(self, mock_repo):
         report = generate_status(mock_repo)
@@ -263,7 +263,7 @@ class TestFormatStatus:
     def test_output_contains_quick_commands(self, mock_repo):
         report = generate_status(mock_repo)
         out = format_status(report)
-        assert "nightshift brain" in out
+        assert "awake brain" in out
 
     def test_red_flags_appear_in_output(self, tmp_path):
         """A report with red flags should show them."""
