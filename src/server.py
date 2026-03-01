@@ -1,4 +1,4 @@
-"""HTTP API server for the Nightshift dashboard — Session 17 update.
+"""HTTP API server for the Awake dashboard — Session 17 update.
 
 Wraps CLI commands as JSON HTTP endpoints.  Uses only stdlib
 (http.server + subprocess) to maintain the zero-dependency principle.
@@ -108,11 +108,11 @@ PARAMETERIZED_ROUTES: dict[str, tuple[str, list[str]]] = {
 }
 
 
-class NightshiftHandler(BaseHTTPRequestHandler):
-    """HTTP request handler that dispatches to nightshift CLI commands."""
+class AwakeHandler(BaseHTTPRequestHandler):
+    """HTTP request handler that dispatches to awake CLI commands."""
 
     def _run_command(self, cli_args: list[str]) -> str:
-        """Run a nightshift CLI command and return the JSON portion of stdout."""
+        """Run a awake CLI command and return the JSON portion of stdout."""
         repo = getattr(self.server, "repo_path", Path("."))
         result = subprocess.run(
             [sys.executable, "-m", "src.cli"] + cli_args,
@@ -236,7 +236,7 @@ class NightshiftHandler(BaseHTTPRequestHandler):
             try:
                 from src.stats import compute_stats
                 repo = getattr(self.server, "repo_path", Path("."))
-                stats = compute_stats(repo_path=repo, log_path=repo / "NIGHTSHIFT_LOG.md")
+                stats = compute_stats(repo_path=repo, log_path=repo / "AWAKE_LOG.md")
                 self._send_json(200, json.dumps({
                     "sessions": stats.to_dict().get("sessions", []),
                     "total": len(stats.sessions),
@@ -274,9 +274,9 @@ def start_server(
     open_browser: bool = True,
 ) -> None:
     """Start the dashboard API server."""
-    server = HTTPServer(("127.0.0.1", port), NightshiftHandler)
+    server = HTTPServer(("127.0.0.1", port), AwakeHandler)
     server.repo_path = repo_path or Path(__file__).resolve().parent.parent
-    print(f"Nightshift API server running on http://127.0.0.1:{port}")
+    print(f"Awake API server running on http://127.0.0.1:{port}")
     if open_browser:
         webbrowser.open(f"http://127.0.0.1:{port}")
     try:
