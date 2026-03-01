@@ -1,14 +1,14 @@
-"""Terminal dashboard for Nightshift.
+"""Terminal dashboard for Awake.
 
 Renders a rich terminal overview using box-drawing characters showing all key
-Nightshift metrics in a single glance.  No external libraries required — all
+Awake metrics in a single glance.  No external libraries required — all
 layout is done with pure Python string manipulation.
 
 CLI usage
 ---------
-    nightshift dashboard
-    nightshift dashboard --write       # saves to docs/dashboard.txt
-    nightshift dashboard --json        # raw JSON data
+    awake dashboard
+    awake dashboard --write       # saves to docs/dashboard.txt
+    awake dashboard --json        # raw JSON data
 """
 
 from __future__ import annotations
@@ -64,9 +64,9 @@ def _bar(value: float, max_value: float = 100.0, width: int = 20) -> str:
     pct = min(max(value / max_value, 0.0), 1.0)
     filled = int(pct * width)
     empty = width - filled
-    inner_fill = "\u2588" * (filled - 1) if filled > 0 else ""
-    inner_empty = "\u2591" * (empty - 1) if empty > 0 else ""
-    return f"[\u2588{inner_fill}\u2591{inner_empty}] {value:.0f}/{max_value:.0f}"
+    inner_fill = "█" * (filled - 1) if filled > 0 else ""
+    inner_empty = "░" * (empty - 1) if empty > 0 else ""
+    return f"[█{inner_fill}░{inner_empty}] {value:.0f}/{max_value:.0f}"
 
 
 # ---------------------------------------------------------------------------
@@ -110,7 +110,7 @@ class DashboardData:
 
 
 def build_dashboard(repo_path: Optional[Path] = None) -> DashboardData:
-    """Collect data from all available Nightshift modules and build DashboardData.
+    """Collect data from all available Awake modules and build DashboardData.
 
     Gracefully skips any module that fails to load or produces no data.
 
@@ -149,7 +149,7 @@ def build_dashboard(repo_path: Optional[Path] = None) -> DashboardData:
     # --- Stats panel ---
     try:
         from src.stats import compute_stats
-        log_path = repo / "NIGHTSHIFT_LOG.md"
+        log_path = repo / "AWAKE_LOG.md"
         stats = compute_stats(repo_path=repo, log_path=log_path)
         panel = DashboardPanel(title="Repository Stats")
         panel.items = [
@@ -183,9 +183,9 @@ def build_dashboard(repo_path: Optional[Path] = None) -> DashboardData:
 
     # --- Session summary panel ---
     try:
-        from src.stats import parse_nightshift_log
-        log_path = repo / "NIGHTSHIFT_LOG.md"
-        sessions = parse_nightshift_log(log_path)
+        from src.stats import parse_awake_log
+        log_path = repo / "AWAKE_LOG.md"
+        sessions = parse_awake_log(log_path)
         panel = DashboardPanel(title="Session Summary")
         if sessions:
             latest = sessions[-1]
@@ -214,7 +214,7 @@ _DASH_WIDTH = 58
 def render_dashboard(dash: DashboardData) -> str:
     """Render DashboardData as a rich terminal string using box-drawing chars."""
     header_line = "═" * _DASH_WIDTH
-    title = f"  🌙 NIGHTSHIFT DASHBOARD  ·  {dash.generated_at}"
+    title = f"  🌙 AWAKE DASHBOARD  ·  {dash.generated_at}"
 
     sections = [
         f"╔{header_line}╗",
