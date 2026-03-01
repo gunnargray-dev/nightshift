@@ -1,4 +1,4 @@
-"""Performance benchmark suite for Nightshift modules.
+"""Performance benchmark suite for Awake modules.
 
 Times every analysis module, detects regressions against a stored baseline,
 and outputs a ranked table.  The baseline is persisted in
@@ -49,7 +49,7 @@ class BenchmarkResult:
         """Human-readable regression string, e.g. ``"\u25b2 +35%  \u26a0"`` or ``"—"``."""
         r = self.regression
         if r is None:
-            return "\u2014"
+            return "—"
         if r > 20:
             return f"\u25b2 +{r:.0f}%  \u26a0"
         if r < -10:
@@ -110,7 +110,7 @@ class BenchmarkReport:
 
     def to_markdown(self) -> str:
         """Render the benchmark report as a Markdown table."""
-        lines: list[str] = ["# Nightshift Performance Benchmark\n"]
+        lines: list[str] = ["# Awake Performance Benchmark\n"]
         if self.timestamp:
             lines.append(f"*Recorded: {self.timestamp}*\n")
 
@@ -171,7 +171,7 @@ def _build_runners(repo_path: Path) -> list[tuple[str, object]]:
 
     try:
         from src.stats import compute_stats
-        log = repo_path / "NIGHTSHIFT_LOG.md"
+        log = repo_path / "AWAKE_LOG.md"
         runners.append(("stats", lambda: compute_stats(repo_path=repo_path, log_path=log)))
     except ImportError:
         pass
