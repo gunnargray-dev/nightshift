@@ -1,62 +1,62 @@
 # Nightshift
 
 <!-- badges:start -->
-[![Sessions](https://img.shields.io/badge/sessions-22-blueviolet?style=flat-square)](https://github.com/gunnargray-dev/nightshift/blob/main/NIGHTSHIFT_LOG.md)
-[![PRs](https://img.shields.io/badge/PRs-47-blue?style=flat-square)](https://github.com/gunnargray-dev/nightshift/pulls)
-[![Tests](https://img.shields.io/badge/tests-2128%2B-brightgreen?style=flat-square)](https://github.com/gunnargray-dev/nightshift/tree/main/tests)
-[![Modules](https://img.shields.io/badge/modules-61-orange?style=flat-square)](https://github.com/gunnargray-dev/nightshift/tree/main/src)
-[![CLI](https://img.shields.io/badge/CLI_commands-50-cyan?style=flat-square)](https://github.com/gunnargray-dev/nightshift/blob/main/src/cli.py)
+[![Sessions](https://img.shields.io/badge/sessions-23-blueviolet?style=flat-square)](https://github.com/gunnargray-dev/nightshift/blob/main/NIGHTSHIFT_LOG.md)
+[![PRs](https://img.shields.io/badge/PRs-49-blue?style=flat-square)](https://github.com/gunnargray-dev/nightshift/pulls)
+[![Tests](https://img.shields.io/badge/tests-2214%2B-brightgreen?style=flat-square)](https://github.com/gunnargray-dev/nightshift/tree/main/tests)
+[![Modules](https://img.shields.io/badge/modules-65-orange?style=flat-square)](https://github.com/gunnargray-dev/nightshift/tree/main/src)
+[![CLI](https://img.shields.io/badge/CLI_commands-51-cyan?style=flat-square)](https://github.com/gunnargray-dev/nightshift/blob/main/src/cli.py)
 [![API](https://img.shields.io/badge/API_endpoints-39-teal?style=flat-square)](https://github.com/gunnargray-dev/nightshift/blob/main/src/server.py)
 [![Python](https://img.shields.io/badge/python-3.10%2B-yellow?style=flat-square)](https://python.org)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square)](LICENSE)
 <!-- badges:end -->
 
-> **An AI that improves its own codebase — autonomously, every session.**
+> **An AI that improves its own codebase -- autonomously, every session.**
 
-Nightshift is a self-improving autonomous development system. An AI runs overnight, analyzes the repo, identifies what matters most, ships features, writes tests, and opens a pull request — all without human input. Then it does it again the next session, learning from what it built.
+Nightshift is a self-improving autonomous development system. An AI runs overnight, analyzes the repo, identifies what matters most, ships features, writes tests, and opens a pull request -- all without human input. Then it does it again the next session, learning from what it built.
 
-**22 sessions. 47 PRs. 61 modules. 2,128+ tests. Zero human commits.**
+**23 sessions. 49 PRs. 65 modules. 2,214+ tests. Zero human commits.**
 
 ---
 
 ## How It Works
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        NIGHTSHIFT PIPELINE                          │
-│                                                                     │
-│   1. ANALYZE          2. DECIDE           3. BUILD                  │
-│   ──────────         ──────────          ───────                    │
-│                                                                     │
-│   nightshift stats ──► brain.py      ──► write code                │
-│   nightshift health    (5-dimension       write tests               │
-│   nightshift audit     scoring:           update CLI                │
-│   nightshift predict   · complexity       update API                │
-│   nightshift dna       · coverage                                   │
-│                        · churn         4. VERIFY                    │
-│                        · debt          ───────                      │
-│                        · momentum)     pytest (all green)           │
-│                             │                                       │
-│                             ↓          5. SHIP                      │
-│                         ranked task    ──────                       │
-│                         queue          git commit                   │
-│                                        open PR                      │
-│                                        update log                   │
-└─────────────────────────────────────────────────────────────────────┘
++---------------------------------------------------------------------+
+|                        NIGHTSHIFT PIPELINE                          |
+|                                                                     |
+|   1. ANALYZE          2. DECIDE           3. BUILD                  |
+|   ----------         ----------          -------                    |
+|                                                                     |
+|   nightshift stats --> brain.py      --> write code                 |
+|   nightshift health    (5-dimension       write tests               |
+|   nightshift audit     scoring:           update CLI                |
+|   nightshift predict   . complexity       update API                |
+|   nightshift dna       . coverage                                   |
+|                        . churn         4. VERIFY                    |
+|                        . debt          -------                      |
+|                        . momentum)     pytest (all green)           |
+|                             |                                       |
+|                             v          5. SHIP                      |
+|                         ranked task    ------                       |
+|                         queue          git commit                   |
+|                                        open PR                      |
+|                                        update log                   |
++---------------------------------------------------------------------+
 
   METACOGNITION LAYER (new in Session 18)
-  ────────────────────────────────────────
-  nightshift reflect  ──► analyzes ALL past sessions, scores quality,
+  ----------------------------------------
+  nightshift reflect  --> analyzes ALL past sessions, scores quality,
                           identifies patterns, surfaces what the AI
                           learned and how it has improved over time
 
-  nightshift evolve   ──► gap analysis + next evolution proposals
+  nightshift evolve   --> gap analysis + next evolution proposals
                           based on system's own growth trajectory
 
-  nightshift status   ──► one-command comprehensive health snapshot
+  nightshift status   --> one-command comprehensive health snapshot
 ```
 
-The system is entirely self-contained. Every module is pure Python stdlib — no runtime dependencies. The AI reads `NIGHTSHIFT_LOG.md` as memory, uses `brain.py` as its decision engine, and leaves behind a PR as evidence of its work.
+The system is entirely self-contained. Every module is pure Python stdlib -- no runtime dependencies. The AI reads `NIGHTSHIFT_LOG.md` as memory, uses `brain.py` as its decision engine, and leaves behind a PR as evidence of its work.
 
 ---
 
@@ -79,13 +79,17 @@ nightshift status
 
 # Launch the React dashboard
 nightshift dashboard
-# → http://localhost:5173
+# -> http://localhost:5173
 
 # Read the AI's self-analysis
 nightshift reflect
 
 # Ask the AI what it should become
 nightshift evolve
+
+# Auto-generate missing docstrings (new in Session 23)
+nightshift docstrings --dry-run
+nightshift docstrings --apply
 ```
 
 ---
@@ -99,8 +103,8 @@ The brain is a five-dimension scoring engine. Every module in the codebase gets 
 ```
 $ nightshift brain
 
-  BRAIN ANALYSIS — Session 18 context
-  ─────────────────────────────────────────────────────
+  BRAIN ANALYSIS -- Session 18 context
+  ---------------------------------------------------------
 
   Signal weights:
     Complexity drift    25%   (McCabe complexity trends)
@@ -117,7 +121,7 @@ $ nightshift brain
 
 ### Metacognition (Session 18)
 
-The system can now reflect on its own history — scoring past sessions, identifying productivity patterns, and proposing its own evolution.
+The system can now reflect on its own history -- scoring past sessions, identifying productivity patterns, and proposing its own evolution.
 
 Run:
 
@@ -152,7 +156,7 @@ nightshift evolve
 
 You can also browse the full project dashboard:
 
-- `docs/index.html` — interactive evolution dashboard
+- `docs/index.html` -- interactive evolution dashboard
 
 ---
 
