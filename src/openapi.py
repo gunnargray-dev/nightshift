@@ -21,6 +21,7 @@ from typing import Any, Optional
 
 @dataclass
 class OpenAPIParameter:
+    """Represent a single parameter in an OpenAPI operation"""
     name: str
     location: str
     description: str = ""
@@ -29,6 +30,7 @@ class OpenAPIParameter:
     schema_format: str = ""
 
     def to_dict(self) -> dict:
+        """Return an OpenAPI-compliant dictionary for this parameter"""
         d: dict[str, Any] = {
             "name": self.name,
             "in": self.location,
@@ -43,6 +45,7 @@ class OpenAPIParameter:
 
 @dataclass
 class OpenAPIOperation:
+    """Represent a single API operation with its metadata and response schema"""
     operation_id: str
     summary: str
     description: str = ""
@@ -53,6 +56,7 @@ class OpenAPIOperation:
     session_added: str = ""
 
     def to_dict(self) -> dict:
+        """Return an OpenAPI-compliant dictionary for this operation"""
         responses: dict[str, Any] = {
             "200": {
                 "description": self.response_description,
@@ -82,10 +86,12 @@ class OpenAPIOperation:
 
 @dataclass
 class OpenAPIPath:
+    """Represent an API endpoint path and its associated operations"""
     path: str
     get: Optional[OpenAPIOperation] = None
 
     def to_dict(self) -> dict:
+        """Return an OpenAPI-compliant dictionary for this path"""
         d: dict[str, Any] = {}
         if self.get:
             d["get"] = self.get.to_dict()
@@ -94,6 +100,7 @@ class OpenAPIPath:
 
 @dataclass
 class OpenAPISpec:
+    """Represent a complete OpenAPI 3.1 specification document"""
     title: str = "Nightshift API"
     version: str = "1.0.0"
     description: str = ""
@@ -101,6 +108,7 @@ class OpenAPISpec:
     server_url: str = "http://127.0.0.1:8710"
 
     def to_dict(self) -> dict:
+        """Return the full OpenAPI 3.1 specification as a dictionary"""
         paths_dict: dict[str, Any] = {}
         for p in self.paths:
             openapi_path = re.sub(r"<([^>]+)>", r"{\1}", p.path)
@@ -124,9 +132,11 @@ class OpenAPISpec:
         }
 
     def to_yaml(self) -> str:
+        """Serialize the specification to a YAML string"""
         return _dict_to_yaml(self.to_dict())
 
     def to_markdown(self) -> str:
+        """Render the specification as a Markdown endpoint summary table"""
         lines = [
             f"# {self.title}",
             "",

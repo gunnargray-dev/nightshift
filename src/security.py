@@ -243,6 +243,7 @@ class _SecurityVisitor(ast.NodeVisitor):
 
     # ---- S001: eval ----
     def visit_Call(self, node: ast.Call) -> None:  # noqa: N802
+        """Check function calls for dangerous patterns like eval, exec, and pickle"""
         func = node.func
         func_name = ""
         if isinstance(func, ast.Name):
@@ -331,6 +332,7 @@ class _SecurityVisitor(ast.NodeVisitor):
 
     # ---- S009: assert for access control ----
     def visit_Assert(self, node: ast.Assert) -> None:  # noqa: N802
+        """Flag assert statements used for authentication or access control checks"""
         # Only flag if the assert test looks like an auth/permission check.
         test_src = ""
         if isinstance(node.test, ast.Call):

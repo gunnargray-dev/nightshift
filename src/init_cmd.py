@@ -35,9 +35,11 @@ class InitResult:
 
     @property
     def total_created(self) -> int:
+        """Return the number of files created during init"""
         return len(self.created)
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the init result"""
         return {
             "created": self.created,
             "skipped": self.skipped,
@@ -46,9 +48,11 @@ class InitResult:
         }
 
     def to_json(self) -> str:
+        """Serialize the init result to a JSON string"""
         return json.dumps(self.to_dict(), indent=2)
 
     def to_markdown(self) -> str:
+        """Render the init result as a Markdown summary"""
         lines = ["# Nightshift Init\n"]
         lines.append(f"**Repo:** `{self.repo_path}`\n")
         if self.created:

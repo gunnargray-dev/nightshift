@@ -21,6 +21,8 @@ from src.scoring import score_to_grade as _grade
 
 @dataclass
 class TestFileScore:
+    """Hold quality metrics and score for a single test file"""
+
     file: str
     module: str
     score: float = 0.0
@@ -39,11 +41,14 @@ class TestFileScore:
     highlights: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the test file score"""
         return asdict(self)
 
 
 @dataclass
 class TestQualityReport:
+    """Hold aggregate test quality metrics across all test files"""
+
     repo_path: str
     total_test_files: int = 0
     total_tests: int = 0
@@ -56,9 +61,11 @@ class TestQualityReport:
     weak_files: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the test quality report"""
         return asdict(self)
 
     def to_markdown(self) -> str:
+        """Render the test quality report as a Markdown table"""
         lines = [
             "## Test Quality Analysis", "",
             "| Metric | Value |", "|--------|-------|" ,
@@ -120,17 +127,20 @@ class _TestFileVisitor(ast.NodeVisitor):
         self._has_mock_import = False
 
     def visit_Import(self, node: ast.Import) -> None:
+        """Track mock-related imports"""
         for alias in node.names:
             if "mock" in alias.name.lower():
                 self._has_mock_import = True
         self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        """Track mock and pytest from-imports"""
         if node.module and ("mock" in node.module.lower() or "pytest" in node.module.lower()):
             self._has_mock_import = True
         self.generic_visit(node)
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        """Count tests, docstrings, edge cases, parametrize decorators, and fixtures"""
         name = node.name.lower()
         if name.startswith("test_"):
             self.test_count += 1
@@ -157,10 +167,12 @@ class _TestFileVisitor(ast.NodeVisitor):
     visit_AsyncFunctionDef = visit_FunctionDef
 
     def visit_Assert(self, node: ast.Assert) -> None:
+        """Count bare assert statements"""
         self.assertion_count += 1
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:
+        """Count assertion helper calls and mock usage"""
         if isinstance(node.func, ast.Attribute):
             if node.func.attr in _ASSERT_FUNCTIONS:
                 self.assertion_count += 1
@@ -174,6 +186,7 @@ class _TestFileVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_With(self, node: ast.With) -> None:
+        """Count pytest.raises and pytest.warns context managers as assertions"""
         for item in node.items:
             ctx = item.context_expr
             if isinstance(ctx, ast.Call):

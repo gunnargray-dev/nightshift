@@ -139,9 +139,11 @@ class NightshiftHandler(BaseHTTPRequestHandler):
         self.wfile.write(body.encode("utf-8"))
 
     def do_OPTIONS(self) -> None:
+        """Handle CORS preflight requests"""
         self._send_json(204, "")
 
     def do_GET(self) -> None:
+        """Route incoming GET requests to the appropriate CLI command or handler"""
         # Strip query string for routing
         path = self.path.split("?")[0]
 
@@ -262,6 +264,7 @@ class NightshiftHandler(BaseHTTPRequestHandler):
         self._send_json(404, json.dumps({"error": "Not found"}))
 
     def log_message(self, format: str, *args) -> None:
+        """Suppress default HTTP request logging"""
         pass
 
 

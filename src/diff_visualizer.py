@@ -36,10 +36,12 @@ class FileDelta:
 
     @property
     def net(self) -> int:
+        """Return the net line delta for this file"""
         return self.added - self.deleted
 
     @property
     def churn(self) -> int:
+        """Return the total churn (additions plus deletions) for this file"""
         return self.added + self.deleted
 
 
@@ -67,30 +69,37 @@ class SessionDiff:
 
     @property
     def files_added(self) -> list[FileDelta]:
+        """Return file deltas with status 'added'"""
         return [f for f in self.file_deltas if f.status == "A"]
 
     @property
     def files_modified(self) -> list[FileDelta]:
+        """Return file deltas with status 'modified'"""
         return [f for f in self.file_deltas if f.status == "M"]
 
     @property
     def files_deleted(self) -> list[FileDelta]:
+        """Return file deltas with status 'deleted'"""
         return [f for f in self.file_deltas if f.status == "D"]
 
     @property
     def total_added(self) -> int:
+        """Return the sum of added lines across all file deltas"""
         return sum(f.added for f in self.file_deltas)
 
     @property
     def total_deleted(self) -> int:
+        """Return the sum of deleted lines across all file deltas"""
         return sum(f.deleted for f in self.file_deltas)
 
     @property
     def tests_delta(self) -> int:
+        """Return the change in test count between before and after"""
         return self.tests_after - self.tests_before
 
     @property
     def biggest_change(self) -> Optional[FileDelta]:
+        """Return the file delta with the highest churn, or None if empty"""
         if not self.file_deltas:
             return None
         return max(self.file_deltas, key=lambda f: f.churn)

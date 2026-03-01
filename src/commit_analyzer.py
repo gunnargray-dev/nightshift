@@ -48,6 +48,8 @@ NS_PATTERNS = [
 
 @dataclass
 class CommitRecord:
+    """A single parsed commit with quality metadata"""
+
     sha: str
     subject: str
     body: str
@@ -62,11 +64,14 @@ class CommitRecord:
     quality_badges: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the commit record"""
         return asdict(self)
 
 
 @dataclass
 class CommitPatterns:
+    """Aggregate pattern counts extracted from commit messages"""
+
     conventional_count: int = 0
     breaking_count: int = 0
     wip_count: int = 0
@@ -79,11 +84,14 @@ class CommitPatterns:
     type_distribution: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the commit patterns"""
         return asdict(self)
 
 
 @dataclass
 class CommitAnalysisReport:
+    """Full commit quality analysis with scores and pattern breakdown"""
+
     repo_path: str
     total_commits: int = 0
     avg_quality_score: float = 0.0
@@ -94,6 +102,7 @@ class CommitAnalysisReport:
     bottom_commits: list[CommitRecord] = field(default_factory=list)
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the analysis report"""
         return {
             "repo_path": self.repo_path,
             "total_commits": self.total_commits,
@@ -105,6 +114,7 @@ class CommitAnalysisReport:
         }
 
     def to_markdown(self) -> str:
+        """Render the analysis report as a Markdown table"""
         p = self.patterns
         cc_pct = (p.conventional_count / self.total_commits * 100) if self.total_commits else 0
         return f"""## Commit Message Analysis

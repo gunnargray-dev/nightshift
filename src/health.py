@@ -44,6 +44,7 @@ class FileHealth:
     parse_error: bool = False
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of this file's health metrics"""
         return asdict(self)
 
     @property
@@ -84,30 +85,37 @@ class HealthReport:
     generated_at: str = ""
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the aggregate health report"""
         return asdict(self)
 
     @property
     def total_lines(self) -> int:
+        """Return the sum of total lines across all analyzed files"""
         return sum(f.total_lines for f in self.files)
 
     @property
     def total_code_lines(self) -> int:
+        """Return the sum of code lines across all analyzed files"""
         return sum(f.code_lines for f in self.files)
 
     @property
     def total_functions(self) -> int:
+        """Return the sum of function counts across all analyzed files"""
         return sum(f.function_count for f in self.files)
 
     @property
     def total_classes(self) -> int:
+        """Return the sum of class counts across all analyzed files"""
         return sum(f.class_count for f in self.files)
 
     @property
     def total_todos(self) -> int:
+        """Return the sum of TODO/FIXME markers across all analyzed files"""
         return sum(f.todo_count for f in self.files)
 
     @property
     def total_long_lines(self) -> int:
+        """Return the sum of long line violations across all analyzed files"""
         return sum(f.long_lines for f in self.files)
 
     @property

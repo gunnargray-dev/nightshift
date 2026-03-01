@@ -54,22 +54,28 @@ _LAYER_STYLES = {
 
 @dataclass
 class ModuleNode:
+    """A single module in the dependency graph with its layer and edges"""
+
     name: str
     layer: str
     imports: list[str] = field(default_factory=list)
     imported_by: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of this module node"""
         return asdict(self)
 
 
 @dataclass
 class ModuleGraph:
+    """The full module interconnection graph with nodes, edges, and layers"""
+
     nodes: list[ModuleNode] = field(default_factory=list)
     edges: list[tuple] = field(default_factory=list)
     layers: dict[str, list[str]] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the full module graph"""
         return {
             "nodes": [n.to_dict() for n in self.nodes],
             "edges": [{"from": e[0], "to": e[1]} for e in self.edges],
@@ -79,6 +85,7 @@ class ModuleGraph:
         }
 
     def to_mermaid(self, show_all_edges: bool = False) -> str:
+        """Render the module graph as a Mermaid flowchart diagram"""
         lines = ["```mermaid", "graph TD"]
         layer_order = ["core", "analysis", "git", "intelligence", "output", "extensibility", "sessions", "misc"]
         layer_labels = {
@@ -120,6 +127,7 @@ class ModuleGraph:
         return "\n".join(lines)
 
     def to_ascii(self) -> str:
+        """Render the module graph as an ASCII art diagram"""
         layer_order = ["core", "analysis", "git", "intelligence", "output", "extensibility", "sessions", "misc"]
         layer_labels = {
             "core": "Core Infrastructure", "analysis": "Analysis Engines",
@@ -148,6 +156,7 @@ class ModuleGraph:
         return "\n".join(lines)
 
     def to_markdown(self) -> str:
+        """Render the module graph as a Markdown document with diagram and table"""
         mermaid = self.to_mermaid()
         layer_order = ["core", "analysis", "git", "intelligence", "output", "extensibility", "sessions", "misc"]
         layer_labels = {

@@ -50,10 +50,12 @@ class PackageStatus:
 
     @property
     def is_outdated(self) -> bool:
+        """Return whether this package has a newer version available"""
         return self.status == "outdated"
 
     @property
     def delta_symbol(self) -> str:
+        """Return a symbol indicating the freshness status"""
         if self.status == "outdated":
             return "▼"
         if self.status == "up-to-date":
@@ -61,6 +63,7 @@ class PackageStatus:
         return "?"
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the package status"""
         return asdict(self)
 
 
@@ -75,17 +78,21 @@ class FreshnessReport:
 
     @property
     def outdated_count(self) -> int:
+        """Return the number of packages that are outdated"""
         return sum(1 for p in self.packages if p.is_outdated)
 
     @property
     def up_to_date_count(self) -> int:
+        """Return the number of packages that are up to date"""
         return sum(1 for p in self.packages if p.status == "up-to-date")
 
     @property
     def unknown_count(self) -> int:
+        """Return the number of packages with unknown or error status"""
         return sum(1 for p in self.packages if p.status in ("unknown", "error"))
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the freshness report"""
         return {
             "packages": [p.to_dict() for p in self.packages],
             "checked_at": self.checked_at,

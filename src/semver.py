@@ -59,6 +59,8 @@ TYPE_BUMP = {
 
 @dataclass
 class CommitInfo:
+    """Represent a single parsed commit with its conventional-commits classification"""
+
     sha: str
     message: str
     commit_type: str          # "feat" | "fix" | "chore" | "unknown" | …
@@ -68,11 +70,14 @@ class CommitInfo:
     bump: str                 # "major" | "minor" | "patch" | "none"
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the commit info"""
         return asdict(self)
 
 
 @dataclass
 class SemverBump:
+    """Hold the result of a semver analysis including bump type, commits, and changelog"""
+
     current_version: str
     next_version: str
     bump_type: str            # "major" | "minor" | "patch" | "none"
@@ -83,24 +88,29 @@ class SemverBump:
     # grouped views
     @property
     def breaking(self) -> list[CommitInfo]:
+        """Return commits classified as breaking changes"""
         return [c for c in self.commits if c.is_breaking]
 
     @property
     def features(self) -> list[CommitInfo]:
+        """Return non-breaking commits of type feat"""
         return [c for c in self.commits if c.commit_type == "feat" and not c.is_breaking]
 
     @property
     def fixes(self) -> list[CommitInfo]:
+        """Return commits of type fix"""
         return [c for c in self.commits if c.commit_type == "fix"]
 
     @property
     def other(self) -> list[CommitInfo]:
+        """Return commits that are neither feat, fix, nor breaking"""
         return [
             c for c in self.commits
             if c.commit_type not in ("feat", "fix") and not c.is_breaking
         ]
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation with grouped commit counts"""
         d = asdict(self)
         d["breaking_count"] = len(self.breaking)
         d["feature_count"] = len(self.features)
@@ -109,9 +119,11 @@ class SemverBump:
         return d
 
     def to_json(self) -> str:
+        """Serialize the semver bump result to a JSON string"""
         return json.dumps(self.to_dict(), indent=2)
 
     def to_markdown(self) -> str:
+        """Render the semver analysis as a Markdown report"""
         lines: list[str] = []
         bump_emoji = {"major": "🚨", "minor": "✨", "patch": "🐛", "none": "📝"}.get(self.bump_type, "")
         lines.append(f"# Semantic Version Analysis\n")

@@ -32,6 +32,8 @@ from typing import Optional
 
 @dataclass
 class StatusReport:
+    """Hold a comprehensive at-a-glance status snapshot of the repository"""
+
     generated_at: str
     session: int
     project_age_days: Optional[int]

@@ -50,6 +50,7 @@ class ThresholdsConfig:
     dep_outdated_warn: int = 3              # Warn if N or more deps are outdated
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the thresholds config"""
         return asdict(self)
 
 
@@ -62,6 +63,7 @@ class OutputConfig:
     unicode_symbols: bool = True        # Use ▲ ▼ = symbols
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the output config"""
         return asdict(self)
 
 
@@ -74,6 +76,7 @@ class SessionConfig:
     src_dir: str = "src"
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the session config"""
         return asdict(self)
 
 
@@ -94,6 +97,7 @@ class NightshiftConfig:
     # ------------------------------------------------------------------
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the full config"""
         return {
             "thresholds": self.thresholds.to_dict(),
             "output": self.output.to_dict(),

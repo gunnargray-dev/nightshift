@@ -38,6 +38,7 @@ class SessionSnapshot:
     notes: str = ""
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the session snapshot"""
         return asdict(self)
 
 
@@ -51,6 +52,7 @@ class DeltaMetric:
 
     @property
     def delta(self) -> int | float:
+        """Compute the numeric difference between session B and session A"""
         return self.value_b - self.value_a
 
     @property
@@ -63,6 +65,7 @@ class DeltaMetric:
         return "="
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the delta metric"""
         return {
             "name": self.name,
             "value_a": self.value_a,
@@ -84,6 +87,7 @@ class SessionComparison:
     tasks_common: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the session comparison"""
         return {
             "session_a": self.session_a.to_dict(),
             "session_b": self.session_b.to_dict(),

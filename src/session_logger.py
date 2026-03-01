@@ -26,6 +26,7 @@ class PRRecord:
     status: str = "open"  # open | merged | closed
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the PR record"""
         return asdict(self)
 
 
@@ -39,6 +40,7 @@ class TaskRecord:
     pr: Optional[PRRecord] = None
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the task record"""
         d = asdict(self)
         return d
 
@@ -61,6 +63,7 @@ class SessionEntry:
             self.date = datetime.now(timezone.utc).strftime("%B %d, %Y")
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the session entry"""
         return asdict(self)
 
     def to_markdown(self) -> str:

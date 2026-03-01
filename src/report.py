@@ -41,6 +41,7 @@ class ReportSection:
     subsections: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of this report section"""
         return asdict(self)
 
 
@@ -56,13 +57,16 @@ class ExecutiveReport:
     headline_metrics: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the full executive report"""
         return asdict(self)
 
     def save(self, output_path: Path) -> None:
+        """Write the HTML report to the given file path"""
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(self.to_html(), encoding="utf-8")
 
     def to_html(self) -> str:
+        """Render the executive report as a standalone HTML document"""
         return _render_html(self)
 
 

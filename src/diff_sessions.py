@@ -21,6 +21,8 @@ from typing import Optional
 
 @dataclass
 class SessionSnapshot:
+    """A snapshot of metrics for a single session"""
+
     session: int
     date: str = ""
     prs: int = 0
@@ -34,11 +36,14 @@ class SessionSnapshot:
     notes: str = ""
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the session snapshot"""
         return asdict(self)
 
 
 @dataclass
 class MetricDelta:
+    """A single metric comparison between two sessions"""
+
     name: str
     session_a: object
     session_b: object
@@ -47,9 +52,11 @@ class MetricDelta:
     direction: str = "neutral"
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the metric delta"""
         return asdict(self)
 
     def format(self) -> str:
+        """Format the delta as a human-readable change string"""
         arrow = {"up": "^", "down": "v", "neutral": "="}[self.direction]
         delta_str = ""
         if self.delta is not None:
@@ -63,6 +70,8 @@ class MetricDelta:
 
 @dataclass
 class SessionDiffReport:
+    """Full diff report comparing two sessions with deltas and task changes"""
+
     repo_path: str
     session_a: int
     session_b: int
@@ -75,9 +84,11 @@ class SessionDiffReport:
     commit_range_count: int = 0
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the diff report"""
         return asdict(self)
 
     def to_markdown(self) -> str:
+        """Render the session diff as a Markdown document"""
         a, b = self.session_a, self.session_b
         sa, sb = self.snapshot_a, self.snapshot_b
         if not sa or not sb:

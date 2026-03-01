@@ -39,10 +39,12 @@ class CoverageSnapshot:
     missing_lines: int = 0
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the coverage snapshot"""
         return asdict(self)
 
     @classmethod
     def from_dict(cls, d: dict) -> "CoverageSnapshot":
+        """Construct a CoverageSnapshot from a dictionary"""
         return cls(**d)
 
     @property
@@ -64,10 +66,12 @@ class CoverageHistory:
     snapshots: list[CoverageSnapshot] = field(default_factory=list)
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the coverage history"""
         return {"snapshots": [s.to_dict() for s in self.snapshots]}
 
     @classmethod
     def from_dict(cls, d: dict) -> "CoverageHistory":
+        """Construct a CoverageHistory from a dictionary"""
         snapshots = [CoverageSnapshot.from_dict(s) for s in d.get("snapshots", [])]
         return cls(snapshots=snapshots)
 

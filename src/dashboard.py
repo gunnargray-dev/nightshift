@@ -82,6 +82,7 @@ class DashboardPanel:
     items: list[tuple[str, str]] = field(default_factory=list)
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the dashboard panel"""
         return {"title": self.title, "items": dict(self.items)}
 
 
@@ -95,6 +96,7 @@ class DashboardData:
     raw: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the dashboard data"""
         return {
             "generated_at": self.generated_at,
             "repo_path": self.repo_path,

@@ -32,6 +32,7 @@ class RepoStats:
     sessions: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the repository stats"""
         return asdict(self)
 
     def readme_table(self) -> str:

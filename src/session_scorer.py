@@ -30,6 +30,8 @@ from src.scoring import score_to_grade as _grade
 
 @dataclass
 class DimensionScore:
+    """Represent a single scored dimension with raw value, weight, and evidence"""
+
     name: str
     raw: float
     weight: float
@@ -39,6 +41,8 @@ class DimensionScore:
 
 @dataclass
 class SessionQualityScore:
+    """Hold the aggregate quality score and grade for a single session"""
+
     session: int
     dimensions: list
     total: float

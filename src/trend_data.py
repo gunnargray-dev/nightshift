@@ -35,6 +35,7 @@ class SessionMetrics:
     dead_code_count: Optional[int] = None
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the session metrics"""
         return asdict(self)
 
 
@@ -46,6 +47,7 @@ class TrendData:
     latest_session: int = 0
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation including chart-ready series data"""
         return {
             "sessions": [s.to_dict() for s in self.sessions],
             "total_sessions": self.total_sessions,
@@ -71,6 +73,7 @@ class TrendData:
         }
 
     def to_markdown(self) -> str:
+        """Render the trend data as a Markdown table"""
         lines = [
             "# Historical Trend Data", "",
             "| Session | Date | PRs | Tests | Modules | Health | Coverage | Security |",

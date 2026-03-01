@@ -89,6 +89,7 @@ class DepGraph:
         cycles: list[list[str]] = []
 
         def dfs(node: str) -> None:
+            """Traverse the graph depth-first to detect cycles"""
             if node in on_path:
                 # Found cycle — extract it
                 idx = path.index(node)

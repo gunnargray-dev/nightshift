@@ -43,6 +43,7 @@ class SessionNode:
     highlight: str = ""  # Most notable task/achievement
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the session node"""
         return asdict(self)
 
 
@@ -57,6 +58,7 @@ class Timeline:
     latest_session_date: str = ""
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the full timeline"""
         return asdict(self)
 
     def to_markdown(self) -> str:
@@ -64,6 +66,7 @@ class Timeline:
         return render_timeline(self)
 
     def to_json(self) -> str:
+        """Serialize the timeline to a JSON string"""
         return json.dumps(self.to_dict(), indent=2)
 
 

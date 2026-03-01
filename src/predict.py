@@ -43,6 +43,7 @@ class PredictionSignal:
     rationale: str
 
     def weighted_score(self) -> float:
+        """Compute the weight-adjusted score for this signal"""
         return self.score * self.weight
 
 
@@ -59,6 +60,7 @@ class PredictionItem:
     suggested_command: str    # the nightshift command to run
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the prediction item"""
         return asdict(self)
 
 
@@ -74,9 +76,11 @@ class PredictionReport:
 
     @property
     def top_items(self) -> list[PredictionItem]:
+        """Return the five highest-priority prediction items"""
         return self.items[:5]
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the prediction report"""
         return {
             "next_session": self.next_session,
             "items": [i.to_dict() for i in self.items],
@@ -87,9 +91,11 @@ class PredictionReport:
         }
 
     def to_json(self) -> str:
+        """Serialize the prediction report to a JSON string"""
         return json.dumps(self.to_dict(), indent=2)
 
     def to_markdown(self) -> str:
+        """Render the prediction report as a Markdown document"""
         lines: list[str] = []
         lines.append(f"# Predictive Session Planner — Session {self.next_session} Forecast\n")
         lines.append(f"**Sessions analysed:** {self.session_count}  ")

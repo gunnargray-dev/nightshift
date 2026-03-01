@@ -1,1 +1,292 @@
-IiIiVGVzdHMgZm9yIHNyYy9zY29yaW5nLnB5IOKAlCB0aGUgc2hhcmVkIHNjb3JpbmcgYWJzdHJhY3Rpb24uIiIiCgpmcm9tIF9fZnV0dXJlX18gaW1wb3J0IGFubm90YXRpb25zCgppbXBvcnQganNvbgppbXBvcnQgc3lzCmZyb20gcGF0aGxpYiBpbXBvcnQgUGF0aAoKaW1wb3J0IHB5dGVzdAoKc3lzLnBhdGguaW5zZXJ0KDAsIHN0cihQYXRoKF9fZmlsZV9fKS5yZXNvbHZlKCkucGFyZW50LnBhcmVudCkpCgpmcm9tIHNyYy5zY29yaW5nIGltcG9ydCAoCiAgICBzY29yZV90b19ncmFkZSwKICAgIGdyYWRlX3RvX3Njb3JlLAogICAgZ3JhZGVfY29sb3VyLAogICAgc2NvcmVfY29sb3VyLAogICAgc2NvcmVfdG9fdGllciwKICAgIHNjb3JlX3RvX3RpZXJfZW1vamksCiAgICBzY29yZV90b19zdGF0dXMsCiAgICBzY29yZV90b19vdmVyYWxsX3N0YXR1cywKICAgIFNjb3JlUmVzdWx0LAopCgoKIyA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0KIyBzY29yZV90b19ncmFkZQojID09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PQoKY2xhc3MgVGVzdFNjb3JlVG9HcmFkZToKICAgIEBweXRlc3QubWFyay5wYXJhbWV0cml6ZSgic2NvcmUsZXhwZWN0ZWQiLCBbCiAgICAgICAgKDEwMCwgIkErIiksICg5NSwgIkErIiksICg5NC45LCAiQSIpLCAoOTAsICJBIiksCiAgICAgICAgKDg5LjksICJBLSIpLCAoODUsICJBLSIpLCAoODQuOSwgIkIrIiksICg4MCwgIkIrIiksCiAgICAgICAgKDc5LjksICJCIiksICg3NSwgIkIiKSwgKDc0LjksICJCLSIpLCAoNzAsICJCLSIpLAogICAgICAgICg2OS45LCAiQysiKSwgKDY1LCAiQysiKSwgKDY0LjksICJDIiksICg2MCwgIkMiKSwKICAgICAgICAoNTkuOSwgIkMtIiksICg1NSwgIkMtIiksICg1NC45LCAiRCsiKSwgKDUwLCAiRCsiKSwKICAgICAgICAoNDkuOSwgIkQiKSwgKDQ1LCAiRCIpLCAoNDQuOSwgIkQtIiksICg0MCwgIkQtIiksCiAgICAgICAgKDM5LjksICJGIiksICgwLCAiRiIpLAogICAgXSkKICAgIGRlZiB0ZXN0X2dyYWRlX2JvdW5kYXJpZXMoc2VsZiwgc2NvcmUsIGV4cGVjdGVkKToKICAgICAgICBhc3NlcnQgc2NvcmVfdG9fZ3JhZGUoc2NvcmUpID09IGV4cGVjdGVkCgogICAgZGVmIHRlc3Rfbm9uZV9yZXR1cm5zX2VtcHR5KHNlbGYpOgogICAgICAgIGFzc2VydCBzY29yZV90b19ncmFkZShOb25lKSA9PSAiIgoKICAgIGRlZiB0ZXN0X3NpbXBsZV9tb2RlX2Eoc2VsZik6CiAgICAgICAgYXNzZXJ0IHNjb3JlX3RvX2dyYWRlKDkyLCBzaW1wbGU9VHJ1ZSkgPT0gIkEiCgogICAgZGVmIHRlc3Rfc2ltcGxlX21vZGVfYihzZWxmKToKICAgICAgICBhc3NlcnQgc2NvcmVfdG9fZ3JhZGUoNzgsIHNpbXBsZT1UcnVlKSA9PSAiQiIKCiAgICBkZWYgdGVzdF9zaW1wbGVfbW9kZV9jKHNlbGYpOgogICAgICAgIGFzc2VydCBzY29yZV90b19ncmFkZSg2Miwgc2ltcGxlPVRydWUpID09ICJDIgoKICAgIGRlZiB0ZXN0X3NpbXBsZV9tb2RlX2Qoc2VsZik6CiAgICAgICAgYXNzZXJ0IHNjb3JlX3RvX2dyYWRlKDQ3LCBzaW1wbGU9VHJ1ZSkgPT0gIkQiCgogICAgZGVmIHRlc3Rfc2ltcGxlX21vZGVfZihzZWxmKToKICAgICAgICBhc3NlcnQgc2NvcmVfdG9fZ3JhZGUoMjAsIHNpbXBsZT1UcnVlKSA9PSAiRiIKCiAgICBkZWYgdGVzdF9zaW1wbGVfbm9fcGx1c19taW51cyhzZWxmKToKICAgICAgICBmb3Igc2NvcmUgaW4gcmFuZ2UoMCwgMTAxLCA1KToKICAgICAgICAgICAgZ3JhZGUgPSBzY29yZV90b19ncmFkZShzY29yZSwgc2ltcGxlPVRydWUpCiAgICAgICAgICAgIGFzc2VydCAiKyIgbm90IGluIGdyYWRlCiAgICAgICAgICAgIGFzc2VydCAiLSIgbm90IGluIGdyYWRlCgoKIyA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0KIyBncmFkZV90b19zY29yZQojID09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PQoKY2xhc3MgVGVzdEdyYWRlVG9TY29yZToKICAgIEBweXRlc3QubWFyay5wYXJhbWV0cml6ZSgiZ3JhZGUsZXhwZWN0ZWQiLCBbCiAgICAgICAgKCJBKyIsIDk3LjUpLCAoIkEiLCA5Mi41KSwgKCJBLSIsIDg3LjUpLAogICAgICAgICgiQisiLCA4Mi41KSwgKCJCIiwgNzcuNSksICgiQi0iLCA3Mi41KSwKICAgICAgICAoIkMrIiwgNjcuNSksICgiQyIsIDYyLjUpLCAoIkMtIiwgNTcuNSksCiAgICAgICAgKCJEKyIsIDUyLjUpLCAoIkQiLCA0Ny41KSwgKCJELSIsIDQyLjUpLAogICAgICAgICgiRiIsIDIwLjApLAogICAgXSkKICAgIGRlZiB0ZXN0X2tub3duX2dyYWRlcyhzZWxmLCBncmFkZSwgZXhwZWN0ZWQpOgogICAgICAgIGFzc2VydCBncmFkZV90b19zY29yZShncmFkZSkgPT0gZXhwZWN0ZWQKCiAgICBkZWYgdGVzdF91bmtub3duX2dyYWRlX3JldHVybnNfNTAoc2VsZik6CiAgICAgICAgYXNzZXJ0IGdyYWRlX3RvX3Njb3JlKCJaIikgPT0gNTAuMAoKICAgIGRlZiB0ZXN0X2Nhc2VfaW5zZW5zaXRpdmUoc2VsZik6CiAgICAgICAgYXNzZXJ0IGdyYWRlX3RvX3Njb3JlKCJhIikgPT0gZ3JhZGVfdG9fc2NvcmUoIkEiKQogICAgICAgIGFzc2VydCBncmFkZV90b19zY29yZSgiYisiKSA9PSBncmFkZV90b19zY29yZSgiQisiKQoKCiMgPT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09CiMgZ3JhZGVfY29sb3VyCiMgPT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09CgpjbGFzcyBUZXN0R3JhZGVDb2xvdXI6CiAgICBkZWYgdGVzdF9yZXR1cm5zX2hleF9zdHJpbmcoc2VsZik6CiAgICAgICAgY29sb3VyID0gZ3JhZGVfY29sb3VyKCJBIikKICAgICAgICBhc3NlcnQgY29sb3VyLnN0YXJ0c3dpdGgoIiMiKQoKICAgIGRlZiB0ZXN0X2FfZ3JhZGVfaXNfZ3JlZW4oc2VsZik6CiAgICAgICAgYXNzZXJ0ICJjODUzIiBpbiBncmFkZV9jb2xvdXIoIkErIikgb3IgIjAwYzgiIGluIGdyYWRlX2NvbG91cigiQSsiKQoKICAgIGRlZiB0ZXN0X2ZfZ3JhZGVfaXNfcmVkKHNlbGYpOgogICAgICAgIGFzc2VydCAiZmYiIGluIGdyYWRlX2NvbG91cigiRiIpLmxvd2VyKCkKCiAgICBkZWYgdGVzdF9zaGllbGRzX21vZGVfcmV0dXJuc19uYW1lKHNlbGYpOgogICAgICAgIGFzc2VydCBncmFkZV9jb2xvdXIoIkEiLCBzaGllbGRzPVRydWUpID09ICJicmlnaHRncmVlbiIKICAgICAgICBhc3NlcnQgZ3JhZGVfY29sb3VyKCJCIiwgc2hpZWxkcz1UcnVlKSA9PSAiZ3JlZW4iCiAgICAgICAgYXNzZXJ0IGdyYWRlX2NvbG91cigiQyIsIHNoaWVsZHM9VHJ1ZSkgPT0gInllbGxvdyIKICAgICAgICBhc3NlcnQgZ3JhZGVfY29sb3VyKCJEIiwgc2hpZWxkcz1UcnVlKSA9PSAib3JhbmdlIgogICAgICAgIGFzc2VydCBncmFkZV9jb2xvdXIoIkYiLCBzaGllbGRzPVRydWUpID09ICJyZWQiCgogICAgZGVmIHRlc3RfdW5rbm93bl9ncmFkZV9yZXR1cm5zX2ZhbGxiYWNrKHNlbGYpOgogICAgICAgIGMgPSBncmFkZV9jb2xvdXIoIloiKQogICAgICAgIGFzc2VydCBpc2luc3RhbmNlKGMsIHN0cikKICAgICAgICBhc3NlcnQgbGVuKGMpID4gMAoKCiMgPT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09CiMgc2NvcmVfY29sb3VyCiMgPT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09CgpjbGFzcyBUZXN0U2NvcmVDb2xvdXI6CiAgICBkZWYgdGVzdF9yZXR1cm5zX2hleF9ieV9kZWZhdWx0KHNlbGYpOgogICAgICAgIGFzc2VydCBzY29yZV9jb2xvdXIoOTApLnN0YXJ0c3dpdGgoIiMiKQoKICAgIGRlZiB0ZXN0X3NoaWVsZHNfbW9kZV9oaWdoKHNlbGYpOgogICAgICAgIGFzc2VydCBzY29yZV9jb2xvdXIoODUsIHNoaWVsZHM9VHJ1ZSkgPT0gImJyaWdodGdyZWVuIgoKICAgIGRlZiB0ZXN0X3NoaWVsZHNfbW9kZV9taWQoc2VsZik6CiAgICAgICAgYXNzZXJ0IHNjb3JlX2NvbG91cig2OCwgc2hpZWxkcz1UcnVlKSA9PSAiZ3JlZW4iCgogICAgZGVmIHRlc3Rfc2hpZWxkc19tb2RlX2xvdyhzZWxmKToKICAgICAgICBhc3NlcnQgc2NvcmVfY29sb3VyKDEwLCBzaGllbGRzPVRydWUpID09ICJyZWQiCgogICAgQHB5dGVzdC5tYXJrLnBhcmFtZXRyaXplKCJzY29yZSIsIFswLCAyNSwgNDAsIDUwLCA2MCwgNzUsIDkwLCAxMDBdKQogICAgZGVmIHRlc3RfYWx3YXlzX3JldHVybnNfc3RyaW5nKHNlbGYsIHNjb3JlKToKICAgICAgICBhc3NlcnQgaXNpbnN0YW5jZShzY29yZV9jb2xvdXIoc2NvcmUpLCBzdHIpCgogICAgZGVmIHRlc3RfaGV4X2JvdW5kYXJpZXMoc2VsZik6CiAgICAgICAgIyDiiaU5MCDihpIgZ3JlZW4sIOKJpTc1IOKGkiB5ZWxsb3ctZ3JlZW4sIOKJpTYwIOKGkiB5ZWxsb3csIOKJpTQwIOKGkiBvcmFuZ2UsIGVsc2UgcmVkCiAgICAgICAgYXNzZXJ0IHNjb3JlX2NvbG91cig5MCkgPT0gc2NvcmVfY29sb3VyKDk1KQogICAgICAgIGFzc2VydCBzY29yZV9jb2xvdXIoMzkpID09IHNjb3JlX2NvbG91cigxMCkgICMgYm90aCBiZWxvdyA0MCDihpIgcmVkCgoKIyA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0KIyBzY29yZV90b190aWVyCiMgPT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09CgpjbGFzcyBUZXN0U2NvcmVUb1RpZXI6CiAgICBAcHl0ZXN0Lm1hcmsucGFyYW1ldHJpemUoInNjb3JlLHRpZXIiLCBbCiAgICAgICAgKDkwLCAiRWxpdGUiKSwgKDg1LCAiRWxpdGUiKSwKICAgICAgICAoNzUsICJNYXR1cmUiKSwgKDcxLCAiTWF0dXJlIiksCiAgICAgICAgKDU1LCAiR3Jvd2luZyIpLCAoNTAsICJHcm93aW5nIiksCiAgICAgICAgKDM1LCAiTmFzY2VudCIpLCAoMzAsICJOYXNjZW50IiksCiAgICAgICAgKDI1LCAiQ3JpdGljYWwiKSwgKDAsICJDcml0aWNhbCIpLAogICAgXSkKICAgIGRlZiB0ZXN0X3RpZXJfbGFiZWxzKHNlbGYsIHNjb3JlLCB0aWVyKToKICAgICAgICBhc3NlcnQgc2NvcmVfdG9fdGllcihzY29yZSkgPT0gdGllcgoKCiMgPT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09CiMgc2NvcmVfdG9fdGllcl9lbW9qaQojID09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PQoKY2xhc3MgVGVzdFNjb3JlVG9UaWVyRW1vamk6CiAgICBkZWYgdGVzdF9lbGl0ZV9nZXRzX3Ryb3BoeShzZWxmKToKICAgICAgICBlbW9qaSA9IHNjb3JlX3RvX3RpZXJfZW1vamkoOTApCiAgICAgICAgYXNzZXJ0IGVtb2ppID09ICLwn4+GIgoKICAgIGRlZiB0ZXN0X2NyaXRpY2FsX2dldHNfcmVkX2NpcmNsZShzZWxmKToKICAgICAgICBlbW9qaSA9IHNjb3JlX3RvX3RpZXJfZW1vamkoMTApCiAgICAgICAgYXNzZXJ0IGVtb2ppID09ICLwn5S0IgoKICAgIGRlZiB0ZXN0X3JldHVybnNfc3RyaW5nKHNlbGYpOgogICAgICAgIGFzc2VydCBpc2luc3RhbmNlKHNjb3JlX3RvX3RpZXJfZW1vamkoNTApLCBzdHIpCgoKIyA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0KIyBzY29yZV90b19zdGF0dXMKIyA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0KCmNsYXNzIFRlc3RTY29yZVRvU3RhdHVzOgogICAgZGVmIHRlc3RfaGlnaF9zY29yZV9pc19wYXNzKHNlbGYpOgogICAgICAgIGFzc2VydCBzY29yZV90b19zdGF0dXMoOTApID09ICJwYXNzIgoKICAgIGRlZiB0ZXN0X21pZF9zY29yZV9pc193YXJuKHNlbGYpOgogICAgICAgIGFzc2VydCBzY29yZV90b19zdGF0dXMoNjApID09ICJ3YXJuIgoKICAgIGRlZiB0ZXN0X2xvd19zY29yZV9pc19mYWlsKHNlbGYpOgogICAgICAgIGFzc2VydCBzY29yZV90b19zdGF0dXMoMzApID09ICJmYWlsIgoKICAgIGRlZiB0ZXN0X2V4YWN0X3dhcm5fYm91bmRhcnkoc2VsZik6CiAgICAgICAgYXNzZXJ0IHNjb3JlX3RvX3N0YXR1cyg3MCkgPT0gInBhc3MiCiAgICAgICAgYXNzZXJ0IHNjb3JlX3RvX3N0YXR1cyg2OS45KSA9PSAid2FybiIKCiAgICBkZWYgdGVzdF9leGFjdF9mYWlsX2JvdW5kYXJ5KHNlbGYpOgogICAgICAgIGFzc2VydCBzY29yZV90b19zdGF0dXMoNTApID09ICJ3YXJuIgogICAgICAgIGFzc2VydCBzY29yZV90b19zdGF0dXMoNDkuOSkgPT0gImZhaWwiCgogICAgZGVmIHRlc3RfY3VzdG9tX3RocmVzaG9sZHMoc2VsZik6CiAgICAgICAgYXNzZXJ0IHNjb3JlX3RvX3N0YXR1cyg2MCwgd2Fybl90aHJlc2hvbGQ9ODAsIGZhaWxfdGhyZXNob2xkPTYwKSA9PSAid2FybiIKICAgICAgICBhc3NlcnQgc2NvcmVfdG9fc3RhdHVzKDU5LCB3YXJuX3RocmVzaG9sZD04MCwgZmFpbF90aHJlc2hvbGQ9NjApID09ICJmYWlsIgoKCiMgPT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09CiMgc2NvcmVfdG9fb3ZlcmFsbF9zdGF0dXMKIyA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0KCmNsYXNzIFRlc3RTY29yZVRvT3ZlcmFsbFN0YXR1czoKICAgIGRlZiB0ZXN0X2hlYWx0aHkoc2VsZik6CiAgICAgICAgYXNzZXJ0IHNjb3JlX3RvX292ZXJhbGxfc3RhdHVzKDgwKSA9PSAiaGVhbHRoeSIKCiAgICBkZWYgdGVzdF9uZWVkc19hdHRlbnRpb24oc2VsZik6CiAgICAgICAgYXNzZXJ0IHNjb3JlX3RvX292ZXJhbGxfc3RhdHVzKDYwKSA9PSAibmVlZHMtYXR0ZW50aW9uIgoKICAgIGRlZiB0ZXN0X2NyaXRpY2FsKHNlbGYpOgogICAgICAgIGFzc2VydCBzY29yZV90b19vdmVyYWxsX3N0YXR1cygzMCkgPT0gImNyaXRpY2FsIgoKICAgIGRlZiB0ZXN0X2JvdW5kYXJ5Xzc1KHNlbGYpOgogICAgICAgIGFzc2VydCBzY29yZV90b19vdmVyYWxsX3N0YXR1cyg3NSkgPT0gImhlYWx0aHkiCiAgICAgICAgYXNzZXJ0IHNjb3JlX3RvX292ZXJhbGxfc3RhdHVzKDc0LjkpID09ICJuZWVkcy1hdHRlbnRpb24iCgogICAgZGVmIHRlc3RfYm91bmRhcnlfNTAoc2VsZik6CiAgICAgICAgYXNzZXJ0IHNjb3JlX3RvX292ZXJhbGxfc3RhdHVzKDUwKSA9PSAibmVlZHMtYXR0ZW50aW9uIgogICAgICAgIGFzc2VydCBzY29yZV90b19vdmVyYWxsX3N0YXR1cyg0OS45KSA9PSAiY3JpdGljYWwiCgoKIyA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0KIyBTY29yZVJlc3VsdAojID09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PQoKY2xhc3MgVGVzdFNjb3JlUmVzdWx0OgogICAgZGVmIHRlc3RfZnJvbV9zY29yZV9yZXR1cm5zX2luc3RhbmNlKHNlbGYpOgogICAgICAgIHIgPSBTY29yZVJlc3VsdC5mcm9tX3Njb3JlKDgwLjApCiAgICAgICAgYXNzZXJ0IGlzaW5zdGFuY2UociwgU2NvcmVSZXN1bHQpCgogICAgZGVmIHRlc3RfZnJvbV9zY29yZV9ncmFkZV9tYXRjaGVzKHNlbGYpOgogICAgICAgIHIgPSBTY29yZVJlc3VsdC5mcm9tX3Njb3JlKDgyLjUpCiAgICAgICAgYXNzZXJ0IHIuZ3JhZGUgPT0gIkIrIgoKICAgIGRlZiB0ZXN0X2Zyb21fc2NvcmVfc2ltcGxlX2dyYWRlX25vX3BsdXNtaW51cyhzZWxmKToKICAgICAgICByID0gU2NvcmVSZXN1bHQuZnJvbV9zY29yZSg4Mi41KQogICAgICAgIGFzc2VydCByLnNpbXBsZV9ncmFkZSA9PSAiQiIKCiAgICBkZWYgdGVzdF9mcm9tX3Njb3JlX3RpZXJfcG9wdWxhdGVkKHNlbGYpOgogICAgICAgIHIgPSBTY29yZVJlc3VsdC5mcm9tX3Njb3JlKDg4KQogICAgICAgIGFzc2VydCByLnRpZXIgPT0gIkVsaXRlIgoKICAgIGRlZiB0ZXN0X2Zyb21fc2NvcmVfZW1vamlfcG9wdWxhdGVkKHNlbGYpOgogICAgICAgIHIgPSBTY29yZVJlc3VsdC5mcm9tX3Njb3JlKDg4KQogICAgICAgIGFzc2VydCByLnRpZXJfZW1vamkgPT0gIvCfj4YiCgogICAgZGVmIHRlc3RfZnJvbV9zY29yZV9jb2xvdXJfaXNfaGV4KHNlbGYpOgogICAgICAgIHIgPSBTY29yZVJlc3VsdC5mcm9tX3Njb3JlKDYwKQogICAgICAgIGFzc2VydCByLmNvbG91ci5zdGFydHN3aXRoKCIjIikKCiAgICBkZWYgdGVzdF9mcm9tX3Njb3JlX3N0YXR1c19wYXNzKHNlbGYpOgogICAgICAgIHIgPSBTY29yZVJlc3VsdC5mcm9tX3Njb3JlKDkwKQogICAgICAgIGFzc2VydCByLnN0YXR1cyA9PSAicGFzcyIKCiAgICBkZWYgdGVzdF9mcm9tX3Njb3JlX3N0YXR1c193YXJuKHNlbGYpOgogICAgICAgIHIgPSBTY29yZVJlc3VsdC5mcm9tX3Njb3JlKDYwKQogICAgICAgIGFzc2VydCByLnN0YXR1cyA9PSAid2FybiIKCiAgICBkZWYgdGVzdF9mcm9tX3Njb3JlX3N0YXR1c19mYWlsKHNlbGYpOgogICAgICAgIHIgPSBTY29yZVJlc3VsdC5mcm9tX3Njb3JlKDMwKQogICAgICAgIGFzc2VydCByLnN0YXR1cyA9PSAiZmFpbCIKCiAgICBkZWYgdGVzdF9mcm9tX2dyYWRlX2NvbnN0cnVjdG9yKHNlbGYpOgogICAgICAgIHIgPSBTY29yZVJlc3VsdC5mcm9tX2dyYWRlKCJBIikKICAgICAgICBhc3NlcnQgci5zY29yZSA9PSA5Mi41CiAgICAgICAgYXNzZXJ0IHIuZ3JhZGUuc3RhcnRzd2l0aCgiQSIpCgogICAgZGVmIHRlc3RfdG9fZGljdF9oYXNfYWxsX2ZpZWxkcyhzZWxmKToKICAgICAgICByID0gU2NvcmVSZXN1bHQuZnJvbV9zY29yZSg3MCkKICAgICAgICBkID0gci50b19kaWN0KCkKICAgICAgICBmb3IgayBpbiAoInNjb3JlIiwgImdyYWRlIiwgInNpbXBsZV9ncmFkZSIsICJ0aWVyIiwgInRpZXJfZW1vamkiLCAiY29sb3VyIiwgInN0YXR1cyIpOgogICAgICAgICAgICBhc3NlcnQgayBpbiBkCgogICAgZGVmIHRlc3RfdG9fZGljdF9pc19qc29uX3NlcmlhbGlzYWJsZShzZWxmKToKICAgICAgICByID0gU2NvcmVSZXN1bHQuZnJvbV9zY29yZSg1NSkKICAgICAgICBqc29uLmR1bXBzKHIudG9fZGljdCgpKSAgIyBzaG91bGQgbm90IHJhaXNlCgogICAgZGVmIHRlc3Rfc3RyX3JlcHJlc2VudGF0aW9uKHNlbGYpOgogICAgICAgIHIgPSBTY29yZVJlc3VsdC5mcm9tX3Njb3JlKDgwKQogICAgICAgIHMgPSBzdHIocikKICAgICAgICBhc3NlcnQgIjgwIiBpbiBzCgogICAgZGVmIHRlc3Rfc2NvcmVfaXNfcm91bmRlZChzZWxmKToKICAgICAgICByID0gU2NvcmVSZXN1bHQuZnJvbV9zY29yZSg3Mi4xMjM0NTY3ODkpCiAgICAgICAgYXNzZXJ0IHIuc2NvcmUgPT0gcm91bmQoNzIuMTIzNDU2Nzg5LCAyKQo=
+"""Tests for src/scoring.py — the shared scoring abstraction."""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from src.scoring import (
+    score_to_grade,
+    grade_to_score,
+    grade_colour,
+    score_colour,
+    score_to_tier,
+    score_to_tier_emoji,
+    score_to_status,
+    score_to_overall_status,
+    ScoreResult,
+)
+
+
+# ===========================================================================
+# score_to_grade
+# ===========================================================================
+
+class TestScoreToGrade:
+    @pytest.mark.parametrize("score,expected", [
+        (100, "A+"), (95, "A+"), (94.9, "A"), (90, "A"),
+        (89.9, "A-"), (85, "A-"), (84.9, "B+"), (80, "B+"),
+        (79.9, "B"), (75, "B"), (74.9, "B-"), (70, "B-"),
+        (69.9, "C+"), (65, "C+"), (64.9, "C"), (60, "C"),
+        (59.9, "C-"), (55, "C-"), (54.9, "D+"), (50, "D+"),
+        (49.9, "D"), (45, "D"), (44.9, "D-"), (40, "D-"),
+        (39.9, "F"), (0, "F"),
+    ])
+    def test_grade_boundaries(self, score, expected):
+        assert score_to_grade(score) == expected
+
+    def test_none_returns_empty(self):
+        assert score_to_grade(None) == ""
+
+    def test_simple_mode_a(self):
+        assert score_to_grade(92, simple=True) == "A"
+
+    def test_simple_mode_b(self):
+        assert score_to_grade(78, simple=True) == "B"
+
+    def test_simple_mode_c(self):
+        assert score_to_grade(62, simple=True) == "C"
+
+    def test_simple_mode_d(self):
+        assert score_to_grade(47, simple=True) == "D"
+
+    def test_simple_mode_f(self):
+        assert score_to_grade(20, simple=True) == "F"
+
+    def test_simple_no_plus_minus(self):
+        for score in range(0, 101, 5):
+            grade = score_to_grade(score, simple=True)
+            assert "+" not in grade
+            assert "-" not in grade
+
+
+# ===========================================================================
+# grade_to_score
+# ===========================================================================
+
+class TestGradeToScore:
+    @pytest.mark.parametrize("grade,expected", [
+        ("A+", 97.5), ("A", 92.5), ("A-", 87.5),
+        ("B+", 82.5), ("B", 77.5), ("B-", 72.5),
+        ("C+", 67.5), ("C", 62.5), ("C-", 57.5),
+        ("D+", 52.5), ("D", 47.5), ("D-", 42.5),
+        ("F", 20.0),
+    ])
+    def test_known_grades(self, grade, expected):
+        assert grade_to_score(grade) == expected
+
+    def test_unknown_grade_returns_50(self):
+        assert grade_to_score("Z") == 50.0
+
+    def test_case_insensitive(self):
+        assert grade_to_score("a") == grade_to_score("A")
+        assert grade_to_score("b+") == grade_to_score("B+")
+
+
+# ===========================================================================
+# grade_colour
+# ===========================================================================
+
+class TestGradeColour:
+    def test_returns_hex_string(self):
+        colour = grade_colour("A")
+        assert colour.startswith("#")
+
+    def test_a_grade_is_green(self):
+        assert "c853" in grade_colour("A+") or "00c8" in grade_colour("A+")
+
+    def test_f_grade_is_red(self):
+        assert "ff" in grade_colour("F").lower()
+
+    def test_shields_mode_returns_name(self):
+        assert grade_colour("A", shields=True) == "brightgreen"
+        assert grade_colour("B", shields=True) == "green"
+        assert grade_colour("C", shields=True) == "yellow"
+        assert grade_colour("D", shields=True) == "orange"
+        assert grade_colour("F", shields=True) == "red"
+
+    def test_unknown_grade_returns_fallback(self):
+        c = grade_colour("Z")
+        assert isinstance(c, str)
+        assert len(c) > 0
+
+
+# ===========================================================================
+# score_colour
+# ===========================================================================
+
+class TestScoreColour:
+    def test_returns_hex_by_default(self):
+        assert score_colour(90).startswith("#")
+
+    def test_shields_mode_high(self):
+        assert score_colour(85, shields=True) == "brightgreen"
+
+    def test_shields_mode_mid(self):
+        assert score_colour(68, shields=True) == "green"
+
+    def test_shields_mode_low(self):
+        assert score_colour(10, shields=True) == "red"
+
+    @pytest.mark.parametrize("score", [0, 25, 40, 50, 60, 75, 90, 100])
+    def test_always_returns_string(self, score):
+        assert isinstance(score_colour(score), str)
+
+    def test_hex_boundaries(self):
+        # ≥90 → green, ≥75 → yellow-green, ≥60 → yellow, ≥40 → orange, else red
+        assert score_colour(90) == score_colour(95)
+        assert score_colour(39) == score_colour(10)  # both below 40 → red
+
+
+# ===========================================================================
+# score_to_tier
+# ===========================================================================
+
+class TestScoreToTier:
+    @pytest.mark.parametrize("score,tier", [
+        (90, "Elite"), (85, "Elite"),
+        (75, "Mature"), (71, "Mature"),
+        (55, "Growing"), (50, "Growing"),
+        (35, "Nascent"), (30, "Nascent"),
+        (25, "Critical"), (0, "Critical"),
+    ])
+    def test_tier_labels(self, score, tier):
+        assert score_to_tier(score) == tier
+
+
+# ===========================================================================
+# score_to_tier_emoji
+# ===========================================================================
+
+class TestScoreToTierEmoji:
+    def test_elite_gets_trophy(self):
+        emoji = score_to_tier_emoji(90)
+        assert emoji == "🏆"
+
+    def test_critical_gets_red_circle(self):
+        emoji = score_to_tier_emoji(10)
+        assert emoji == "🔴"
+
+    def test_returns_string(self):
+        assert isinstance(score_to_tier_emoji(50), str)
+
+
+# ===========================================================================
+# score_to_status
+# ===========================================================================
+
+class TestScoreToStatus:
+    def test_high_score_is_pass(self):
+        assert score_to_status(90) == "pass"
+
+    def test_mid_score_is_warn(self):
+        assert score_to_status(60) == "warn"
+
+    def test_low_score_is_fail(self):
+        assert score_to_status(30) == "fail"
+
+    def test_exact_warn_boundary(self):
+        assert score_to_status(70) == "pass"
+        assert score_to_status(69.9) == "warn"
+
+    def test_exact_fail_boundary(self):
+        assert score_to_status(50) == "warn"
+        assert score_to_status(49.9) == "fail"
+
+    def test_custom_thresholds(self):
+        assert score_to_status(60, warn_threshold=80, fail_threshold=60) == "warn"
+        assert score_to_status(59, warn_threshold=80, fail_threshold=60) == "fail"
+
+
+# ===========================================================================
+# score_to_overall_status
+# ===========================================================================
+
+class TestScoreToOverallStatus:
+    def test_healthy(self):
+        assert score_to_overall_status(80) == "healthy"
+
+    def test_needs_attention(self):
+        assert score_to_overall_status(60) == "needs-attention"
+
+    def test_critical(self):
+        assert score_to_overall_status(30) == "critical"
+
+    def test_boundary_75(self):
+        assert score_to_overall_status(75) == "healthy"
+        assert score_to_overall_status(74.9) == "needs-attention"
+
+    def test_boundary_50(self):
+        assert score_to_overall_status(50) == "needs-attention"
+        assert score_to_overall_status(49.9) == "critical"
+
+
+# ===========================================================================
+# ScoreResult
+# ===========================================================================
+
+class TestScoreResult:
+    def test_from_score_returns_instance(self):
+        r = ScoreResult.from_score(80.0)
+        assert isinstance(r, ScoreResult)
+
+    def test_from_score_grade_matches(self):
+        r = ScoreResult.from_score(82.5)
+        assert r.grade == "B+"
+
+    def test_from_score_simple_grade_no_plusminus(self):
+        r = ScoreResult.from_score(82.5)
+        assert r.simple_grade == "B"
+
+    def test_from_score_tier_populated(self):
+        r = ScoreResult.from_score(88)
+        assert r.tier == "Elite"
+
+    def test_from_score_emoji_populated(self):
+        r = ScoreResult.from_score(88)
+        assert r.tier_emoji == "🏆"
+
+    def test_from_score_colour_is_hex(self):
+        r = ScoreResult.from_score(60)
+        assert r.colour.startswith("#")
+
+    def test_from_score_status_pass(self):
+        r = ScoreResult.from_score(90)
+        assert r.status == "pass"
+
+    def test_from_score_status_warn(self):
+        r = ScoreResult.from_score(60)
+        assert r.status == "warn"
+
+    def test_from_score_status_fail(self):
+        r = ScoreResult.from_score(30)
+        assert r.status == "fail"
+
+    def test_from_grade_constructor(self):
+        r = ScoreResult.from_grade("A")
+        assert r.score == 92.5
+        assert r.grade.startswith("A")
+
+    def test_to_dict_has_all_fields(self):
+        r = ScoreResult.from_score(70)
+        d = r.to_dict()
+        for k in ("score", "grade", "simple_grade", "tier", "tier_emoji", "colour", "status"):
+            assert k in d
+
+    def test_to_dict_is_json_serialisable(self):
+        r = ScoreResult.from_score(55)
+        json.dumps(r.to_dict())  # should not raise
+
+    def test_str_representation(self):
+        r = ScoreResult.from_score(80)
+        s = str(r)
+        assert "80" in s
+
+    def test_score_is_rounded(self):
+        r = ScoreResult.from_score(72.123456789)
+        assert r.score == round(72.123456789, 2)

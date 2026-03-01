@@ -162,14 +162,17 @@ class _NameCollector(ast.NodeVisitor):
         self.used: set[str] = set()
 
     def visit_Name(self, node: ast.Name) -> None:  # noqa: N802
+        """Record a Name node reference as used"""
         self.used.add(node.id)
         self.generic_visit(node)
 
     def visit_Attribute(self, node: ast.Attribute) -> None:  # noqa: N802
+        """Record an Attribute node reference as used"""
         self.used.add(node.attr)
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:  # noqa: N802
+        """Visit a Call node and recurse into its children"""
         self.generic_visit(node)
 
 
@@ -183,6 +186,7 @@ class _DefCollector(ast.NodeVisitor):
         self._depth = 0
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:  # noqa: N802
+        """Record a top-level function definition and recurse"""
         if self._depth == 0:
             self.functions.append((node.name, node.lineno))
         self._depth += 1
@@ -192,6 +196,7 @@ class _DefCollector(ast.NodeVisitor):
     visit_AsyncFunctionDef = visit_FunctionDef  # type: ignore[assignment]
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:  # noqa: N802
+        """Record a top-level class definition and recurse"""
         if self._depth == 0:
             self.classes.append((node.name, node.lineno))
         self._depth += 1
@@ -199,12 +204,14 @@ class _DefCollector(ast.NodeVisitor):
         self._depth -= 1
 
     def visit_Import(self, node: ast.Import) -> None:  # noqa: N802
+        """Record imported names from an import statement"""
         for alias in node.names:
             local_name = alias.asname or alias.name.split(".")[0]
             self.imports.append((local_name, node.lineno))
         self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:  # noqa: N802
+        """Record imported names from a from-import statement"""
         for alias in node.names:
             if alias.name == "*":
                 continue

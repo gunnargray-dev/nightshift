@@ -64,6 +64,7 @@ class PluginDefinition:
 
     @classmethod
     def from_dict(cls, d: dict) -> "PluginDefinition":
+        """Construct a PluginDefinition from a raw TOML dictionary"""
         return cls(
             name=d.get("name", "unknown"),
             module=d.get("module", ""),
@@ -74,6 +75,7 @@ class PluginDefinition:
         )
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the plugin definition"""
         return asdict(self)
 
 
@@ -89,6 +91,7 @@ class PluginResult:
     error: str = ""
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the plugin result"""
         return asdict(self)
 
 
@@ -104,9 +107,11 @@ class PluginRunReport:
     results: list[PluginResult] = field(default_factory=list)
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the run report"""
         return asdict(self)
 
     def to_markdown(self) -> str:
+        """Render the run report as a Markdown summary table"""
         lines = [
             f"## Plugin Run Report -- Hook: `{self.hook}`",
             "",

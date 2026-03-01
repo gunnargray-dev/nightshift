@@ -51,14 +51,17 @@ class PRScore:
 
     @property
     def total(self) -> int:
+        """Return the sum of all dimension scores"""
         return sum(d.score for d in self.dimensions)
 
     @property
     def max_total(self) -> int:
+        """Return the maximum possible score across all dimensions"""
         return sum(d.max_score for d in self.dimensions)
 
     @property
     def grade(self) -> str:
+        """Compute a letter grade from the total score percentage"""
         pct = self.total / self.max_total * 100 if self.max_total else 0
         if pct >= 90:
             return "A+"
@@ -82,16 +85,19 @@ class Leaderboard:
 
     @property
     def ranked(self) -> list[PRScore]:
+        """Return PR scores sorted by total score descending"""
         return sorted(self.scores, key=lambda s: s.total, reverse=True)
 
     @property
     def average(self) -> float:
+        """Compute the mean total score across all PRs"""
         if not self.scores:
             return 0.0
         return round(sum(s.total for s in self.scores) / len(self.scores), 1)
 
     @property
     def top(self) -> Optional[PRScore]:
+        """Return the highest-scoring PR or None if empty"""
         return self.ranked[0] if self.ranked else None
 
 

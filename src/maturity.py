@@ -106,6 +106,7 @@ class ModuleMaturity:
 
     @property
     def total_score(self) -> float:
+        """Return the sum of all dimension scores for this module"""
         return round(
             self.test_score
             + self.docs_score
@@ -117,13 +118,16 @@ class ModuleMaturity:
 
     @property
     def tier(self) -> str:
+        """Return the maturity tier name based on total score"""
         return _score_to_tier(self.total_score)
 
     @property
     def tier_emoji(self) -> str:
+        """Return the emoji icon for this module's maturity tier"""
         return _TIER_EMOJI[self.tier]
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation including computed score and tier"""
         d = asdict(self)
         d["total_score"] = self.total_score
         d["tier"] = self.tier
@@ -157,19 +161,23 @@ class MaturityReport:
 
     @property
     def avg_score(self) -> float:
+        """Return the average maturity score across all modules"""
         if not self.modules:
             return 0.0
         return round(sum(m.total_score for m in self.modules) / len(self.modules), 1)
 
     @property
     def veterans(self) -> list[ModuleMaturity]:
+        """Return modules that have reached the VETERAN maturity tier"""
         return [m for m in self.modules if m.tier == TIER_VETERAN]
 
     @property
     def seeds(self) -> list[ModuleMaturity]:
+        """Return modules that are still in the SEED maturity tier"""
         return [m for m in self.modules if m.tier == TIER_SEED]
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the maturity report"""
         return {
             "generated_at": self.generated_at,
             "avg_score": self.avg_score,
@@ -177,6 +185,7 @@ class MaturityReport:
         }
 
     def to_json(self) -> str:
+        """Serialize the maturity report to a JSON string"""
         return json.dumps(self.to_dict(), indent=2, default=str)
 
     def to_markdown(self) -> str:

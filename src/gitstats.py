@@ -52,15 +52,19 @@ class CommitRecord:
 
     @property
     def churn(self) -> int:
+        """Return total churn (insertions plus deletions) for this commit"""
         return self.insertions + self.deletions
 
     @property
     def net(self) -> int:
+        """Return the net line delta for this commit"""
         return self.insertions - self.deletions
 
 
 @dataclass
 class ContributorStats:
+    """Aggregated commit statistics for a single contributor"""
+
     name: str
     commits: int
     insertions: int
@@ -68,9 +72,11 @@ class ContributorStats:
 
     @property
     def churn(self) -> int:
+        """Return total churn (insertions plus deletions) for this contributor"""
         return self.insertions + self.deletions
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of this contributor's stats"""
         return asdict(self)
 
 
@@ -97,14 +103,17 @@ class GitStatsReport:
     recent_velocity: int = 0
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the full git stats report"""
         d = asdict(self)
         d["contributors"] = [c.to_dict() for c in self.contributors]
         return d
 
     def to_json(self) -> str:
+        """Serialize the git stats report to a JSON string"""
         return json.dumps(self.to_dict(), indent=2)
 
     def to_markdown(self) -> str:
+        """Render the git stats report as a Markdown document"""
         lines: list[str] = ["# Nightshift Git Statistics Deep-Dive\n"]
         if self.first_commit_date:
             lines.append(f"*Date range: {self.first_commit_date} \u2192 {self.last_commit_date}*\n")

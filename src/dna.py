@@ -89,6 +89,7 @@ class DnaChannel:
     description: str
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of this channel"""
         return asdict(self)
 
     def render_bar(self, width: int = _BAND_WIDTH) -> str:
@@ -118,6 +119,7 @@ class RepoDna:
     total_lines: int = 0
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the full DNA fingerprint"""
         d = {
             "repo_name": self.repo_name,
             "generated_at": self.generated_at,
@@ -130,6 +132,7 @@ class RepoDna:
         return d
 
     def to_json(self) -> str:
+        """Serialize the DNA fingerprint to a JSON string"""
         return json.dumps(self.to_dict(), indent=2, default=str)
 
     def _render_band(self) -> list[str]:

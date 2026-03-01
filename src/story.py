@@ -47,6 +47,7 @@ class SessionChapter:
     narrative: str = ""               # generated prose paragraph
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the session chapter"""
         return asdict(self)
 
 
@@ -69,6 +70,7 @@ class RepoStory:
             self.generated_at = datetime.now(timezone.utc).strftime("%B %d, %Y at %H:%M UTC")
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the full repo story"""
         return asdict(self)
 
     def to_markdown(self) -> str:
@@ -145,6 +147,7 @@ class RepoStory:
         return "\n".join(lines)
 
     def to_json(self) -> str:
+        """Serialize the repo story to a JSON string"""
         return json.dumps(self.to_dict(), indent=2, default=str)
 
 

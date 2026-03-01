@@ -27,6 +27,7 @@ from typing import Optional
 
 @dataclass
 class SessionScore:
+    """Store quality metrics and grade for a single development session"""
     session: int
     features_shipped: int       # new source modules
     tests_added: int            # new tests (approx)
@@ -41,6 +42,7 @@ class SessionScore:
 
 @dataclass
 class ReflectionReport:
+    """Aggregate session scores, trends, patterns, and meta-insights"""
     total_sessions: int
     scores: list
     top_sessions: list

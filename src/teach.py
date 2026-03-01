@@ -50,6 +50,7 @@ class FunctionDoc:
     body_summary: str = ""       # 1-line summary of what the body does
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the function documentation"""
         return asdict(self)
 
 
@@ -66,6 +67,7 @@ class ClassDoc:
     line_number: int = 0
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the class documentation"""
         return asdict(self)
 
 
@@ -83,9 +85,11 @@ class ModuleTutorial:
     constants: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the module tutorial"""
         return asdict(self)
 
     def to_json(self) -> str:
+        """Serialize the module tutorial to a JSON string"""
         return json.dumps(self.to_dict(), indent=2, default=str)
 
     def to_markdown(self) -> str:

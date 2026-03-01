@@ -438,6 +438,7 @@ def compare_sessions(
     ]
 
     def row(metric: str, va: str, vb: str) -> str:
+        """Format a single Markdown table row for two-session comparison"""
         return f"| {metric} | {va} | {vb} |"
 
     lines.append(row("Tasks Completed", str(ra.task_count) if ra else "N/A", str(rb.task_count) if rb else "N/A"))

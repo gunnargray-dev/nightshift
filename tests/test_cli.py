@@ -1,1 +1,529 @@
-IiIiVGVzdHMgZm9yIHNyYy9jbGkucHkg4oCUIHRoZSB1bmlmaWVkIE5pZ2h0c2hpZnQgQ0xJIGVudHJ5IHBvaW50LiIiIgoKZnJvbSBfX2Z1dHVyZV9fIGltcG9ydCBhbm5vdGF0aW9ucwoKaW1wb3J0IGpzb24KaW1wb3J0IHN5cwpmcm9tIHBhdGhsaWIgaW1wb3J0IFBhdGgKZnJvbSB1bml0dGVzdC5tb2NrIGltcG9ydCBNYWdpY01vY2ssIHBhdGNoCgppbXBvcnQgcHl0ZXN0CgojIEVuc3VyZSBzcmMvIGlzIGltcG9ydGFibGUKc3lzLnBhdGguaW5zZXJ0KDAsIHN0cihQYXRoKF9fZmlsZV9fKS5yZXNvbHZlKCkucGFyZW50LnBhcmVudCkpCgpmcm9tIHNyYy5jbGkgaW1wb3J0IGJ1aWxkX3BhcnNlciwgbWFpbiwgX3ByaW50X2hlYWRlciwgX3ByaW50X29rLCBfcHJpbnRfd2FybiwgX3ByaW50X2luZm8sIFJFUE9fUk9PVAoKCiMgLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCiMgUGFyc2VyIHRlc3RzCiMgLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCgoKY2xhc3MgVGVzdEJ1aWxkUGFyc2VyOgogICAgIiIiVGVzdHMgZm9yIHRoZSBhcmd1bWVudCBwYXJzZXIuIiIiCgogICAgZGVmIHRlc3RfcGFyc2VyX3JldHVybnNfcGFyc2VyKHNlbGYpOgogICAgICAgIHBhcnNlciA9IGJ1aWxkX3BhcnNlcigpCiAgICAgICAgYXNzZXJ0IHBhcnNlciBpcyBub3QgTm9uZQoKICAgIGRlZiB0ZXN0X3BhcnNlcl9yZXF1aXJlc19jb21tYW5kKHNlbGYpOgogICAgICAgIHBhcnNlciA9IGJ1aWxkX3BhcnNlcigpCiAgICAgICAgd2l0aCBweXRlc3QucmFpc2VzKFN5c3RlbUV4aXQpOgogICAgICAgICAgICBwYXJzZXIucGFyc2VfYXJncyhbXSkKCiAgICBkZWYgdGVzdF9oZWFsdGhfc3ViY29tbWFuZF9wYXJzZXMoc2VsZik6CiAgICAgICAgcGFyc2VyID0gYnVpbGRfcGFyc2VyKCkKICAgICAgICBhcmdzID0gcGFyc2VyLnBhcnNlX2FyZ3MoWyJoZWFsdGgiXSkKICAgICAgICBhc3NlcnQgYXJncy5jb21tYW5kID09ICJoZWFsdGgiCiAgICAgICAgYXNzZXJ0IGFyZ3MuanNvbiBpcyBGYWxzZQoKICAgIGRlZiB0ZXN0X2hlYWx0aF9qc29uX2ZsYWcoc2VsZik6CiAgICAgICAgcGFyc2VyID0gYnVpbGRfcGFyc2VyKCkKICAgICAgICBhcmdzID0gcGFyc2VyLnBhcnNlX2FyZ3MoWyJoZWFsdGgiLCAiLS1qc29uIl0pCiAgICAgICAgYXNzZXJ0IGFyZ3MuanNvbiBpcyBUcnVlCgogICAgZGVmIHRlc3Rfc3RhdHNfc3ViY29tbWFuZF9wYXJzZXMoc2VsZik6CiAgICAgICAgcGFyc2VyID0gYnVpbGRfcGFyc2VyKCkKICAgICAgICBhcmdzID0gcGFyc2VyLnBhcnNlX2FyZ3MoWyJzdGF0cyJdKQogICAgICAgIGFzc2VydCBhcmdzLmNvbW1hbmQgPT0gInN0YXRzIgoKICAgIGRlZiB0ZXN0X2RpZmZfZGVmYXVsdF9zZXNzaW9uKHNlbGYpOgogICAgICAgIHBhcnNlciA9IGJ1aWxkX3BhcnNlcigpCiAgICAgICAgYXJncyA9IHBhcnNlci5wYXJzZV9hcmdzKFsiZGlmZiJdKQogICAgICAgIGFzc2VydCBhcmdzLnNlc3Npb24gaXMgTm9uZQoKICAgIGRlZiB0ZXN0X2RpZmZfY3VzdG9tX3Nlc3Npb24oc2VsZik6CiAgICAgICAgcGFyc2VyID0gYnVpbGRfcGFyc2VyKCkKICAgICAgICBhcmdzID0gcGFyc2VyLnBhcnNlX2FyZ3MoWyJkaWZmIiwgIi0tc2Vzc2lvbiIsICIyIl0pCiAgICAgICAgYXNzZXJ0IGFyZ3Muc2Vzc2lvbiA9PSAyCgogICAgZGVmIHRlc3RfY2hhbmdlbG9nX3dyaXRlX2ZsYWcoc2VsZik6CiAgICAgICAgcGFyc2VyID0gYnVpbGRfcGFyc2VyKCkKICAgICAgICBhcmdzID0gcGFyc2VyLnBhcnNlX2FyZ3MoWyJjaGFuZ2Vsb2ciLCAiLS13cml0ZSJdKQogICAgICAgIGFzc2VydCBhcmdzLndyaXRlIGlzIFRydWUKCiAgICBkZWYgdGVzdF9jb3ZlcmFnZV9zdWJjb21tYW5kKHNlbGYpOgogICAgICAgIHBhcnNlciA9IGJ1aWxkX3BhcnNlcigpCiAgICAgICAgYXJncyA9IHBhcnNlci5wYXJzZV9hcmdzKFsiY292ZXJhZ2UiXSkKICAgICAgICBhc3NlcnQgYXJncy5jb21tYW5kID09ICJjb3ZlcmFnZSIKCiAgICBkZWYgdGVzdF9zY29yZV9zdWJjb21tYW5kKHNlbGYpOgogICAgICAgIHBhcnNlciA9IGJ1aWxkX3BhcnNlcigpCiAgICAgICAgYXJncyA9IHBhcnNlci5wYXJzZV9hcmdzKFsic2NvcmUiXSkKICAgICAgICBhc3NlcnQgYXJncy5jb21tYW5kID09ICJzY29yZSIKCiAgICBkZWYgdGVzdF9hcmNoX3N1YmNvbW1hbmQoc2VsZik6CiAgICAgICAgcGFyc2VyID0gYnVpbGRfcGFyc2VyKCkKICAgICAgICBhcmdzID0gcGFyc2VyLnBhcnNlX2FyZ3MoWyJhcmNoIl0pCiAgICAgICAgYXNzZXJ0IGFyZ3MuY29tbWFuZCA9PSAiYXJjaCIKICAgICAgICBhc3NlcnQgYXJncy53cml0ZSBpcyBGYWxzZQoKICAgIGRlZiB0ZXN0X2FyY2hfd3JpdGVfZmxhZyhzZWxmKToKICAgICAgICBwYXJzZXIgPSBidWlsZF9wYXJzZXIoKQogICAgICAgIGFyZ3MgPSBwYXJzZXIucGFyc2VfYXJncyhbImFyY2giLCAiLS13cml0ZSJdKQogICAgICAgIGFzc2VydCBhcmdzLndyaXRlIGlzIFRydWUKCiAgICBkZWYgdGVzdF9yZWZhY3Rvcl9zdWJjb21tYW5kKHNlbGYpOgogICAgICAgIHBhcnNlciA9IGJ1aWxkX3BhcnNlcigpCiAgICAgICAgYXJncyA9IHBhcnNlci5wYXJzZV9hcmdzKFsicmVmYWN0b3IiXSkKICAgICAgICBhc3NlcnQgYXJncy5jb21tYW5kID09ICJyZWZhY3RvciIKICAgICAgICBhc3NlcnQgYXJncy5hcHBseSBpcyBGYWxzZQoKICAgIGRlZiB0ZXN0X3JlZmFjdG9yX2FwcGx5X2ZsYWcoc2VsZik6CiAgICAgICAgcGFyc2VyID0gYnVpbGRfcGFyc2VyKCkKICAgICAgICBhcmdzID0gcGFyc2VyLnBhcnNlX2FyZ3MoWyJyZWZhY3RvciIsICItLWFwcGx5Il0pCiAgICAgICAgYXNzZXJ0IGFyZ3MuYXBwbHkgaXMgVHJ1ZQoKICAgIGRlZiB0ZXN0X3J1bl9zdWJjb21tYW5kX2RlZmF1bHRfc2Vzc2lvbihzZWxmKToKICAgICAgICBwYXJzZXIgPSBidWlsZF9wYXJzZXIoKQogICAgICAgIGFyZ3MgPSBwYXJzZXIucGFyc2VfYXJncyhbInJ1biJdKQogICAgICAgIGFzc2VydCBhcmdzLnNlc3Npb24gPT0gMQoKICAgIGRlZiB0ZXN0X3J1bl9jdXN0b21fc2Vzc2lvbihzZWxmKToKICAgICAgICBwYXJzZXIgPSBidWlsZF9wYXJzZXIoKQogICAgICAgIGFyZ3MgPSBwYXJzZXIucGFyc2VfYXJncyhbInJ1biIsICItLXNlc3Npb24iLCAiMyJdKQogICAgICAgIGFzc2VydCBhcmdzLnNlc3Npb24gPT0gMwoKICAgIGRlZiB0ZXN0X3JlcG9fZmxhZ19wZXJfc3ViY29tbWFuZChzZWxmKToKICAgICAgICBwYXJzZXIgPSBidWlsZF9wYXJzZXIoKQogICAgICAgIGFyZ3MgPSBwYXJzZXIucGFyc2VfYXJncyhbImhlYWx0aCIsICItLXJlcG8iLCAiL3RtcC9teXJlcG8iXSkKICAgICAgICBhc3NlcnQgYXJncy5yZXBvID09ICIvdG1wL215cmVwbyIKCiAgICBkZWYgdGVzdF9hbGxfc3ViY29tbWFuZHNfaGF2ZV9mdW5jKHNlbGYpOgogICAgICAgICIiIkV2ZXJ5IHN1YmNvbW1hbmQgc2hvdWxkIGJpbmQgYSBmdW5jIGNhbGxhYmxlLiIiIgogICAgICAgIHBhcnNlciA9IGJ1aWxkX3BhcnNlcigpCiAgICAgICAgZm9yIGNtZCBpbiBbImhlYWx0aCIsICJzdGF0cyIsICJkaWZmIiwgImNoYW5nZWxvZyIsICJjb3ZlcmFnZSIsICJzY29yZSIsICJhcmNoIiwgInJlZmFjdG9yIiwgInJ1biJdOgogICAgICAgICAgICBhcmdzID0gcGFyc2VyLnBhcnNlX2FyZ3MoW2NtZF0pCiAgICAgICAgICAgIGFzc2VydCBjYWxsYWJsZShhcmdzLmZ1bmMpLCBmIntjbWR9IG1pc3NpbmcgZnVuYyBiaW5kaW5nIgoKICAgIGRlZiB0ZXN0X2Rhc2hib2FyZF9zdWJjb21tYW5kX3BhcnNlcyhzZWxmKToKICAgICAgICBwYXJzZXIgPSBidWlsZF9wYXJzZXIoKQogICAgICAgIGFyZ3MgPSBwYXJzZXIucGFyc2VfYXJncyhbImRhc2hib2FyZCJdKQogICAgICAgIGFzc2VydCBhcmdzLmNvbW1hbmQgPT0gImRhc2hib2FyZCIKCiAgICBkZWYgdGVzdF9kYXNoYm9hcmRfY3VzdG9tX3BvcnQoc2VsZik6CiAgICAgICAgcGFyc2VyID0gYnVpbGRfcGFyc2VyKCkKICAgICAgICBhcmdzID0gcGFyc2VyLnBhcnNlX2FyZ3MoWyJkYXNoYm9hcmQiLCAiLS1wb3J0IiwgIjkwMDAiXSkKICAgICAgICBhc3NlcnQgYXJncy5wb3J0ID09IDkwMDAKCiAgICBkZWYgdGVzdF9kYXNoYm9hcmRfZGVmYXVsdF9wb3J0KHNlbGYpOgogICAgICAgIHBhcnNlciA9IGJ1aWxkX3BhcnNlcigpCiAgICAgICAgYXJncyA9IHBhcnNlci5wYXJzZV9hcmdzKFsiZGFzaGJvYXJkIl0pCiAgICAgICAgYXNzZXJ0IGFyZ3MucG9ydCA9PSA4NzEwCgoKIyAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KIyBIZWxwZXIgZnVuY3Rpb24gdGVzdHMKIyAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KCgpjbGFzcyBUZXN0SGVscGVyRnVuY3Rpb25zOgogICAgIiIiVGVzdHMgZm9yIGludGVybmFsIHByaW50IGhlbHBlcnMuIiIiCgogICAgZGVmIHRlc3RfcHJpbnRfaGVhZGVyX2RvZXNfbm90X3JhaXNlKHNlbGYsIGNhcHN5cyk6CiAgICAgICAgX3ByaW50X2hlYWRlcigiVGVzdCBUaXRsZSIpCiAgICAgICAgb3V0ID0gY2Fwc3lzLnJlYWRvdXRlcnIoKS5vdXQKICAgICAgICBhc3NlcnQgIlRlc3QgVGl0bGUiIGluIG91dAogICAgICAgIGFzc2VydCAiTmlnaHRzaGlmdCIgaW4gb3V0CgogICAgZGVmIHRlc3RfcHJpbnRfb2soc2VsZiwgY2Fwc3lzKToKICAgICAgICBfcHJpbnRfb2soImFsbCBnb29kIikKICAgICAgICBvdXQgPSBjYXBzeXMucmVhZG91dGVycigpLm91dAogICAgICAgIGFzc2VydCAiYWxsIGdvb2QiIGluIG91dAoKICAgIGRlZiB0ZXN0X3ByaW50X3dhcm4oc2VsZiwgY2Fwc3lzKToKICAgICAgICBfcHJpbnRfd2Fybigid2F0Y2ggb3V0IikKICAgICAgICBvdXQgPSBjYXBzeXMucmVhZG91dGVycigpLm91dAogICAgICAgIGFzc2VydCAid2F0Y2ggb3V0IiBpbiBvdXQKCiAgICBkZWYgdGVzdF9wcmludF9pbmZvKHNlbGYsIGNhcHN5cyk6CiAgICAgICAgX3ByaW50X2luZm8oInNvbWUgaW5mbyIpCiAgICAgICAgb3V0ID0gY2Fwc3lzLnJlYWRvdXRlcnIoKS5vdXQKICAgICAgICBhc3NlcnQgInNvbWUgaW5mbyIgaW4gb3V0CgoKIyAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KIyBtYWluKCkgaW50ZWdyYXRpb24gdGVzdHMgKHdpdGggbW9ja2VkIG1vZHVsZSBjYWxscykKIyAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KCgpjbGFzcyBUZXN0TWFpbkhlYWx0aDoKICAgICIiIkludGVncmF0aW9uIHRlc3RzIGZvciBgbmlnaHRzaGlmdCBoZWFsdGhgLiIiIgoKICAgIGRlZiB0ZXN0X2hlYWx0aF9jYWxsc19nZW5lcmF0ZV9yZXBvcnQoc2VsZiwgdG1wX3BhdGgpOgogICAgICAgIG1vY2tfcmVwb3J0ID0gTWFnaWNNb2NrKCkKICAgICAgICBtb2NrX3JlcG9ydC50b19tYXJrZG93bi5yZXR1cm5fdmFsdWUgPSAiIyBIZWFsdGhcbiIKICAgICAgICBtb2NrX3JlcG9ydC5vdmVyYWxsX2hlYWx0aF9zY29yZSA9IDk1LjAKICAgICAgICBtb2NrX3JlcG9ydC50b19kaWN0LnJldHVybl92YWx1ZSA9IHsic2NvcmUiOiA5NX0KCiAgICAgICAgd2l0aCBwYXRjaCgic3JjLmNsaS5jbWRfaGVhbHRoIikgYXMgbW9ja19jbWQ6CiAgICAgICAgICAgIG1vY2tfY21kLnJldHVybl92YWx1ZSA9IDAKICAgICAgICAgICAgcmVzdWx0ID0gbWFpbihbImhlYWx0aCJdKQogICAgICAgICAgICBhc3NlcnQgbW9ja19jbWQuY2FsbGVkIG9yIHJlc3VsdCA9PSAwCgogICAgZGVmIHRlc3RfaGVhbHRoX2pzb25fb3V0cHV0KHNlbGYsIHRtcF9wYXRoLCBjYXBzeXMpOgogICAgICAgIG1vY2tfcmVwb3J0ID0gTWFnaWNNb2NrKCkKICAgICAgICBtb2NrX3JlcG9ydC50b19kaWN0LnJldHVybl92YWx1ZSA9IHsib3ZlcmFsbF9oZWFsdGhfc2NvcmUiOiA5MC4wLCAiZmlsZXMiOiBbXX0KICAgICAgICBtb2NrX3JlcG9ydC5vdmVyYWxsX2hlYWx0aF9zY29yZSA9IDkwLjAKCiAgICAgICAgd2l0aCBwYXRjaCgic3JjLmhlYWx0aC5nZW5lcmF0ZV9oZWFsdGhfcmVwb3J0IiwgcmV0dXJuX3ZhbHVlPW1vY2tfcmVwb3J0KToKICAgICAgICAgICAgcmVzdWx0ID0gbWFpbihbImhlYWx0aCIsICItLXJlcG8iLCBzdHIodG1wX3BhdGgpLCAiLS1qc29uIl0pCiAgICAgICAgY2FwdHVyZWQgPSBjYXBzeXMucmVhZG91dGVycigpCiAgICAgICAgYXNzZXJ0IHJlc3VsdCA9PSAwCiAgICAgICAganNvbl9zdGFydCA9IGNhcHR1cmVkLm91dC5maW5kKCJ7IikKICAgICAgICBhc3NlcnQganNvbl9zdGFydCAhPSAtMSwgIk5vIEpTT04gZm91bmQgaW4gb3V0cHV0IgogICAgICAgIGRhdGEgPSBqc29uLmxvYWRzKGNhcHR1cmVkLm91dFtqc29uX3N0YXJ0Ol0pCiAgICAgICAgYXNzZXJ0ICJvdmVyYWxsX2hlYWx0aF9zY29yZSIgaW4gZGF0YQoKCmNsYXNzIFRlc3RNYWluU3RhdHM6CiAgICAiIiJJbnRlZ3JhdGlvbiB0ZXN0cyBmb3IgYG5pZ2h0c2hpZnQgc3RhdHNgLiIiIgoKICAgIGRlZiB0ZXN0X3N0YXRzX3JlbmRlcnNfdGFibGUoc2VsZiwgdG1wX3BhdGgsIGNhcHN5cyk6CiAgICAgICAgbW9ja19zdGF0cyA9IE1hZ2ljTW9jaygpCiAgICAgICAgbW9ja19zdGF0cy5yZWFkbWVfdGFibGUucmV0dXJuX3ZhbHVlID0gInwgTWV0cmljIHwgQ291bnQgfFxufC0tLS0tLS0tfC0tLS0tLS18XG58IE5pZ2h0cyBhY3RpdmUgfCAzIHwiCiAgICAgICAgbW9ja19zdGF0cy5zZXNzaW9ucyA9IFtdCiAgICAgICAgbW9ja19zdGF0cy50b19kaWN0LnJldHVybl92YWx1ZSA9IHt9CgogICAgICAgIHdpdGggcGF0Y2goInNyYy5zdGF0cy5jb21wdXRlX3N0YXRzIiwgcmV0dXJuX3ZhbHVlPW1vY2tfc3RhdHMpOgogICAgICAgICAgICByZXN1bHQgPSBtYWluKFsic3RhdHMiLCAiLS1yZXBvIiwgc3RyKHRtcF9wYXRoKV0pCiAgICAgICAgYXNzZXJ0IHJlc3VsdCA9PSAwCiAgICAgICAgb3V0ID0gY2Fwc3lzLnJlYWRvdXRlcnIoKS5vdXQKICAgICAgICBhc3NlcnQgIk1ldHJpYyIgaW4gb3V0IG9yICJuaWdodHMiIGluIG91dC5sb3dlcigpCgogICAgZGVmIHRlc3Rfc3RhdHNfanNvbl9mbGFnKHNlbGYsIHRtcF9wYXRoLCBjYXBzeXMpOgogICAgICAgIG1vY2tfc3RhdHMgPSBNYWdpY01vY2soKQogICAgICAgIG1vY2tfc3RhdHMudG9fZGljdC5yZXR1cm5fdmFsdWUgPSB7Im5pZ2h0c19hY3RpdmUiOiAzLCAidG90YWxfcHJzIjogOX0KICAgICAgICBtb2NrX3N0YXRzLnNlc3Npb25zID0gW10KCiAgICAgICAgd2l0aCBwYXRjaCgic3JjLnN0YXRzLmNvbXB1dGVfc3RhdHMiLCByZXR1cm5fdmFsdWU9bW9ja19zdGF0cyk6CiAgICAgICAgICAgIHJlc3VsdCA9IG1haW4oWyJzdGF0cyIsICItLXJlcG8iLCBzdHIodG1wX3BhdGgpLCAiLS1qc29uIl0pCiAgICAgICAgYXNzZXJ0IHJlc3VsdCA9PSAwCiAgICAgICAgb3V0ID0gY2Fwc3lzLnJlYWRvdXRlcnIoKS5vdXQKICAgICAgICBqc29uX3N0YXJ0ID0gb3V0LmZpbmQoInsiKQogICAgICAgIGFzc2VydCBqc29uX3N0YXJ0ICE9IC0xLCAiTm8gSlNPTiBmb3VuZCBpbiBvdXRwdXQiCiAgICAgICAgZGF0YSA9IGpzb24ubG9hZHMob3V0W2pzb25fc3RhcnQ6XSkKICAgICAgICBhc3NlcnQgIm5pZ2h0c19hY3RpdmUiIGluIGRhdGEKCgpjbGFzcyBUZXN0TWFpbkNoYW5nZWxvZzoKICAgICIiIkludGVncmF0aW9uIHRlc3RzIGZvciBgbmlnaHRzaGlmdCBjaGFuZ2Vsb2dgLiIiIgoKICAgIGRlZiB0ZXN0X2NoYW5nZWxvZ19wcmludHNfbWFya2Rvd24oc2VsZiwgdG1wX3BhdGgsIGNhcHN5cyk6CiAgICAgICAgbW9ja19jbCA9IE1hZ2ljTW9jaygpCiAgICAgICAgbW9ja19jbC50b19tYXJrZG93bi5yZXR1cm5fdmFsdWUgPSAiIyBDaGFuZ2Vsb2dcbiIKICAgICAgICBtb2NrX2NsLnRvX2RpY3QucmV0dXJuX3ZhbHVlID0ge30KCiAgICAgICAgd2l0aCBwYXRjaCgic3JjLmNoYW5nZWxvZy5nZW5lcmF0ZV9jaGFuZ2Vsb2ciLCByZXR1cm5fdmFsdWU9bW9ja19jbCk6CiAgICAgICAgICAgIHJlc3VsdCA9IG1haW4oWyJjaGFuZ2Vsb2ciLCAiLS1yZXBvIiwgc3RyKHRtcF9wYXRoKV0pCiAgICAgICAgYXNzZXJ0IHJlc3VsdCA9PSAwCgogICAgZGVmIHRlc3RfY2hhbmdlbG9nX3dyaXRlX3NhdmVzX2ZpbGUoc2VsZiwgdG1wX3BhdGgpOgogICAgICAgIG1vY2tfY2wgPSBNYWdpY01vY2soKQogICAgICAgIG1vY2tfY2wudG9fbWFya2Rvd24ucmV0dXJuX3ZhbHVlID0gIiMgQ2hhbmdlbG9nXG4iCgogICAgICAgIHdpdGggcGF0Y2goInNyYy5jaGFuZ2Vsb2cuZ2VuZXJhdGVfY2hhbmdlbG9nIiwgcmV0dXJuX3ZhbHVlPW1vY2tfY2wpLCBcCiAgICAgICAgICAgICBwYXRjaCgic3JjLmNoYW5nZWxvZy5zYXZlX2NoYW5nZWxvZyIpIGFzIG1vY2tfc2F2ZToKICAgICAgICAgICAgcmVzdWx0ID0gbWFpbihbImNoYW5nZWxvZyIsICItLXJlcG8iLCBzdHIodG1wX3BhdGgpLCAiLS13cml0ZSJdKQogICAgICAgIGFzc2VydCByZXN1bHQgPT0gMAogICAgICAgIG1vY2tfc2F2ZS5hc3NlcnRfY2FsbGVkX29uY2UoKQoKCmNsYXNzIFRlc3RNYWluQ292ZXJhZ2U6CiAgICAiIiJJbnRlZ3JhdGlvbiB0ZXN0cyBmb3IgYG5pZ2h0c2hpZnQgY292ZXJhZ2VgLiIiIgoKICAgIGRlZiB0ZXN0X2NvdmVyYWdlX21pc3NpbmdfaGlzdG9yeV9yZXR1cm5zXzEoc2VsZiwgdG1wX3BhdGgpOgogICAgICAgIHJlc3VsdCA9IG1haW4oWyJjb3ZlcmFnZSIsICItLXJlcG8iLCBzdHIodG1wX3BhdGgpXSkKICAgICAgICBhc3NlcnQgcmVzdWx0ID09IDEKCiAgICBkZWYgdGVzdF9jb3ZlcmFnZV9yZWFkc19oaXN0b3J5KHNlbGYsIHRtcF9wYXRoLCBjYXBzeXMpOgogICAgICAgIGhpc3RvcnlfZGlyID0gdG1wX3BhdGggLyAiZG9jcyIKICAgICAgICBoaXN0b3J5X2Rpci5ta2RpcigpCiAgICAgICAgaGlzdG9yeV9maWxlID0gaGlzdG9yeV9kaXIgLyAiY292ZXJhZ2VfaGlzdG9yeS5qc29uIgogICAgICAgIGhpc3RvcnlfZmlsZS53cml0ZV90ZXh0KAogICAgICAgICAgICAneyJzbmFwc2hvdHMiOiBbeyJzZXNzaW9uIjogMSwgInRpbWVzdGFtcCI6ICIyMDI2LTAyLTI3IiwgInRvdGFsX2NvdmVyYWdlIjogODUuMCwgJwogICAgICAgICAgICAnImZpbGVzIjoge30sICJsaW5lc19jb3ZlcmVkIjogMTAwLCAibGluZXNfdG90YWwiOiAxMTgsICJtaXNzaW5nX2xpbmVzIjogMTh9XX0nLAogICAgICAgICAgICBlbmNvZGluZz0idXRmLTgiLAogICAgICAgICkKCiAgICAgICAgZnJvbSBzcmMuY292ZXJhZ2VfdHJhY2tlciBpbXBvcnQgQ292ZXJhZ2VIaXN0b3J5CiAgICAgICAgd2l0aCBwYXRjaCgic3JjLmNvdmVyYWdlX3RyYWNrZXIuQ292ZXJhZ2VIaXN0b3J5LmZyb21fZGljdCIpIGFzIG1vY2tfZnJvbToKICAgICAgICAgICAgbW9ja19oaXN0ID0gTWFnaWNNb2NrKCkKICAgICAgICAgICAgbW9ja19oaXN0LnRvX21hcmtkb3duLnJldHVybl92YWx1ZSA9ICJ8IFNlc3Npb24gfCBDb3ZlcmFnZSB8IgogICAgICAgICAgICBtb2NrX2hpc3QubGF0ZXN0LnJldHVybl92YWx1ZSA9IE5vbmUKICAgICAgICAgICAgbW9ja19mcm9tLnJldHVybl92YWx1ZSA9IG1vY2tfaGlzdAogICAgICAgICAgICByZXN1bHQgPSBtYWluKFsiY292ZXJhZ2UiLCAiLS1yZXBvIiwgc3RyKHRtcF9wYXRoKV0pCiAgICAgICAgYXNzZXJ0IHJlc3VsdCA9PSAwCgoKY2xhc3MgVGVzdE1haW5BcmNoOgogICAgIiIiSW50ZWdyYXRpb24gdGVzdHMgZm9yIGBuaWdodHNoaWZ0IGFyY2hgLiIiIgoKICAgIGRlZiB0ZXN0X2FyY2hfcHJpbnRzX2RvYyhzZWxmLCB0bXBfcGF0aCwgY2Fwc3lzKToKICAgICAgICB3aXRoIHBhdGNoKCJzcmMuYXJjaF9nZW5lcmF0b3IuZ2VuZXJhdGVfYXJjaGl0ZWN0dXJlX2RvYyIsIHJldHVybl92YWx1ZT0iIyBBcmNoaXRlY3R1cmVcbiIpOgogICAgICAgICAgICByZXN1bHQgPSBtYWluKFsiYXJjaCIsICItLXJlcG8iLCBzdHIodG1wX3BhdGgpXSkKICAgICAgICBhc3NlcnQgcmVzdWx0ID09IDAKICAgICAgICBvdXQgPSBjYXBzeXMucmVhZG91dGVycigpLm91dAogICAgICAgIGFzc2VydCAiQXJjaGl0ZWN0dXJlIiBpbiBvdXQKCiAgICBkZWYgdGVzdF9hcmNoX3dyaXRlX3NhdmVzX2ZpbGUoc2VsZiwgdG1wX3BhdGgpOgogICAgICAgICh0bXBfcGF0aCAvICJkb2NzIikubWtkaXIoKQogICAgICAgIHdpdGggcGF0Y2goInNyYy5hcmNoX2dlbmVyYXRvci5nZW5lcmF0ZV9hcmNoaXRlY3R1cmVfZG9jIiwgcmV0dXJuX3ZhbHVlPSIjIEFyY2hpdGVjdHVyZVxuIiksIFwKICAgICAgICAgICAgIHBhdGNoKCJzcmMuYXJjaF9nZW5lcmF0b3Iuc2F2ZV9hcmNoaXRlY3R1cmVfZG9jIikgYXMgbW9ja19zYXZlOgogICAgICAgICAgICByZXN1bHQgPSBtYWluKFsiYXJjaCIsICItLXJlcG8iLCBzdHIodG1wX3BhdGgpLCAiLS13cml0ZSJdKQogICAgICAgIGFzc2VydCByZXN1bHQgPT0gMAogICAgICAgIG1vY2tfc2F2ZS5hc3NlcnRfY2FsbGVkX29uY2UoKQoKCmNsYXNzIFRlc3RNYWluUmVmYWN0b3I6CiAgICAiIiJJbnRlZ3JhdGlvbiB0ZXN0cyBmb3IgYG5pZ2h0c2hpZnQgcmVmYWN0b3JgLiIiIgoKICAgIGRlZiB0ZXN0X3JlZmFjdG9yX3ByaW50c19yZXBvcnQoc2VsZiwgdG1wX3BhdGgsIGNhcHN5cyk6CiAgICAgICAgbW9ja19lbmdpbmUgPSBNYWdpY01vY2soKQogICAgICAgIG1vY2tfcmVwb3J0ID0gTWFnaWNNb2NrKCkKICAgICAgICBtb2NrX3JlcG9ydC50b19tYXJrZG93bi5yZXR1cm5fdmFsdWUgPSAiIyBSZWZhY3RvciBSZXBvcnRcbiIKICAgICAgICBtb2NrX3JlcG9ydC50b19kaWN0LnJldHVybl92YWx1ZSA9IHt9CiAgICAgICAgbW9ja19lbmdpbmUuYW5hbHl6ZS5yZXR1cm5fdmFsdWUgPSBtb2NrX3JlcG9ydAoKICAgICAgICB3aXRoIHBhdGNoKCJzcmMucmVmYWN0b3IuUmVmYWN0b3JFbmdpbmUiLCByZXR1cm5fdmFsdWU9bW9ja19lbmdpbmUpOgogICAgICAgICAgICByZXN1bHQgPSBtYWluKFsicmVmYWN0b3IiLCAiLS1yZXBvIiwgc3RyKHRtcF9wYXRoKV0pCiAgICAgICAgYXNzZXJ0IHJlc3VsdCA9PSAwCgogICAgZGVmIHRlc3RfcmVmYWN0b3JfYXBwbHlfY2FsbHNfZW5naW5lKHNlbGYsIHRtcF9wYXRoKToKICAgICAgICBtb2NrX2VuZ2luZSA9IE1hZ2ljTW9jaygpCiAgICAgICAgbW9ja19yZXBvcnQgPSBNYWdpY01vY2soKQogICAgICAgIG1vY2tfZW5naW5lLmFuYWx5emUucmV0dXJuX3ZhbHVlID0gbW9ja19yZXBvcnQKICAgICAgICBtb2NrX2VuZ2luZS5hcHBseV9zYWZlX2ZpeGVzLnJldHVybl92YWx1ZSA9IDMKCiAgICAgICAgd2l0aCBwYXRjaCgic3JjLnJlZmFjdG9yLlJlZmFjdG9yRW5naW5lIiwgcmV0dXJuX3ZhbHVlPW1vY2tfZW5naW5lKToKICAgICAgICAgICAgcmVzdWx0ID0gbWFpbihbInJlZmFjdG9yIiwgIi0tcmVwbyIsIHN0cih0bXBfcGF0aCksICItLWFwcGx5Il0pCiAgICAgICAgYXNzZXJ0IHJlc3VsdCA9PSAwCiAgICAgICAgbW9ja19lbmdpbmUuYXBwbHlfc2FmZV9maXhlcy5hc3NlcnRfY2FsbGVkX29uY2Vfd2l0aChtb2NrX3JlcG9ydCkKCgpjbGFzcyBUZXN0TWFpblJ1bjoKICAgICIiIkludGVncmF0aW9uIHRlc3RzIGZvciBgbmlnaHRzaGlmdCBydW5gIChmdWxsIHBpcGVsaW5lKS4iIiIKCiAgICBkZWYgdGVzdF9ydW5fc3VjY2VlZHNfd2l0aF9tb2NrcyhzZWxmLCB0bXBfcGF0aCk6CiAgICAgICAgbW9ja19yZXBvcnQgPSBNYWdpY01vY2soKQogICAgICAgIG1vY2tfcmVwb3J0Lm92ZXJhbGxfaGVhbHRoX3Njb3JlID0gODguMAogICAgICAgIG1vY2tfcmVwb3J0LnRvX21hcmtkb3duLnJldHVybl92YWx1ZSA9ICIiCiAgICAgICAgbW9ja19zdGF0cyA9IE1hZ2ljTW9jaygpCiAgICAgICAgbW9ja19zdGF0cy5uaWdodHNfYWN0aXZlID0gNAogICAgICAgIG1vY2tfc3RhdHMudG90YWxfcHJzID0gMTMKICAgICAgICBtb2NrX2NsID0gTWFnaWNNb2NrKCkKICAgICAgICBtb2NrX2NsLnNlY3Rpb25zID0gW10KICAgICAgICBtb2NrX2NsLnRvdGFsX2NvbW1pdHMgPSBsYW1iZGE6IDAKICAgICAgICB3aXRoIHBhdGNoKCJzcmMuaGVhbHRoLmdlbmVyYXRlX2hlYWx0aF9yZXBvcnQiLCByZXR1cm5fdmFsdWU9bW9ja19yZXBvcnQpLCBcCiAgICAgICAgICAgICBwYXRjaCgic3JjLmhlYWx0aC5zYXZlX2hlYWx0aF9yZXBvcnQiKSwgXAogICAgICAgICAgICAgcGF0Y2goInNyYy5zdGF0cy5jb21wdXRlX3N0YXRzIiwgcmV0dXJuX3ZhbHVlPW1vY2tfc3RhdHMpLCBcCiAgICAgICAgICAgICBwYXRjaCgic3JjLnN0YXRzLnVwZGF0ZV9yZWFkbWVfc3RhdHMiLCByZXR1cm5fdmFsdWU9IiMgUkVBRE1FIiksIFwKICAgICAgICAgICAgIHBhdGNoKCJzcmMuY2hhbmdlbG9nLmdlbmVyYXRlX2NoYW5nZWxvZyIsIHJldHVybl92YWx1ZT1tb2NrX2NsKSwgXAogICAgICAgICAgICAgcGF0Y2goInNyYy5jaGFuZ2Vsb2cuc2F2ZV9jaGFuZ2Vsb2ciKSwgXAogICAgICAgICAgICAgcGF0Y2goInNyYy5hcmNoX2dlbmVyYXRvci5nZW5lcmF0ZV9hcmNoaXRlY3R1cmVfZG9jIiwgcmV0dXJuX3ZhbHVlPSIjIGFyY2giKSwgXAogICAgICAgICAgICAgcGF0Y2goInNyYy5hcmNoX2dlbmVyYXRvci5zYXZlX2FyY2hpdGVjdHVyZV9kb2MiKSwgXAogICAgICAgICAgICAgcGF0Y2goInNyYy5yZWZhY3Rvci5SZWZhY3RvckVuZ2luZSIpOgogICAgICAgICAgICAodG1wX3BhdGggLyAiUkVBRE1FLm1kIikud3JpdGVfdGV4dCgiIyB0ZXN0IiwgZW5jb2Rpbmc9InV0Zi04IikKICAgICAgICAgICAgcmVzdWx0ID0gbWFpbihbInJ1biIsICItLXJlcG8iLCBzdHIodG1wX3BhdGgpLCAiLS1zZXNzaW9uIiwgIjQiXSkKICAgICAgICBhc3NlcnQgcmVzdWx0ID09IDAKCiAgICBkZWYgdGVzdF9ydW5faGFuZGxlc19wYXJ0aWFsX2ZhaWx1cmVzKHNlbGYsIHRtcF9wYXRoKToKICAgICAgICB3aXRoIHBhdGNoKCJzcmMuaGVhbHRoLmdlbmVyYXRlX2hlYWx0aF9yZXBvcnQiLCBzaWRlX2VmZmVjdD1SdW50aW1lRXJyb3IoImhlYWx0aCBicm9rZW4iKSksIFwKICAgICAgICAgICAgIHBhdGNoKCJzcmMuc3RhdHMuY29tcHV0ZV9zdGF0cyIsIHNpZGVfZWZmZWN0PVJ1bnRpbWVFcnJvcigic3RhdHMgYnJva2VuIikpLCBcCiAgICAgICAgICAgICBwYXRjaCgic3JjLmNoYW5nZWxvZy5nZW5lcmF0ZV9jaGFuZ2Vsb2ciLCBzaWRlX2VmZmVjdD1SdW50aW1lRXJyb3IoImNoYW5nZWxvZyBicm9rZW4iKSk6CiAgICAgICAgICAgIHdpdGggcHl0ZXN0LnJhaXNlcyhSdW50aW1lRXJyb3IsIG1hdGNoPSJoZWFsdGggYnJva2VuIik6CiAgICAgICAgICAgICAgICBtYWluKFsicnVuIiwgIi0tcmVwbyIsIHN0cih0bXBfcGF0aCldKQoKCiMgLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCiMgRWRnZSBjYXNlcwojIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLQoKCmNsYXNzIFRlc3RFZGdlQ2FzZXM6CiAgICBkZWYgdGVzdF9rZXlib2FyZF9pbnRlcnJ1cHRfcHJvcGFnYXRlcyhzZWxmKToKICAgICAgICB3aXRoIHBhdGNoKCJzcmMuY2xpLmNtZF9oZWFsdGgiLCBzaWRlX2VmZmVjdD1LZXlib2FyZEludGVycnVwdCk6CiAgICAgICAgICAgIHdpdGggcHl0ZXN0LnJhaXNlcyhLZXlib2FyZEludGVycnVwdCk6CiAgICAgICAgICAgICAgICBtYWluKFsiaGVhbHRoIl0pCgogICAgZGVmIHRlc3RfdW5rbm93bl9leGNlcHRpb25fcHJvcGFnYXRlcyhzZWxmLCB0bXBfcGF0aCk6CiAgICAgICAgd2l0aCBwYXRjaCgic3JjLmNsaS5jbWRfaGVhbHRoIiwgc2lkZV9lZmZlY3Q9VmFsdWVFcnJvcigib29wcyIpKToKICAgICAgICAgICAgd2l0aCBweXRlc3QucmFpc2VzKFZhbHVlRXJyb3IpOgogICAgICAgICAgICAgICAgbWFpbihbImhlYWx0aCIsICItLXJlcG8iLCBzdHIodG1wX3BhdGgpXSkKCiAgICBkZWYgdGVzdF9yZXBvX3Jvb3RfZGV0ZWN0ZWQoc2VsZik6CiAgICAgICAgYXNzZXJ0IGlzaW5zdGFuY2UoUkVQT19ST09ULCBQYXRoKQoKCiMgLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCiMgTmV3IHN1YmNvbW1hbmRzOiB0aW1lbGluZSwgY291cGxpbmcsIGNvbXBsZXhpdHksIGV4cG9ydAojIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLQoKCmNsYXNzIFRlc3RUaW1lbGluZVN1YmNvbW1hbmQ6CiAgICAiIiJUZXN0cyBmb3IgbmlnaHRzaGlmdCB0aW1lbGluZS4iIiIKCiAgICBkZWYgdGVzdF90aW1lbGluZV9wYXJzZXMoc2VsZik6CiAgICAgICAgcGFyc2VyID0gYnVpbGRfcGFyc2VyKCkKICAgICAgICBhcmdzID0gcGFyc2VyLnBhcnNlX2FyZ3MoWyJ0aW1lbGluZSJdKQogICAgICAgIGFzc2VydCBhcmdzLmNvbW1hbmQgPT0gInRpbWVsaW5lIgoKICAgIGRlZiB0ZXN0X3RpbWVsaW5lX2pzb25fZmxhZyhzZWxmKToKICAgICAgICBwYXJzZXIgPSBidWlsZF9wYXJzZXIoKQogICAgICAgIGFyZ3MgPSBwYXJzZXIucGFyc2VfYXJncyhbInRpbWVsaW5lIiwgIi0tanNvbiJdKQogICAgICAgIGFzc2VydCBhcmdzLmpzb24gaXMgVHJ1ZQoKICAgIGRlZiB0ZXN0X3RpbWVsaW5lX3dyaXRlX2ZsYWcoc2VsZik6CiAgICAgICAgcGFyc2VyID0gYnVpbGRfcGFyc2VyKCkKICAgICAgICBhcmdzID0gcGFyc2VyLnBhcnNlX2FyZ3MoWyJ0aW1lbGluZSIsICItLXdyaXRlIl0pCiAgICAgICAgYXNzZXJ0IGFyZ3Mud3JpdGUgaXMgVHJ1ZQoKICAgIGRlZiB0ZXN0X3RpbWVsaW5lX3JlbmRlcnNfb3V0cHV0KHNlbGYsIHRtcF9wYXRoLCBjYXBzeXMpOgogICAgICAgICh0bXBfcGF0aCAvICJOSUdIVFNISUZUX0xPRy5tZCIpLndyaXRlX3RleHQoCiAgICAgICAgICAgICIjIE5pZ2h0c2hpZnQgTG9nXG5cbiMjIFNlc3Npb24gMSDigJQgRmVicnVhcnkgMjcsIDIwMjZcblxuIgogICAgICAgICAgICAiKipPcGVyYXRvcjoqKiBDb21wdXRlclxuXG4tIOKchSBTdGF0cyDihpIgUFIgIzEg4oCUIHNyYy9zdGF0cy5weVxuIiwKICAgICAgICAgICAgZW5jb2Rpbmc9InV0Zi04IiwKICAgICAgICApCiAgICAgICAgcmVzdWx0ID0gbWFpbihbInRpbWVsaW5lIiwgIi0tcmVwbyIsIHN0cih0bXBfcGF0aCldKQogICAgICAgIGFzc2VydCByZXN1bHQgPT0gMAogICAgICAgIGNhcHR1cmVkID0gY2Fwc3lzLnJlYWRvdXRlcnIoKQogICAgICAgIGFzc2VydCAiU2Vzc2lvbiIgaW4gY2FwdHVyZWQub3V0CgogICAgZGVmIHRlc3RfdGltZWxpbmVfanNvbl9vdXRwdXQoc2VsZiwgdG1wX3BhdGgsIGNhcHN5cyk6CiAgICAgICAgKHRtcF9wYXRoIC8gIk5JR0hUU0hJRlRfTE9HLm1kIikud3JpdGVfdGV4dCgKICAgICAgICAgICAgIiMgTmlnaHRzaGlmdCBMb2dcblxuIyMgU2Vzc2lvbiAxIOKAlCBGZWIgMjcsIDIwMjZcblxuIgogICAgICAgICAgICAiLSDinIUgU29tZXRoaW5nXG4iLAogICAgICAgICAgICBlbmNvZGluZz0idXRmLTgiLAogICAgICAgICkKICAgICAgICByZXN1bHQgPSBtYWluKFsidGltZWxpbmUiLCAiLS1yZXBvIiwgc3RyKHRtcF9wYXRoKSwgIi0tanNvbiJdKQogICAgICAgIGFzc2VydCByZXN1bHQgPT0gMAogICAgICAgIGNhcHR1cmVkID0gY2Fwc3lzLnJlYWRvdXRlcnIoKQogICAgICAgIGZvciBsaW5lIGluIGNhcHR1cmVkLm91dC5zcGxpdCgiXG4iKToKICAgICAgICAgICAgaWYgbGluZS5zdHJpcCgpLnN0YXJ0c3dpdGgoInsiKToKICAgICAgICAgICAgICAgIGRhdGEgPSBqc29uLmxvYWRzKGNhcHR1cmVkLm91dFtjYXB0dXJlZC5vdXQuaW5kZXgoInsiKTpdKQogICAgICAgICAgICAgICAgYXNzZXJ0ICJzZXNzaW9ucyIgaW4gZGF0YQogICAgICAgICAgICAgICAgcmV0dXJuCiAgICAgICAgaW1wb3J0IHJlCiAgICAgICAgbSA9IHJlLnNlYXJjaChyJyhcey4qXH0pJywgY2FwdHVyZWQub3V0LCByZS5ET1RBTEwpCiAgICAgICAgYXNzZXJ0IG0gaXMgbm90IE5vbmUsIGYiTm8gSlNPTiBmb3VuZCBpbiBvdXRwdXQ6IHtjYXB0dXJlZC5vdXQhcn0iCiAgICAgICAgZGF0YSA9IGpzb24ubG9hZHMobS5ncm91cCgxKSkKICAgICAgICBhc3NlcnQgInNlc3Npb25zIiBpbiBkYXRhCgogICAgZGVmIHRlc3RfdGltZWxpbmVfd3JpdGVfY3JlYXRlc19maWxlKHNlbGYsIHRtcF9wYXRoKToKICAgICAgICAodG1wX3BhdGggLyAiTklHSFRTSElGVF9MT0cubWQiKS53cml0ZV90ZXh0KAogICAgICAgICAgICAiIyBOaWdodHNoaWZ0IExvZ1xuXG4jIyBTZXNzaW9uIDEg4oCUIEZlYiAyNywgMjAyNlxuXG4iCiAgICAgICAgICAgICItIOKchSBTb21ldGhpbmdcbiIsCiAgICAgICAgICAgIGVuY29kaW5nPSJ1dGYtOCIsCiAgICAgICAgKQogICAgICAgIHJlc3VsdCA9IG1haW4oWyJ0aW1lbGluZSIsICItLXJlcG8iLCBzdHIodG1wX3BhdGgpLCAiLS13cml0ZSJdKQogICAgICAgIGFzc2VydCByZXN1bHQgPT0gMAogICAgICAgIGFzc2VydCAodG1wX3BhdGggLyAiZG9jcyIgLyAidGltZWxpbmUubWQiKS5leGlzdHMoKQoKCmNsYXNzIFRlc3RDb3VwbGluZ1N1YmNvbW1hbmQ6CiAgICAiIiJUZXN0cyBmb3IgbmlnaHRzaGlmdCBjb3VwbGluZy4iIiIKCiAgICBkZWYgdGVzdF9jb3VwbGluZ19wYXJzZXMoc2VsZik6CiAgICAgICAgcGFyc2VyID0gYnVpbGRfcGFyc2VyKCkKICAgICAgICBhcmdzID0gcGFyc2VyLnBhcnNlX2FyZ3MoWyJjb3VwbGluZyJdKQogICAgICAgIGFzc2VydCBhcmdzLmNvbW1hbmQgPT0gImNvdXBsaW5nIgoKICAgIGRlZiB0ZXN0X2NvdXBsaW5nX2pzb25fZmxhZyhzZWxmKToKICAgICAgICBwYXJzZXIgPSBidWlsZF9wYXJzZXIoKQogICAgICAgIGFyZ3MgPSBwYXJzZXIucGFyc2VfYXJncyhbImNvdXBsaW5nIiwgIi0tanNvbiJdKQogICAgICAgIGFzc2VydCBhcmdzLmpzb24gaXMgVHJ1ZQoKICAgIGRlZiB0ZXN0X2NvdXBsaW5nX3dyaXRlX2ZsYWcoc2VsZik6CiAgICAgICAgcGFyc2VyID0gYnVpbGRfcGFyc2VyKCkKICAgICAgICBhcmdzID0gcGFyc2VyLnBhcnNlX2FyZ3MoWyJjb3VwbGluZyIsICItLXdyaXRlIl0pCiAgICAgICAgYXNzZXJ0IGFyZ3Mud3JpdGUgaXMgVHJ1ZQoKICAgIGRlZiB0ZXN0X2NvdXBsaW5nX3JlbmRlcnNfb3V0cHV0KHNlbGYsIHRtcF9wYXRoLCBjYXBzeXMpOgogICAgICAgICIiIlNraXBwZWQg4oCUIHNyYy5jb3VwbGluZyBtb2R1bGUgbm90IHlldCBpbXBsZW1lbnRlZC4iIiIKICAgICAgICBweXRlc3Quc2tpcCgic3JjLmNvdXBsaW5nIG1vZHVsZSBub3QgeWV0IGltcGxlbWVudGVkIikKCiAgICBkZWYgdGVzdF9jb3VwbGluZ193cml0ZV9jcmVhdGVzX2ZpbGUoc2VsZiwgdG1wX3BhdGgpOgogICAgICAgICIiIlNraXBwZWQg4oCUIHNyYy5jb3VwbGluZyBtb2R1bGUgbm90IHlldCBpbXBsZW1lbnRlZC4iIiIKICAgICAgICBweXRlc3Quc2tpcCgic3JjLmNvdXBsaW5nIG1vZHVsZSBub3QgeWV0IGltcGxlbWVudGVkIikKCgpjbGFzcyBUZXN0Q29tcGxleGl0eVN1YmNvbW1hbmQ6CiAgICAiIiJUZXN0cyBmb3IgbmlnaHRzaGlmdCBjb21wbGV4aXR5LiIiIgoKICAgIGRlZiB0ZXN0X2NvbXBsZXhpdHlfcGFyc2VzKHNlbGYpOgogICAgICAgIHBhcnNlciA9IGJ1aWxkX3BhcnNlcigpCiAgICAgICAgYXJncyA9IHBhcnNlci5wYXJzZV9hcmdzKFsiY29tcGxleGl0eSJdKQogICAgICAgIGFzc2VydCBhcmdzLmNvbW1hbmQgPT0gImNvbXBsZXhpdHkiCgogICAgZGVmIHRlc3RfY29tcGxleGl0eV9ub19zZXNzaW9uX2ZsYWcoc2VsZik6CiAgICAgICAgcGFyc2VyID0gYnVpbGRfcGFyc2VyKCkKICAgICAgICBhcmdzID0gcGFyc2VyLnBhcnNlX2FyZ3MoWyJjb21wbGV4aXR5Il0pCiAgICAgICAgYXNzZXJ0IG5vdCBoYXNhdHRyKGFyZ3MsICJzZXNzaW9uIikKCiAgICBkZWYgdGVzdF9jb21wbGV4aXR5X2pzb25fZmxhZyhzZWxmKToKICAgICAgICBwYXJzZXIgPSBidWlsZF9wYXJzZXIoKQogICAgICAgIGFyZ3MgPSBwYXJzZXIucGFyc2VfYXJncyhbImNvbXBsZXhpdHkiLCAiLS1qc29uIl0pCiAgICAgICAgYXNzZXJ0IGFyZ3MuanNvbiBpcyBUcnVlCgogICAgZGVmIHRlc3RfY29tcGxleGl0eV9yZW5kZXJzX291dHB1dChzZWxmLCB0bXBfcGF0aCwgY2Fwc3lzKToKICAgICAgICAiIiJTa2lwcGVkIOKAlCBzcmMuY29tcGxleGl0eSBtb2R1bGUgbm90IHlldCBpbXBsZW1lbnRlZC4iIiIKICAgICAgICBweXRlc3Quc2tpcCgic3JjLmNvbXBsZXhpdHkgbW9kdWxlIG5vdCB5ZXQgaW1wbGVtZW50ZWQiKQoKICAgIGRlZiB0ZXN0X2NvbXBsZXhpdHlfd3JpdGVfY3JlYXRlc19maWxlKHNlbGYsIHRtcF9wYXRoKToKICAgICAgICAiIiJTa2lwcGVkIOKAlCBzcmMuY29tcGxleGl0eSBtb2R1bGUgbm90IHlldCBpbXBsZW1lbnRlZC4iIiIKICAgICAgICBweXRlc3Quc2tpcCgic3JjLmNvbXBsZXhpdHkgbW9kdWxlIG5vdCB5ZXQgaW1wbGVtZW50ZWQiKQoKICAgIGRlZiB0ZXN0X2NvbXBsZXhpdHlfaGlzdG9yeV91cGRhdGVkKHNlbGYsIHRtcF9wYXRoKToKICAgICAgICAiIiJTa2lwcGVkIOKAlCBzcmMuY29tcGxleGl0eSBtb2R1bGUgbm90IHlldCBpbXBsZW1lbnRlZC4iIiIKICAgICAgICBweXRlc3Quc2tpcCgic3JjLmNvbXBsZXhpdHkgbW9kdWxlIG5vdCB5ZXQgaW1wbGVtZW50ZWQiKQoKCmNsYXNzIFRlc3RFeHBvcnRTdWJjb21tYW5kOgogICAgIiIiVGVzdHMgZm9yIG5pZ2h0c2hpZnQgZXhwb3J0LiIiIgoKICAgIGRlZiB0ZXN0X2V4cG9ydF9wYXJzZXMoc2VsZik6CiAgICAgICAgcGFyc2VyID0gYnVpbGRfcGFyc2VyKCkKICAgICAgICBhcmdzID0gcGFyc2VyLnBhcnNlX2FyZ3MoWyJleHBvcnQiXSkKICAgICAgICBhc3NlcnQgYXJncy5jb21tYW5kID09ICJleHBvcnQiCiAgICAgICAgYXNzZXJ0IGFyZ3MuZm9ybWF0ID09ICJqc29uIiAgIyBkZWZhdWx0CgogICAgZGVmIHRlc3RfZXhwb3J0X2pzb25fZm9ybWF0KHNlbGYpOgogICAgICAgIHBhcnNlciA9IGJ1aWxkX3BhcnNlcigpCiAgICAgICAgYXJncyA9IHBhcnNlci5wYXJzZV9hcmdzKFsiZXhwb3J0IiwgIi0tZm9ybWF0IiwgImpzb24iXSkKICAgICAgICBhc3NlcnQgYXJncy5mb3JtYXQgPT0gImpzb24iCgogICAgZGVmIHRlc3RfZXhwb3J0X21hcmtkb3duX2Zvcm1hdChzZWxmKToKICAgICAgICBwYXJzZXIgPSBidWlsZF9wYXJzZXIoKQogICAgICAgIGFyZ3MgPSBwYXJzZXIucGFyc2VfYXJncyhbImV4cG9ydCIsICItLWZvcm1hdCIsICJtYXJrZG93biJdKQogICAgICAgIGFzc2VydCBhcmdzLmZvcm1hdCA9PSAibWFya2Rvd24iCgogICAgZGVmIHRlc3RfZXhwb3J0X2h0bWxfZm9ybWF0KHNlbGYpOgogICAgICAgIHBhcnNlciA9IGJ1aWxkX3BhcnNlcigpCiAgICAgICAgYXJncyA9IHBhcnNlci5wYXJzZV9hcmdzKFsiZXhwb3J0IiwgIi0tZm9ybWF0IiwgImh0bWwiXSkKICAgICAgICBhc3NlcnQgYXJncy5mb3JtYXQgPT0gImh0bWwiCgogICAgZGVmIHRlc3RfZXhwb3J0X2ludmFsaWRfZm9ybWF0X3JhaXNlcyhzZWxmKToKICAgICAgICBwYXJzZXIgPSBidWlsZF9wYXJzZXIoKQogICAgICAgIHdpdGggcHl0ZXN0LnJhaXNlcyhTeXN0ZW1FeGl0KToKICAgICAgICAgICAgcGFyc2VyLnBhcnNlX2FyZ3MoWyJleHBvcnQiLCAiLS1mb3JtYXQiLCAiY3N2Il0pCg==
+"""Tests for src/cli.py — the unified Nightshift CLI entry point."""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+# Ensure src/ is importable
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from src.cli import build_parser, main, _print_header, _print_ok, _print_warn, _print_info, REPO_ROOT
+
+
+# ---------------------------------------------------------------------------
+# Parser tests
+# ---------------------------------------------------------------------------
+
+
+class TestBuildParser:
+    """Tests for the argument parser."""
+
+    def test_parser_returns_parser(self):
+        parser = build_parser()
+        assert parser is not None
+
+    def test_parser_requires_command(self):
+        parser = build_parser()
+        with pytest.raises(SystemExit):
+            parser.parse_args([])
+
+    def test_health_subcommand_parses(self):
+        parser = build_parser()
+        args = parser.parse_args(["health"])
+        assert args.command == "health"
+        assert args.json is False
+
+    def test_health_json_flag(self):
+        parser = build_parser()
+        args = parser.parse_args(["health", "--json"])
+        assert args.json is True
+
+    def test_stats_subcommand_parses(self):
+        parser = build_parser()
+        args = parser.parse_args(["stats"])
+        assert args.command == "stats"
+
+    def test_diff_default_session(self):
+        parser = build_parser()
+        args = parser.parse_args(["diff"])
+        assert args.session is None
+
+    def test_diff_custom_session(self):
+        parser = build_parser()
+        args = parser.parse_args(["diff", "--session", "2"])
+        assert args.session == 2
+
+    def test_changelog_write_flag(self):
+        parser = build_parser()
+        args = parser.parse_args(["changelog", "--write"])
+        assert args.write is True
+
+    def test_coverage_subcommand(self):
+        parser = build_parser()
+        args = parser.parse_args(["coverage"])
+        assert args.command == "coverage"
+
+    def test_score_subcommand(self):
+        parser = build_parser()
+        args = parser.parse_args(["score"])
+        assert args.command == "score"
+
+    def test_arch_subcommand(self):
+        parser = build_parser()
+        args = parser.parse_args(["arch"])
+        assert args.command == "arch"
+        assert args.write is False
+
+    def test_arch_write_flag(self):
+        parser = build_parser()
+        args = parser.parse_args(["arch", "--write"])
+        assert args.write is True
+
+    def test_refactor_subcommand(self):
+        parser = build_parser()
+        args = parser.parse_args(["refactor"])
+        assert args.command == "refactor"
+        assert args.apply is False
+
+    def test_refactor_apply_flag(self):
+        parser = build_parser()
+        args = parser.parse_args(["refactor", "--apply"])
+        assert args.apply is True
+
+    def test_run_subcommand_default_session(self):
+        parser = build_parser()
+        args = parser.parse_args(["run"])
+        assert args.session == 1
+
+    def test_run_custom_session(self):
+        parser = build_parser()
+        args = parser.parse_args(["run", "--session", "3"])
+        assert args.session == 3
+
+    def test_repo_flag_per_subcommand(self):
+        parser = build_parser()
+        args = parser.parse_args(["health", "--repo", "/tmp/myrepo"])
+        assert args.repo == "/tmp/myrepo"
+
+    def test_all_subcommands_have_func(self):
+        """Every subcommand should bind a func callable."""
+        parser = build_parser()
+        for cmd in ["health", "stats", "diff", "changelog", "coverage", "score", "arch", "refactor", "run"]:
+            args = parser.parse_args([cmd])
+            assert callable(args.func), f"{cmd} missing func binding"
+
+    def test_dashboard_subcommand_parses(self):
+        parser = build_parser()
+        args = parser.parse_args(["dashboard"])
+        assert args.command == "dashboard"
+
+    def test_dashboard_custom_port(self):
+        parser = build_parser()
+        args = parser.parse_args(["dashboard", "--port", "9000"])
+        assert args.port == 9000
+
+    def test_dashboard_default_port(self):
+        parser = build_parser()
+        args = parser.parse_args(["dashboard"])
+        assert args.port == 8710
+
+
+# ---------------------------------------------------------------------------
+# Helper function tests
+# ---------------------------------------------------------------------------
+
+
+class TestHelperFunctions:
+    """Tests for internal print helpers."""
+
+    def test_print_header_does_not_raise(self, capsys):
+        _print_header("Test Title")
+        out = capsys.readouterr().out
+        assert "Test Title" in out
+        assert "Nightshift" in out
+
+    def test_print_ok(self, capsys):
+        _print_ok("all good")
+        out = capsys.readouterr().out
+        assert "all good" in out
+
+    def test_print_warn(self, capsys):
+        _print_warn("watch out")
+        out = capsys.readouterr().out
+        assert "watch out" in out
+
+    def test_print_info(self, capsys):
+        _print_info("some info")
+        out = capsys.readouterr().out
+        assert "some info" in out
+
+
+# ---------------------------------------------------------------------------
+# main() integration tests (with mocked module calls)
+# ---------------------------------------------------------------------------
+
+
+class TestMainHealth:
+    """Integration tests for `nightshift health`."""
+
+    def test_health_calls_generate_report(self, tmp_path):
+        mock_report = MagicMock()
+        mock_report.to_markdown.return_value = "# Health\n"
+        mock_report.overall_health_score = 95.0
+        mock_report.to_dict.return_value = {"score": 95}
+
+        with patch("src.cli.cmd_health") as mock_cmd:
+            mock_cmd.return_value = 0
+            result = main(["health"])
+            assert mock_cmd.called or result == 0
+
+    def test_health_json_output(self, tmp_path, capsys):
+        mock_report = MagicMock()
+        mock_report.to_dict.return_value = {"overall_health_score": 90.0, "files": []}
+        mock_report.overall_health_score = 90.0
+
+        with patch("src.health.generate_health_report", return_value=mock_report):
+            result = main(["health", "--repo", str(tmp_path), "--json"])
+        captured = capsys.readouterr()
+        assert result == 0
+        json_start = captured.out.find("{")
+        assert json_start != -1, "No JSON found in output"
+        data = json.loads(captured.out[json_start:])
+        assert "overall_health_score" in data
+
+
+class TestMainStats:
+    """Integration tests for `nightshift stats`."""
+
+    def test_stats_renders_table(self, tmp_path, capsys):
+        mock_stats = MagicMock()
+        mock_stats.readme_table.return_value = "| Metric | Count |\n|--------|-------|\n| Nights active | 3 |"
+        mock_stats.sessions = []
+        mock_stats.to_dict.return_value = {}
+
+        with patch("src.stats.compute_stats", return_value=mock_stats):
+            result = main(["stats", "--repo", str(tmp_path)])
+        assert result == 0
+        out = capsys.readouterr().out
+        assert "Metric" in out or "nights" in out.lower()
+
+    def test_stats_json_flag(self, tmp_path, capsys):
+        mock_stats = MagicMock()
+        mock_stats.to_dict.return_value = {"nights_active": 3, "total_prs": 9}
+        mock_stats.sessions = []
+
+        with patch("src.stats.compute_stats", return_value=mock_stats):
+            result = main(["stats", "--repo", str(tmp_path), "--json"])
+        assert result == 0
+        out = capsys.readouterr().out
+        json_start = out.find("{")
+        assert json_start != -1, "No JSON found in output"
+        data = json.loads(out[json_start:])
+        assert "nights_active" in data
+
+
+class TestMainChangelog:
+    """Integration tests for `nightshift changelog`."""
+
+    def test_changelog_prints_markdown(self, tmp_path, capsys):
+        mock_cl = MagicMock()
+        mock_cl.to_markdown.return_value = "# Changelog\n"
+        mock_cl.to_dict.return_value = {}
+
+        with patch("src.changelog.generate_changelog", return_value=mock_cl):
+            result = main(["changelog", "--repo", str(tmp_path)])
+        assert result == 0
+
+    def test_changelog_write_saves_file(self, tmp_path):
+        mock_cl = MagicMock()
+        mock_cl.to_markdown.return_value = "# Changelog\n"
+
+        with patch("src.changelog.generate_changelog", return_value=mock_cl), \
+             patch("src.changelog.save_changelog") as mock_save:
+            result = main(["changelog", "--repo", str(tmp_path), "--write"])
+        assert result == 0
+        mock_save.assert_called_once()
+
+
+class TestMainCoverage:
+    """Integration tests for `nightshift coverage`."""
+
+    def test_coverage_missing_history_returns_1(self, tmp_path):
+        result = main(["coverage", "--repo", str(tmp_path)])
+        assert result == 1
+
+    def test_coverage_reads_history(self, tmp_path, capsys):
+        history_dir = tmp_path / "docs"
+        history_dir.mkdir()
+        history_file = history_dir / "coverage_history.json"
+        history_file.write_text(
+            '{"snapshots": [{"session": 1, "timestamp": "2026-02-27", "total_coverage": 85.0, '
+            '"files": {}, "lines_covered": 100, "lines_total": 118, "missing_lines": 18}]}',
+            encoding="utf-8",
+        )
+
+        from src.coverage_tracker import CoverageHistory
+        with patch("src.coverage_tracker.CoverageHistory.from_dict") as mock_from:
+            mock_hist = MagicMock()
+            mock_hist.to_markdown.return_value = "| Session | Coverage |"
+            mock_hist.latest.return_value = None
+            mock_from.return_value = mock_hist
+            result = main(["coverage", "--repo", str(tmp_path)])
+        assert result == 0
+
+
+class TestMainArch:
+    """Integration tests for `nightshift arch`."""
+
+    def test_arch_prints_doc(self, tmp_path, capsys):
+        with patch("src.arch_generator.generate_architecture_doc", return_value="# Architecture\n"):
+            result = main(["arch", "--repo", str(tmp_path)])
+        assert result == 0
+        out = capsys.readouterr().out
+        assert "Architecture" in out
+
+    def test_arch_write_saves_file(self, tmp_path):
+        (tmp_path / "docs").mkdir()
+        with patch("src.arch_generator.generate_architecture_doc", return_value="# Architecture\n"), \
+             patch("src.arch_generator.save_architecture_doc") as mock_save:
+            result = main(["arch", "--repo", str(tmp_path), "--write"])
+        assert result == 0
+        mock_save.assert_called_once()
+
+
+class TestMainRefactor:
+    """Integration tests for `nightshift refactor`."""
+
+    def test_refactor_prints_report(self, tmp_path, capsys):
+        mock_engine = MagicMock()
+        mock_report = MagicMock()
+        mock_report.to_markdown.return_value = "# Refactor Report\n"
+        mock_report.to_dict.return_value = {}
+        mock_engine.analyze.return_value = mock_report
+
+        with patch("src.refactor.RefactorEngine", return_value=mock_engine):
+            result = main(["refactor", "--repo", str(tmp_path)])
+        assert result == 0
+
+    def test_refactor_apply_calls_engine(self, tmp_path):
+        mock_engine = MagicMock()
+        mock_report = MagicMock()
+        mock_engine.analyze.return_value = mock_report
+        mock_engine.apply_safe_fixes.return_value = 3
+
+        with patch("src.refactor.RefactorEngine", return_value=mock_engine):
+            result = main(["refactor", "--repo", str(tmp_path), "--apply"])
+        assert result == 0
+        mock_engine.apply_safe_fixes.assert_called_once_with(mock_report)
+
+
+class TestMainRun:
+    """Integration tests for `nightshift run` (full pipeline)."""
+
+    def test_run_succeeds_with_mocks(self, tmp_path):
+        mock_report = MagicMock()
+        mock_report.overall_health_score = 88.0
+        mock_report.to_markdown.return_value = ""
+        mock_stats = MagicMock()
+        mock_stats.nights_active = 4
+        mock_stats.total_prs = 13
+        mock_cl = MagicMock()
+        mock_cl.sections = []
+        mock_cl.total_commits = lambda: 0
+        with patch("src.health.generate_health_report", return_value=mock_report), \
+             patch("src.health.save_health_report"), \
+             patch("src.stats.compute_stats", return_value=mock_stats), \
+             patch("src.stats.update_readme_stats", return_value="# README"), \
+             patch("src.changelog.generate_changelog", return_value=mock_cl), \
+             patch("src.changelog.save_changelog"), \
+             patch("src.arch_generator.generate_architecture_doc", return_value="# arch"), \
+             patch("src.arch_generator.save_architecture_doc"), \
+             patch("src.refactor.RefactorEngine"):
+            (tmp_path / "README.md").write_text("# test", encoding="utf-8")
+            result = main(["run", "--repo", str(tmp_path), "--session", "4"])
+        assert result == 0
+
+    def test_run_handles_partial_failures(self, tmp_path):
+        with patch("src.health.generate_health_report", side_effect=RuntimeError("health broken")), \
+             patch("src.stats.compute_stats", side_effect=RuntimeError("stats broken")), \
+             patch("src.changelog.generate_changelog", side_effect=RuntimeError("changelog broken")):
+            with pytest.raises(RuntimeError, match="health broken"):
+                main(["run", "--repo", str(tmp_path)])
+
+
+# ---------------------------------------------------------------------------
+# Edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestEdgeCases:
+    def test_keyboard_interrupt_propagates(self):
+        with patch("src.cli.cmd_health", side_effect=KeyboardInterrupt):
+            with pytest.raises(KeyboardInterrupt):
+                main(["health"])
+
+    def test_unknown_exception_propagates(self, tmp_path):
+        with patch("src.cli.cmd_health", side_effect=ValueError("oops")):
+            with pytest.raises(ValueError):
+                main(["health", "--repo", str(tmp_path)])
+
+    def test_repo_root_detected(self):
+        assert isinstance(REPO_ROOT, Path)
+
+
+# ---------------------------------------------------------------------------
+# New subcommands: timeline, coupling, complexity, export
+# ---------------------------------------------------------------------------
+
+
+class TestTimelineSubcommand:
+    """Tests for nightshift timeline."""
+
+    def test_timeline_parses(self):
+        parser = build_parser()
+        args = parser.parse_args(["timeline"])
+        assert args.command == "timeline"
+
+    def test_timeline_json_flag(self):
+        parser = build_parser()
+        args = parser.parse_args(["timeline", "--json"])
+        assert args.json is True
+
+    def test_timeline_write_flag(self):
+        parser = build_parser()
+        args = parser.parse_args(["timeline", "--write"])
+        assert args.write is True
+
+    def test_timeline_renders_output(self, tmp_path, capsys):
+        (tmp_path / "NIGHTSHIFT_LOG.md").write_text(
+            "# Nightshift Log\n\n## Session 1 — February 27, 2026\n\n"
+            "**Operator:** Computer\n\n- ✅ Stats → PR #1 — src/stats.py\n",
+            encoding="utf-8",
+        )
+        result = main(["timeline", "--repo", str(tmp_path)])
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "Session" in captured.out
+
+    def test_timeline_json_output(self, tmp_path, capsys):
+        (tmp_path / "NIGHTSHIFT_LOG.md").write_text(
+            "# Nightshift Log\n\n## Session 1 — Feb 27, 2026\n\n"
+            "- ✅ Something\n",
+            encoding="utf-8",
+        )
+        result = main(["timeline", "--repo", str(tmp_path), "--json"])
+        assert result == 0
+        captured = capsys.readouterr()
+        for line in captured.out.split("\n"):
+            if line.strip().startswith("{"):
+                data = json.loads(captured.out[captured.out.index("{"):])
+                assert "sessions" in data
+                return
+        import re
+        m = re.search(r'(\{.*\})', captured.out, re.DOTALL)
+        assert m is not None, f"No JSON found in output: {captured.out!r}"
+        data = json.loads(m.group(1))
+        assert "sessions" in data
+
+    def test_timeline_write_creates_file(self, tmp_path):
+        (tmp_path / "NIGHTSHIFT_LOG.md").write_text(
+            "# Nightshift Log\n\n## Session 1 — Feb 27, 2026\n\n"
+            "- ✅ Something\n",
+            encoding="utf-8",
+        )
+        result = main(["timeline", "--repo", str(tmp_path), "--write"])
+        assert result == 0
+        assert (tmp_path / "docs" / "timeline.md").exists()
+
+
+class TestCouplingSubcommand:
+    """Tests for nightshift coupling."""
+
+    def test_coupling_parses(self):
+        parser = build_parser()
+        args = parser.parse_args(["coupling"])
+        assert args.command == "coupling"
+
+    def test_coupling_json_flag(self):
+        parser = build_parser()
+        args = parser.parse_args(["coupling", "--json"])
+        assert args.json is True
+
+    def test_coupling_write_flag(self):
+        parser = build_parser()
+        args = parser.parse_args(["coupling", "--write"])
+        assert args.write is True
+
+    def test_coupling_renders_output(self, tmp_path, capsys):
+        """Skipped — src.coupling module not yet implemented."""
+        pytest.skip("src.coupling module not yet implemented")
+
+    def test_coupling_write_creates_file(self, tmp_path):
+        """Skipped — src.coupling module not yet implemented."""
+        pytest.skip("src.coupling module not yet implemented")
+
+
+class TestComplexitySubcommand:
+    """Tests for nightshift complexity."""
+
+    def test_complexity_parses(self):
+        parser = build_parser()
+        args = parser.parse_args(["complexity"])
+        assert args.command == "complexity"
+
+    def test_complexity_no_session_flag(self):
+        parser = build_parser()
+        args = parser.parse_args(["complexity"])
+        assert not hasattr(args, "session")
+
+    def test_complexity_json_flag(self):
+        parser = build_parser()
+        args = parser.parse_args(["complexity", "--json"])
+        assert args.json is True
+
+    def test_complexity_renders_output(self, tmp_path, capsys):
+        """Skipped — src.complexity module not yet implemented."""
+        pytest.skip("src.complexity module not yet implemented")
+
+    def test_complexity_write_creates_file(self, tmp_path):
+        """Skipped — src.complexity module not yet implemented."""
+        pytest.skip("src.complexity module not yet implemented")
+
+    def test_complexity_history_updated(self, tmp_path):
+        """Skipped — src.complexity module not yet implemented."""
+        pytest.skip("src.complexity module not yet implemented")
+
+
+class TestExportSubcommand:
+    """Tests for nightshift export."""
+
+    def test_export_parses(self):
+        parser = build_parser()
+        args = parser.parse_args(["export"])
+        assert args.command == "export"
+        assert args.format == "json"  # default
+
+    def test_export_json_format(self):
+        parser = build_parser()
+        args = parser.parse_args(["export", "--format", "json"])
+        assert args.format == "json"
+
+    def test_export_markdown_format(self):
+        parser = build_parser()
+        args = parser.parse_args(["export", "--format", "markdown"])
+        assert args.format == "markdown"
+
+    def test_export_html_format(self):
+        parser = build_parser()
+        args = parser.parse_args(["export", "--format", "html"])
+        assert args.format == "html"
+
+    def test_export_invalid_format_raises(self):
+        parser = build_parser()
+        with pytest.raises(SystemExit):
+            parser.parse_args(["export", "--format", "csv"])

@@ -41,6 +41,7 @@ _NIGHTSHIFT_PATTERN = re.compile(
 
 @dataclass
 class ReleaseEntry:
+    """Represent a single parsed conventional commit for release notes"""
     sha: str
     subject: str
     cc_type: str
@@ -52,6 +53,7 @@ class ReleaseEntry:
     author: str
 
     def format_line(self) -> str:
+        """Format this entry as a Markdown bullet point"""
         scope_str = f"**{self.scope}:** " if self.scope else ""
         breaking = " **BREAKING**" if self.is_breaking else ""
         pr_str = " ".join(f"({r})" for r in self.pr_refs)
@@ -61,11 +63,13 @@ class ReleaseEntry:
 
 @dataclass
 class ReleaseSection:
+    """Group release entries under a conventional commit category"""
     title: str
     order: int
     entries: list[ReleaseEntry] = field(default_factory=list)
 
     def to_markdown(self) -> str:
+        """Render this section as a Markdown heading with entry list"""
         lines = [f"### {self.title}", ""]
         for e in sorted(self.entries, key=lambda x: (not x.is_breaking, x.scope)):
             lines.append(e.format_line())
@@ -74,6 +78,7 @@ class ReleaseSection:
 
 @dataclass
 class ReleaseNotes:
+    """Represent a complete set of GitHub-compatible release notes"""
     version: str
     date: str
     repo_url: str
@@ -85,6 +90,7 @@ class ReleaseNotes:
     nightshift_session: int = 0
 
     def to_markdown(self) -> str:
+        """Render the full release notes as a Markdown document"""
         lines = [f"# Release {self.version}", "", f"> **Released:** {self.date}", ""]
         if self.nightshift_session:
             lines += [f"> **Nightshift Session:** {self.nightshift_session}", "> Built autonomously by Perplexity Computer", ""]
@@ -112,6 +118,7 @@ class ReleaseNotes:
         return "\n".join(lines)
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the release notes"""
         return {
             "version": self.version,
             "date": self.date,
@@ -122,6 +129,7 @@ class ReleaseNotes:
         }
 
     def save(self, path: Path) -> None:
+        """Write the release notes as Markdown to the given path"""
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(self.to_markdown(), encoding="utf-8")
 

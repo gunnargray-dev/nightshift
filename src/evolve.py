@@ -23,6 +23,8 @@ from typing import Optional
 
 @dataclass
 class EvolutionProposal:
+    """A single tiered evolution proposal with impact and effort ratings"""
+
     title: str
     description: str
     tier: int               # 1=high impact/low effort, 2=high/high, 3=exploratory
@@ -36,6 +38,8 @@ class EvolutionProposal:
 
 @dataclass
 class GapArea:
+    """A gap between current state and target state with severity rating"""
+
     name: str
     current_state: str
     target_state: str
@@ -45,6 +49,8 @@ class GapArea:
 
 @dataclass
 class EvolutionReport:
+    """Aggregate evolution report containing gap areas and tiered proposals"""
+
     current_session: int
     gap_areas: list
     proposals: list

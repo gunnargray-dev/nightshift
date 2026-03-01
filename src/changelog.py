@@ -42,6 +42,7 @@ class CommitRecord:
     body: str = ""        # Full commit body
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the commit record"""
         return asdict(self)
 
 
@@ -53,6 +54,7 @@ class ChangelogSection:
     commits_by_type: dict[str, list[CommitRecord]] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the changelog section"""
         return {
             "session": self.session,
             "commits_by_type": {
@@ -62,6 +64,7 @@ class ChangelogSection:
         }
 
     def total_commits(self) -> int:
+        """Return the total number of commits across all types"""
         return sum(len(v) for v in self.commits_by_type.values())
 
 
@@ -74,6 +77,7 @@ class Changelog:
     generated_at: str = ""
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of the full changelog"""
         return asdict(self)
 
     def to_markdown(self) -> str:
