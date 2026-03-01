@@ -4,6 +4,20 @@ version = "0.1.0"
 description = "Self-improving autonomous development system — built overnight by AI"
 requires-python = ">=3.10"
 
+# Minimal runtime deps (keep the core as pure-stdlib as possible)
+dependencies = []
+
+[project.optional-dependencies]
+# Developer / CI tooling
+# Note: these are intentionally small and widely-available.
+dev = [
+  "pytest>=7",
+  "pytest-cov>=4",
+]
+
+[project.scripts]
+nightshift = "src.cli:main"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
