@@ -1,9 +1,9 @@
-"""Issue auto-triage system for Nightshift.
+"""Issue auto-triage system for Awake.
 
 Reads open GitHub issues (from a JSON export or file), categorizes them by type,
 assigns priority scores, and surfaces the highest-priority items for the next
 session.  All analysis is pure Python — no external HTTP calls required at
-runtime.  The module can be driven by the CLI (``nightshift triage``) or called
+runtime.  The module can be driven by the CLI (``awake triage``) or called
 from ``src/brain.py`` for task selection.
 
 Categories
