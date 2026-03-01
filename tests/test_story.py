@@ -29,7 +29,7 @@ from src.story import (
 # ---------------------------------------------------------------------------
 
 SAMPLE_LOG = """\
-# Nightshift Log
+# Awake Log
 
 Maintained autonomously.
 
@@ -41,12 +41,12 @@ Maintained autonomously.
 
 **Tasks completed:**
 
-- ✅ **Self-stats engine** → [PR #1](https://github.com/gunnargray-dev/nightshift/pull/1) — `src/stats.py`: analyzes git history.
-- ✅ **Session logger** → [PR #1](https://github.com/gunnargray-dev/nightshift/pull/1) — `src/session_logger.py`: structured entries.
+- ✅ **Self-stats engine** → [PR #1](https://github.com/gunnargray-dev/awake/pull/1) — `src/stats.py`: analyzes git history.
+- ✅ **Session logger** → [PR #1](https://github.com/gunnargray-dev/awake/pull/1) — `src/session_logger.py`: structured entries.
 
 **Pull requests:**
 
-- [#1](https://github.com/gunnargray-dev/nightshift/pull/1) — feat: stats engine
+- [#1](https://github.com/gunnargray-dev/awake/pull/1) — feat: stats engine
 
 **Decisions & rationale:**
 
@@ -68,8 +68,8 @@ Maintained autonomously.
 
 **Tasks completed:**
 
-- ✅ **Code health monitor** → [PR #4](https://github.com/gunnargray-dev/nightshift/pull/4) — `src/health.py`: AST-based analyzer.
-- ✅ **Changelog generator** → [PR #5](https://github.com/gunnargray-dev/nightshift/pull/5) — `src/changelog.py`: git history.
+- ✅ **Code health monitor** → [PR #4](https://github.com/gunnargray-dev/awake/pull/4) — `src/health.py`: AST-based analyzer.
+- ✅ **Changelog generator** → [PR #5](https://github.com/gunnargray-dev/awake/pull/5) — `src/changelog.py`: git history.
 
 **Decisions & rationale:**
 
@@ -91,9 +91,9 @@ Maintained autonomously.
 
 **Tasks completed:**
 
-- ✅ **README auto-updater** → [PR #7](https://github.com/gunnargray-dev/nightshift/pull/7) — `src/readme_updater.py`: dynamic README.
-- ✅ **Session diff visualizer** → [PR #8](https://github.com/gunnargray-dev/nightshift/pull/8) — `src/diff_visualizer.py`.
-- ✅ **PR quality scorer** → [PR #9](https://github.com/gunnargray-dev/nightshift/pull/9) — `src/pr_scorer.py`.
+- ✅ **README auto-updater** → [PR #7](https://github.com/gunnargray-dev/awake/pull/7) — `src/readme_updater.py`: dynamic README.
+- ✅ **Session diff visualizer** → [PR #8](https://github.com/gunnargray-dev/awake/pull/8) — `src/diff_visualizer.py`.
+- ✅ **PR quality scorer** → [PR #9](https://github.com/gunnargray-dev/awake/pull/9) — `src/pr_scorer.py`.
 
 **Decisions & rationale:**
 
@@ -113,14 +113,14 @@ Maintained autonomously.
 
 @pytest.fixture()
 def log_file(tmp_path: Path) -> Path:
-    p = tmp_path / "NIGHTSHIFT_LOG.md"
+    p = tmp_path / "AWAKE_LOG.md"
     p.write_text(SAMPLE_LOG, encoding="utf-8")
     return p
 
 
 @pytest.fixture()
 def repo_with_log(tmp_path: Path, log_file: Path) -> Path:
-    """A tmp repo root with a NIGHTSHIFT_LOG.md."""
+    """A tmp repo root with a AWAKE_LOG.md."""
     return tmp_path
 
 
@@ -177,7 +177,7 @@ def test_split_sessions_content_not_empty():
 
 
 def test_split_sessions_empty_log():
-    assert _split_sessions("# Nightshift Log\n\nNo sessions yet.\n") == []
+    assert _split_sessions("# Awake Log\n\nNo sessions yet.\n") == []
 
 
 # ---------------------------------------------------------------------------
@@ -308,12 +308,12 @@ def test_narrative_many_features():
 
 
 def test_prologue_contains_repo_name():
-    prologue = _build_prologue("Nightshift", 13, 35)
-    assert "Nightshift" in prologue
+    prologue = _build_prologue("Awake", 13, 35)
+    assert "Awake" in prologue
 
 
 def test_prologue_mentions_sessions():
-    prologue = _build_prologue("Nightshift", 13, 35)
+    prologue = _build_prologue("Awake", 13, 35)
     assert "13" in prologue
 
 
@@ -322,13 +322,13 @@ def test_epilogue_contains_stats():
         SessionChapter(1, "Feb 1", "Foundation", ["A", "B"], 3, 50, 700, []),
         SessionChapter(2, "Feb 2", "Health", ["C"], 1, 30, 400, []),
     ]
-    epilogue = _build_epilogue("Nightshift", chapters, 1200, 35)
+    epilogue = _build_epilogue("Awake", chapters, 1200, 35)
     assert "1,200" in epilogue or "1200" in epilogue
 
 
 def test_epilogue_story_arc():
     chapters = [SessionChapter(1, "Feb 1", "Foundation", [], 0, 0, 0, [])]
-    epilogue = _build_epilogue("Nightshift", chapters, 500, 10)
+    epilogue = _build_epilogue("Awake", chapters, 500, 10)
     assert "session" in epilogue.lower()
 
 
@@ -390,7 +390,7 @@ def test_to_markdown_has_title(repo_with_log: Path):
     story = generate_story(repo_with_log)
     md = story.to_markdown()
     assert "# " in md
-    assert "Story" in md or "nightshift" in md.lower()
+    assert "Story" in md or "awake" in md.lower()
 
 
 def test_to_markdown_has_all_chapters(repo_with_log: Path):
