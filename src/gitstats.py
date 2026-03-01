@@ -1,14 +1,11 @@
-"""Git statistics deep-dive for Nightshift.
+"""Git statistics deep-dive for Awake.
 
-Provides a detailed breakdown of commit frequency, code churn rate,
-average PR size, contributor velocity, and day-of-week activity patterns.
-Uses only stdlib (subprocess + re) and works on any git repository.
+Provides a detailed breakdown of commit frequency, code churn, contributor
+activity, and branch health. Designed to surface patterns invisible in
+standard `git log` output.
 
-Usage
------
-    from src.gitstats import compute_git_stats, save_git_stats_report
-    report = compute_git_stats(repo_path=Path("."))
-    print(report.to_markdown())
+CLI: awake gitstats [--json] [--days N] [--author AUTHOR]
+API: GET /api/gitstats
 """
 
 from __future__ import annotations
@@ -17,293 +14,412 @@ import json
 import re
 import subprocess
 from collections import defaultdict
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, asdict
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional
 
 
-def _git(cmd: list[str], cwd: Path) -> str:
-    """Run a git command and return stdout, or '' on failure."""
-    try:
-        result = subprocess.run(
-            ["git"] + cmd,
-            capture_output=True,
-            text=True,
-            cwd=str(cwd),
-            timeout=30,
-        )
-        return result.stdout.strip() if result.returncode == 0 else ""
-    except Exception:
-        return ""
-
+# ---------------------------------------------------------------------------
+# Data structures
+# ---------------------------------------------------------------------------
 
 @dataclass
 class CommitRecord:
-    """Lightweight representation of a single git commit."""
+    """Normalised representation of a single commit."""
+
     sha: str
     author: str
-    date: str
-    weekday: str
-    hour: int
+    email: str
+    timestamp: str          # ISO-8601
+    subject: str
     insertions: int
     deletions: int
     files_changed: int
-    subject: str
-
-    @property
-    def churn(self) -> int:
-        """Return total churn (insertions plus deletions) for this commit"""
-        return self.insertions + self.deletions
-
-    @property
-    def net(self) -> int:
-        """Return the net line delta for this commit"""
-        return self.insertions - self.deletions
 
 
 @dataclass
-class ContributorStats:
-    """Aggregated commit statistics for a single contributor"""
+class AuthorStats:
+    """Per-author aggregate statistics."""
 
-    name: str
+    author: str
+    email: str
     commits: int
     insertions: int
     deletions: int
+    files_changed: int
+    first_commit: str
+    last_commit: str
+    active_days: int
 
-    @property
-    def churn(self) -> int:
-        """Return total churn (insertions plus deletions) for this contributor"""
-        return self.insertions + self.deletions
 
-    def to_dict(self) -> dict:
-        """Return a dictionary representation of this contributor's stats"""
-        return asdict(self)
+@dataclass
+class ChurnRecord:
+    """High-churn file record."""
+
+    path: str
+    changes: int        # number of commits touching this file
+    insertions: int
+    deletions: int
 
 
 @dataclass
 class GitStatsReport:
-    """Aggregated git statistics for the repository."""
-    total_commits: int = 0
-    total_insertions: int = 0
-    total_deletions: int = 0
-    total_files_changed: int = 0
-    avg_insertions_per_commit: float = 0.0
-    avg_deletions_per_commit: float = 0.0
-    avg_churn_per_commit: float = 0.0
-    avg_files_per_commit: float = 0.0
-    commits_by_weekday: dict = field(default_factory=dict)
-    commits_by_hour: dict = field(default_factory=dict)
-    contributors: list[ContributorStats] = field(default_factory=list)
-    estimated_pr_count: int = 0
-    avg_pr_size_lines: float = 0.0
-    active_days: int = 0
-    first_commit_date: str = ""
-    last_commit_date: str = ""
-    churn_rate_per_day: float = 0.0
-    recent_velocity: int = 0
+    """Full git-statistics report."""
 
-    @property
-    def contributor_count(self) -> int:
-        """Return the number of contributors."""
-        return len(self.contributors)
-
-    def to_dict(self) -> dict:
-        """Return a dictionary representation of the full git stats report"""
-        d = asdict(self)
-        d["contributors"] = [c.to_dict() for c in self.contributors]
-        return d
-
-    def to_json(self) -> str:
-        """Serialize the git stats report to a JSON string"""
-        return json.dumps(self.to_dict(), indent=2)
-
-    def to_markdown(self) -> str:
-        """Render the git stats report as a Markdown document"""
-        lines: list[str] = ["# Nightshift Git Statistics Deep-Dive\n"]
-        if self.first_commit_date:
-            lines.append(f"*Date range: {self.first_commit_date} \u2192 {self.last_commit_date}*\n")
-
-        lines += [
-            "## Overview\n",
-            "| Metric | Value |",
-            "|--------|-------|",
-            f"| Total commits | {self.total_commits:,} |",
-            f"| Total insertions | {self.total_insertions:,} |",
-            f"| Total deletions | {self.total_deletions:,} |",
-            f"| Net lines added | {self.total_insertions - self.total_deletions:,} |",
-            f"| Files ever touched | {self.total_files_changed:,} |",
-            f"| Active days | {self.active_days} |",
-            f"| Churn rate (lines/day) | {self.churn_rate_per_day:.1f} |",
-            f"| Recent velocity (last 30d) | {self.recent_velocity} commits |",
-            f"| Estimated PRs | {self.estimated_pr_count} |",
-            f"| Avg PR size | {self.avg_pr_size_lines:.0f} lines |",
-            "",
-        ]
-
-        lines += [
-            "## Commit Size Averages\n",
-            "| Metric | Per Commit |",
-            "|--------|-----------|",
-            f"| Insertions | {self.avg_insertions_per_commit:.1f} |",
-            f"| Deletions | {self.avg_deletions_per_commit:.1f} |",
-            f"| Churn | {self.avg_churn_per_commit:.1f} |",
-            f"| Files changed | {self.avg_files_per_commit:.1f} |",
-            "",
-        ]
-
-        if self.contributors:
-            lines += ["## Top Contributors\n",
-                      "| Author | Commits | Insertions | Deletions |",
-                      "|--------|--------:|-----------:|----------:|"]
-            for c in self.contributors[:10]:
-                lines.append(f"| {c.name} | {c.commits} | {c.insertions:,} | {c.deletions:,} |")
-            lines.append("")
-
-        if self.commits_by_weekday:
-            lines.append("## Activity by Day of Week\n")
-            days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-            max_count = max(self.commits_by_weekday.values(), default=1)
-            for day in days:
-                count = self.commits_by_weekday.get(day, 0)
-                bar_len = int((count / max_count) * 20) if max_count else 0
-                bar = "█" * bar_len
-                lines.append(f"  {day[:3]}  {bar:<20} {count}")
-            lines.append("")
-
-        if self.commits_by_hour:
-            lines.append("## Activity by Hour (UTC)\n")
-            max_h = max(self.commits_by_hour.values(), default=1)
-            for h in range(24):
-                count = self.commits_by_hour.get(h, 0)
-                bar_len = int((count / max_h) * 15) if max_h else 0
-                bar = "█" * bar_len
-                lines.append(f"  {h:02d}h  {bar:<15} {count}")
-            lines.append("")
-
-        return "\n".join(lines)
+    period_days: int
+    total_commits: int
+    total_insertions: int
+    total_deletions: int
+    active_authors: int
+    commits_per_day: float
+    busiest_day: str
+    busiest_day_count: int
+    author_stats: List[AuthorStats]
+    top_churn_files: List[ChurnRecord]
+    recent_commits: List[CommitRecord]
+    branch_count: int
+    stale_branches: List[str]   # branches with no commits in >30 days
+    summary: str
 
 
-def _parse_commits(raw_log: str) -> list[CommitRecord]:
-    """Parse git log output into CommitRecord objects."""
+# ---------------------------------------------------------------------------
+# Git helpers
+# ---------------------------------------------------------------------------
+
+def _run(cmd: list[str], cwd: Optional[Path] = None) -> str:
+    """Run a git command and return stdout, or empty string on error."""
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=str(cwd) if cwd else None,
+        )
+        return result.stdout.strip()
+    except Exception:
+        return ""
+
+
+def _repo_root() -> Path:
+    """Return the repository root (or cwd)."""
+    root = _run(["git", "rev-parse", "--show-toplevel"])
+    return Path(root) if root else Path.cwd()
+
+
+def _since_date(days: int) -> str:
+    """Return an ISO date string N days in the past."""
+    dt = datetime.now(timezone.utc) - timedelta(days=days)
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# ---------------------------------------------------------------------------
+# Commit parsing
+# ---------------------------------------------------------------------------
+
+_SEP = "\x00"  # NUL separator — safe delimiter for log format
+
+
+def _parse_commits(days: int, author: Optional[str] = None) -> list[CommitRecord]:
+    """Parse commits in the given period into CommitRecord objects."""
+    since = _since_date(days)
+    fmt = f"%H{_SEP}%an{_SEP}%ae{_SEP}%aI{_SEP}%s"
+    cmd = ["git", "log", f"--since={since}", f"--format={fmt}", "--numstat"]
+    if author:
+        cmd += [f"--author={author}"]
+
+    root = _repo_root()
+    raw = _run(cmd, cwd=root)
+    if not raw:
+        return []
+
     records: list[CommitRecord] = []
-    log_pattern = re.compile(
-        r"^([0-9a-f]{40})\|(.+?)\|(\d{4}-\d{2}-\d{2}) (\d{2}):\d{2}:\d{2}[^|]*\|(.*)$"
-    )
-    for line in raw_log.splitlines():
-        m = log_pattern.match(line.strip())
-        if not m:
+    # Split on blank lines — each commit block starts with the NUL-delimited header
+    blocks = re.split(r"\n(?=\S.*\x00)", raw)
+
+    for block in blocks:
+        lines = block.strip().splitlines()
+        if not lines:
             continue
-        sha, author, date_str, hour_str, subject = m.groups()
-        import datetime
-        try:
-            dt = datetime.date.fromisoformat(date_str)
-            weekday = dt.strftime("%A")
-        except ValueError:
-            weekday = "Unknown"
+        header_line = lines[0]
+        parts = header_line.split(_SEP)
+        if len(parts) < 5:
+            continue
+        sha, author_name, email, ts, subject = parts[0], parts[1], parts[2], parts[3], parts[4]
+
+        insertions = deletions = files_changed = 0
+        for line in lines[1:]:
+            m = re.match(r"(\d+)\s+(\d+)\s+(\S+)", line)
+            if m:
+                insertions += int(m.group(1))
+                deletions += int(m.group(2))
+                files_changed += 1
+
         records.append(CommitRecord(
-            sha=sha, author=author, date=date_str, weekday=weekday,
-            hour=int(hour_str), insertions=0, deletions=0, files_changed=0, subject=subject,
+            sha=sha[:8],
+            author=author_name,
+            email=email,
+            timestamp=ts,
+            subject=subject,
+            insertions=insertions,
+            deletions=deletions,
+            files_changed=files_changed,
         ))
+
     return records
 
 
-def _enrich_with_numstat(records: list[CommitRecord], cwd: Path) -> None:
-    """Fill insertions/deletions/files_changed using git diff-tree --numstat."""
-    if not records:
-        return
-    sha_map = {r.sha: r for r in records[:200]}
-    for sha, r in sha_map.items():
-        out = _git(["diff-tree", "--numstat", "-r", "--no-commit-id", sha], cwd)
-        ins = dels = files = 0
-        for line in out.splitlines():
-            parts = line.split("\t")
-            if len(parts) == 3:
-                try:
-                    ins += int(parts[0])
-                    dels += int(parts[1])
-                    files += 1
-                except ValueError:
-                    pass
-        r.insertions, r.deletions, r.files_changed = ins, dels, files
+# ---------------------------------------------------------------------------
+# Churn analysis
+# ---------------------------------------------------------------------------
 
-
-def compute_git_stats(repo_path: Optional[Path] = None) -> GitStatsReport:
-    """Compute detailed git statistics for *repo_path*."""
-    import datetime
-    repo = repo_path or Path(__file__).resolve().parent.parent
-    raw_log = _git(["log", "--format=%H|%aN|%ai|%s", "--no-merges"], repo)
-    records = _parse_commits(raw_log)
-    if not records:
-        return GitStatsReport()
-
-    _enrich_with_numstat(records, repo)
-
-    total_commits = len(records)
-    total_ins = sum(r.insertions for r in records)
-    total_dels = sum(r.deletions for r in records)
-    total_files = sum(r.files_changed for r in records)
-
-    commits_by_weekday: dict[str, int] = defaultdict(int)
-    commits_by_hour: dict[int, int] = defaultdict(int)
-    contributor_commits: dict[str, int] = defaultdict(int)
-    contributor_ins: dict[str, int] = defaultdict(int)
-    contributor_dels: dict[str, int] = defaultdict(int)
-    active_dates: set[str] = set()
-
-    for r in records:
-        commits_by_weekday[r.weekday] += 1
-        commits_by_hour[r.hour] += 1
-        contributor_commits[r.author] += 1
-        contributor_ins[r.author] += r.insertions
-        contributor_dels[r.author] += r.deletions
-        active_dates.add(r.date)
-
-    active_days = len(active_dates)
-    dates_sorted = sorted(active_dates)
-    first_date = dates_sorted[0] if dates_sorted else ""
-    last_date = dates_sorted[-1] if dates_sorted else ""
-    churn_rate = ((total_ins + total_dels) / active_days) if active_days else 0.0
-
-    recent_velocity = 0
-    if last_date:
-        try:
-            last_dt = datetime.date.fromisoformat(last_date)
-            cutoff = last_dt - datetime.timedelta(days=30)
-            recent_velocity = sum(1 for r in records if r.date >= cutoff.isoformat())
-        except ValueError:
-            pass
-
-    full_log = _git(["log", "--format=%s"], repo)
-    estimated_prs = sum(
-        1 for line in full_log.splitlines()
-        if re.search(r"(merge pull request|^merge branch)", line, re.I)
+def _compute_churn(days: int) -> list[ChurnRecord]:
+    """Return the top 20 most-changed files in the period."""
+    since = _since_date(days)
+    root = _repo_root()
+    raw = _run(
+        ["git", "log", f"--since={since}", "--numstat", "--format="],
+        cwd=root,
     )
-    avg_pr_size = (total_ins + total_dels) / estimated_prs if estimated_prs else 0.0
+    if not raw:
+        return []
 
-    contributors = [
-        ContributorStats(name=name, commits=contributor_commits[name],
-                         insertions=contributor_ins[name], deletions=contributor_dels[name])
-        for name in contributor_commits
+    file_stats: dict[str, dict] = defaultdict(lambda: {"changes": 0, "ins": 0, "dels": 0})
+    for line in raw.splitlines():
+        m = re.match(r"(\d+)\s+(\d+)\s+(\S+)", line)
+        if m:
+            ins, dels, path = int(m.group(1)), int(m.group(2)), m.group(3)
+            file_stats[path]["changes"] += 1
+            file_stats[path]["ins"] += ins
+            file_stats[path]["dels"] += dels
+
+    sorted_files = sorted(file_stats.items(), key=lambda x: x[1]["changes"], reverse=True)
+    return [
+        ChurnRecord(path=p, changes=s["changes"], insertions=s["ins"], deletions=s["dels"])
+        for p, s in sorted_files[:20]
     ]
-    contributors.sort(key=lambda c: c.commits, reverse=True)
+
+
+# ---------------------------------------------------------------------------
+# Branch analysis
+# ---------------------------------------------------------------------------
+
+def _branch_stats() -> tuple[int, list[str]]:
+    """Return (total_branch_count, list_of_stale_branch_names)."""
+    root = _repo_root()
+    raw = _run(
+        ["git", "branch", "-r", "--format=%(refname:short) %(committerdate:iso)"],
+        cwd=root,
+    )
+    if not raw:
+        return 0, []
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+    stale: list[str] = []
+    total = 0
+    for line in raw.splitlines():
+        parts = line.strip().split(" ", 1)
+        if not parts:
+            continue
+        total += 1
+        if len(parts) == 2:
+            try:
+                dt = datetime.fromisoformat(parts[1].replace(" +", "+").replace(" -", "-"))
+                if dt.replace(tzinfo=timezone.utc) < cutoff:
+                    stale.append(parts[0])
+            except Exception:
+                pass
+
+    return total, stale
+
+
+# ---------------------------------------------------------------------------
+# Report assembly
+# ---------------------------------------------------------------------------
+
+def generate_gitstats_report(
+    days: int = 30,
+    author: Optional[str] = None,
+) -> GitStatsReport:
+    """Generate a full git statistics report."""
+
+    commits = _parse_commits(days=days, author=author)
+    churn = _compute_churn(days=days)
+    branch_count, stale_branches = _branch_stats()
+
+    # Aggregate author stats
+    author_map: dict[str, dict] = defaultdict(lambda: {
+        "commits": 0, "ins": 0, "dels": 0, "files": 0,
+        "dates": [], "email": "",
+    })
+    for c in commits:
+        a = author_map[c.author]
+        a["commits"] += 1
+        a["ins"] += c.insertions
+        a["dels"] += c.deletions
+        a["files"] += c.files_changed
+        a["dates"].append(c.timestamp)
+        a["email"] = c.email
+
+    author_stats = [
+        AuthorStats(
+            author=name,
+            email=s["email"],
+            commits=s["commits"],
+            insertions=s["ins"],
+            deletions=s["dels"],
+            files_changed=s["files"],
+            first_commit=min(s["dates"]) if s["dates"] else "",
+            last_commit=max(s["dates"]) if s["dates"] else "",
+            active_days=len(set(d[:10] for d in s["dates"])),
+        )
+        for name, s in sorted(author_map.items(), key=lambda x: -x[1]["commits"])
+    ]
+
+    # Day-level commit counts
+    day_counts: dict[str, int] = defaultdict(int)
+    for c in commits:
+        day_counts[c.timestamp[:10]] += 1
+
+    busiest_day = max(day_counts, key=lambda d: day_counts[d]) if day_counts else ""
+    busiest_count = day_counts.get(busiest_day, 0)
+
+    total_ins = sum(c.insertions for c in commits)
+    total_dels = sum(c.deletions for c in commits)
+    cpd = len(commits) / days if days else 0
+
+    summary = (
+        f"{len(commits)} commits over {days} days "
+        f"(~{cpd:.1f}/day). "
+        f"+{total_ins}/−{total_dels} lines. "
+        f"{len(author_stats)} active author(s). "
+        f"{branch_count} branches ({len(stale_branches)} stale)."
+    )
 
     return GitStatsReport(
-        total_commits=total_commits, total_insertions=total_ins, total_deletions=total_dels,
-        total_files_changed=total_files,
-        avg_insertions_per_commit=total_ins / total_commits if total_commits else 0.0,
-        avg_deletions_per_commit=total_dels / total_commits if total_commits else 0.0,
-        avg_churn_per_commit=(total_ins + total_dels) / total_commits if total_commits else 0.0,
-        avg_files_per_commit=total_files / total_commits if total_commits else 0.0,
-        commits_by_weekday=dict(commits_by_weekday),
-        commits_by_hour={k: v for k, v in sorted(commits_by_hour.items())},
-        contributors=contributors, estimated_pr_count=estimated_prs, avg_pr_size_lines=avg_pr_size,
-        active_days=active_days, first_commit_date=first_date, last_commit_date=last_date,
-        churn_rate_per_day=churn_rate, recent_velocity=recent_velocity,
+        period_days=days,
+        total_commits=len(commits),
+        total_insertions=total_ins,
+        total_deletions=total_dels,
+        active_authors=len(author_stats),
+        commits_per_day=round(cpd, 2),
+        busiest_day=busiest_day,
+        busiest_day_count=busiest_count,
+        author_stats=author_stats,
+        top_churn_files=churn,
+        recent_commits=commits[:20],
+        branch_count=branch_count,
+        stale_branches=stale_branches,
+        summary=summary,
     )
 
 
-def save_git_stats_report(report: GitStatsReport, output_path: Path) -> None:
-    """Write Markdown + JSON sidecar to *output_path*."""
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(report.to_markdown())
-    output_path.with_suffix(".json").write_text(report.to_json())
+# ---------------------------------------------------------------------------
+# Formatting
+# ---------------------------------------------------------------------------
+
+def format_gitstats_report(report: GitStatsReport) -> str:
+    """Render a GitStatsReport as a human-readable string."""
+
+    lines = [
+        "═" * 70,
+        "  AWAKE — GIT STATISTICS",
+        "═" * 70,
+        f"  Period       : last {report.period_days} days",
+        f"  Commits      : {report.total_commits}  ({report.commits_per_day}/day avg)",
+        f"  Lines added  : +{report.total_insertions}  removed: −{report.total_deletions}",
+        f"  Authors      : {report.active_authors}",
+        f"  Branches     : {report.branch_count} total, {len(report.stale_branches)} stale",
+        f"  Busiest day  : {report.busiest_day}  ({report.busiest_day_count} commits)",
+        f"  Summary      : {report.summary}",
+        "",
+    ]
+
+    # Author breakdown
+    if report.author_stats:
+        lines += [
+            "─" * 70,
+            "  AUTHORS",
+            "─" * 70,
+        ]
+        for a in report.author_stats:
+            lines += [
+                f"  {a.author} <{a.email}>",
+                f"    commits={a.commits}  +{a.insertions}/−{a.deletions}  "
+                f"files={a.files_changed}  active_days={a.active_days}",
+                f"    first={a.first_commit[:10]}  last={a.last_commit[:10]}",
+                "",
+            ]
+
+    # Top churn files
+    if report.top_churn_files:
+        lines += [
+            "─" * 70,
+            "  TOP CHURN FILES",
+            "─" * 70,
+        ]
+        for f in report.top_churn_files[:10]:
+            lines += [
+                f"  {f.path}",
+                f"    changes={f.changes}  +{f.insertions}/−{f.deletions}",
+            ]
+        lines.append("")
+
+    # Recent commits
+    if report.recent_commits:
+        lines += [
+            "─" * 70,
+            "  RECENT COMMITS (up to 20)",
+            "─" * 70,
+        ]
+        for c in report.recent_commits:
+            lines.append(
+                f"  {c.sha}  {c.timestamp[:10]}  {c.author[:20]:<20}  {c.subject[:50]}"
+            )
+        lines.append("")
+
+    # Stale branches
+    if report.stale_branches:
+        lines += [
+            "─" * 70,
+            "  STALE BRANCHES (>30 days inactive)",
+            "─" * 70,
+        ]
+        for b in report.stale_branches:
+            lines.append(f"  {b}")
+        lines.append("")
+
+    lines.append("═" * 70)
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# CLI entry point
+# ---------------------------------------------------------------------------
+
+def main(args=None) -> int:
+    """CLI entry point for `awake gitstats`."""
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="awake gitstats",
+        description="Deep-dive git statistics",
+    )
+    parser.add_argument("--json", action="store_true", help="Output as JSON")
+    parser.add_argument("--days", type=int, default=30, help="Analysis window (default: 30)")
+    parser.add_argument("--author", type=str, default=None, help="Filter by author name")
+
+    parsed = parser.parse_args(args)
+
+    report = generate_gitstats_report(days=parsed.days, author=parsed.author)
+
+    if parsed.json:
+        print(json.dumps(asdict(report), indent=2))
+    else:
+        print(format_gitstats_report(report))
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
