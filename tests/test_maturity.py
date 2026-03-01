@@ -95,7 +95,7 @@ def not_a_test():
 '''
 
 SAMPLE_LOG = """\
-# Nightshift Log
+# Awake Log
 
 ---
 
@@ -138,7 +138,7 @@ def tests_dir(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def log_file(tmp_path: Path) -> Path:
-    p = tmp_path / "NIGHTSHIFT_LOG.md"
+    p = tmp_path / "AWAKE_LOG.md"
     p.write_text(SAMPLE_LOG)
     return p
 
@@ -402,7 +402,7 @@ def test_has_module_docstring_bad_syntax(tmp_path: Path):
 
 
 def test_estimate_session_age_found(tmp_path: Path):
-    log = tmp_path / "NIGHTSHIFT_LOG.md"
+    log = tmp_path / "AWAKE_LOG.md"
     log.write_text(SAMPLE_LOG)
     # 'sample' is mentioned in session 1, last session is 3 → age = 3
     age = _estimate_session_age("sample", log)
@@ -415,7 +415,7 @@ def test_estimate_session_age_no_log(tmp_path: Path):
 
 
 def test_estimate_session_age_not_found(tmp_path: Path):
-    log = tmp_path / "NIGHTSHIFT_LOG.md"
+    log = tmp_path / "AWAKE_LOG.md"
     log.write_text(SAMPLE_LOG)
     age = _estimate_session_age("nonexistent_module_xyz", log)
     assert age >= 0
@@ -449,7 +449,7 @@ def test_score_module_maturity_returns_object(repo: Path):
         "sample",
         repo / "src",
         repo / "tests",
-        repo / "NIGHTSHIFT_LOG.md",
+        repo / "AWAKE_LOG.md",
         max_sessions=3,
     )
     assert isinstance(m, ModuleMaturity)
@@ -461,7 +461,7 @@ def test_score_module_maturity_total_score_range(repo: Path):
         "sample",
         repo / "src",
         repo / "tests",
-        repo / "NIGHTSHIFT_LOG.md",
+        repo / "AWAKE_LOG.md",
     )
     assert 0.0 <= m.total_score <= 100.0
 
@@ -471,7 +471,7 @@ def test_score_module_maturity_has_test_file(repo: Path):
         "sample",
         repo / "src",
         repo / "tests",
-        repo / "NIGHTSHIFT_LOG.md",
+        repo / "AWAKE_LOG.md",
     )
     assert m.test_path is not None
     assert m.test_count == 5
@@ -482,7 +482,7 @@ def test_score_module_maturity_no_test_file(repo: Path):
         "sample",
         repo / "src",
         repo / "tests" / "nonexistent",
-        repo / "NIGHTSHIFT_LOG.md",
+        repo / "AWAKE_LOG.md",
     )
     assert m.test_score == 0.0
     assert m.test_path is None
@@ -493,7 +493,7 @@ def test_score_module_maturity_tier_attribute(repo: Path):
         "sample",
         repo / "src",
         repo / "tests",
-        repo / "NIGHTSHIFT_LOG.md",
+        repo / "AWAKE_LOG.md",
     )
     assert m.tier in (TIER_SEED, TIER_SPROUT, TIER_GROWING, TIER_MATURE, TIER_VETERAN)
 
@@ -503,7 +503,7 @@ def test_score_module_maturity_dimension_scores_non_negative(repo: Path):
         "sample",
         repo / "src",
         repo / "tests",
-        repo / "NIGHTSHIFT_LOG.md",
+        repo / "AWAKE_LOG.md",
     )
     assert m.test_score >= 0
     assert m.docs_score >= 0
