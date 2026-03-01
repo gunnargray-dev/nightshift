@@ -1,7 +1,7 @@
-"""Git blame integration for Nightshift.
+"""Git blame integration for Awake.
 
 Attributes human vs AI contribution per file and across the whole repo.
-Nightshift commits are identified by the author name/email pattern
+Awake commits are identified by the author name/email pattern
 ``Computer`` (the autonomous AI author used throughout sessions).
 
 Public API
@@ -14,7 +14,7 @@ Public API
 
 CLI
 ---
-    nightshift blame [--write] [--json]
+    awake blame [--write] [--json]
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ from typing import Optional
 # Author names / email fragments that identify the AI operator.
 _AI_AUTHOR_PATTERNS = [
     re.compile(r"computer", re.IGNORECASE),
-    re.compile(r"nightshift", re.IGNORECASE),
+    re.compile(r"awake", re.IGNORECASE),
     re.compile(r"gunnar@perplexity", re.IGNORECASE),
 ]
 
