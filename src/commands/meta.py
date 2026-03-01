@@ -1,4 +1,4 @@
-"""Meta/introspection command group for Nightshift CLI.
+"""Meta/introspection command group for Awake CLI.
 
 Commands: stats, changelog, story, reflect, evolve, status, session_score,
 timeline, replay, compare, diff, diff_sessions.
@@ -22,7 +22,7 @@ def cmd_stats(args) -> int:
     from src.stats import compute_stats
     _print_header("Repository Stats")
     repo = _repo(getattr(args, "repo", None))
-    log_path = repo / "NIGHTSHIFT_LOG.md"
+    log_path = repo / "AWAKE_LOG.md"
     stats = compute_stats(repo_path=repo, log_path=log_path)
     if args.json:
         print(json.dumps(stats.to_dict(), indent=2))
@@ -222,11 +222,11 @@ def cmd_session_score(args) -> int:
 
 
 def cmd_timeline(args) -> int:
-    """Render an ASCII visual timeline of all Nightshift sessions."""
+    """Render an ASCII visual timeline of all Awake sessions."""
     from src.timeline import build_timeline, save_timeline
     _print_header("Session Timeline")
     repo = _repo(getattr(args, "repo", None))
-    log_path = repo / "NIGHTSHIFT_LOG.md"
+    log_path = repo / "AWAKE_LOG.md"
     timeline = build_timeline(log_path=log_path, repo_path=repo)
     if args.json:
         print(timeline.to_json())
@@ -250,11 +250,11 @@ def cmd_timeline(args) -> int:
 
 
 def cmd_replay(args) -> int:
-    """Replay a past Nightshift session from the log."""
+    """Replay a past Awake session from the log."""
     from src.session_replay import replay, replay_all
     _print_header("Session Replay")
     repo = _repo(getattr(args, "repo", None))
-    log_path = repo / "NIGHTSHIFT_LOG.md"
+    log_path = repo / "AWAKE_LOG.md"
     if args.session is not None:
         r = replay(log_path, args.session)
         if r is None:
@@ -284,7 +284,7 @@ def cmd_compare(args) -> int:
     from src.compare import compare_sessions, render_comparison
     _print_header(f"Session Comparison — {args.session_a} vs {args.session_b}")
     repo = _repo(getattr(args, "repo", None))
-    log_path = repo / "NIGHTSHIFT_LOG.md"
+    log_path = repo / "AWAKE_LOG.md"
     comparison = compare_sessions(log_path=log_path, session_a=args.session_a, session_b=args.session_b)
     if args.json:
         print(json.dumps(comparison.to_dict(), indent=2, default=str))
