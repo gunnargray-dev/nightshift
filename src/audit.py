@@ -240,7 +240,7 @@ def run_audit(repo_path: Path) -> AuditReport:
             summary=(
                 f"{health.total_functions} functions, "
                 f"{health.total_classes} classes, "
-                f"doc coverage {health.docstring_coverage:.0%}"
+                f"doc coverage {health.overall_docstring_coverage:.0%}"
             ),
         ))
     except Exception as exc:

@@ -34,6 +34,7 @@ class AutoMergeDecision:
     reason: str = ""
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of this decision."""
         return {
             "eligible": self.eligible,
             "pr_number": self.pr_number,

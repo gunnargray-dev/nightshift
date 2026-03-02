@@ -310,7 +310,7 @@ class TestRunAudit:
         mock_health.overall_health_score = 100
         mock_health.total_functions = 5
         mock_health.total_classes = 1
-        mock_health.docstring_coverage = 1.0
+        mock_health.overall_docstring_coverage = 1.0
 
         mock_security = MagicMock()
         mock_security.grade = "A"

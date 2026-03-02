@@ -356,11 +356,8 @@ def _rank(complexity: int) -> str:
 
 def _parse_file(py_file: Path) -> Optional[ast.Module]:
     """Parse *py_file* and return its AST, or ``None`` on syntax error."""
-    try:
-        source = py_file.read_text(encoding="utf-8", errors="replace")
-        return ast.parse(source, filename=str(py_file))
-    except SyntaxError:
-        return None
+    from src._ast_utils import parse_file
+    return parse_file(py_file)
 
 
 def _analyse_tree(

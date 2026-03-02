@@ -38,6 +38,7 @@ class MergeResult:
     decision: AutoMergeDecision | None = None
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of this merge result."""
         return {
             "merged": self.merged,
             "status": self.status,

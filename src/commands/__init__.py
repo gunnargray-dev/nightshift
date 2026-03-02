@@ -46,7 +46,7 @@ def _print_header(title: str) -> None:
     bar = "\u2500" * 60
     import sys as _sys
     _sys.stderr.write("\n" + bar + "\n")
-    _sys.stderr.write(f"  \U0001f319 Awake  \u00b7  {title}\n")
+    _sys.stderr.write(f"  \u2600\ufe0f Awake  \u00b7  {title}\n")
     _sys.stderr.write(bar + "\n\n")
 
 

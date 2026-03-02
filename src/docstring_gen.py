@@ -58,6 +58,7 @@ class MissingDocstring:
     generated_docstring: Optional[str] = None
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of this missing docstring item."""
         return {
             "kind": self.kind,
             "name": self.name,
@@ -85,6 +86,7 @@ class DocstringReport:
     errors: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
+        """Return a dictionary representation of this docstring report."""
         return {
             "total_items": self.total_items,
             "documented": self.documented,
