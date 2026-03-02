@@ -1,140 +1,94 @@
-"""Auto-merge decision engine for Awake.
-
-Determines whether a PR is eligible for auto-merge based on:
-  1. CI status (all checks passed)
-  2. PR score threshold (default: 80)
-
-Design: pure function, no GitHub side-effects. Safe to call anywhere.
-Actual merge execution is deferred to a future GitHub Actions integration.
-"""
-
 from __future__ import annotations
 
-import json
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from .utils import run_cmd
+
 
 @dataclass
-class MergeDecision:
-    """Result of an auto-merge eligibility check."""
-
-    pr_number: int
-    eligible: bool
-    reasons: list[str] = field(default_factory=list)
-    score: Optional[float] = None
-    ci_passed: Optional[bool] = None
-
-    def to_dict(self) -> dict:
-        """Serialise to plain dict for JSON output."""
-        return {
-            "pr_number": self.pr_number,
-            "eligible": self.eligible,
-            "score": self.score,
-            "ci_passed": self.ci_passed,
-            "reasons": self.reasons,
-        }
+class MergeResult:
+    success: bool
+    branch: str
+    message: str
+    conflicts: list[str]
 
 
-# ---------------------------------------------------------------------------
-# Score helpers
-# ---------------------------------------------------------------------------
+def _current_branch(repo: Path) -> str:
+    return run_cmd(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=repo).strip()
 
 
-def _load_scores(scores_path: Path) -> dict[int, float]:
-    """Load PR scores from the JSON persistence file produced by pr_scorer."""
-    if not scores_path.exists():
-        return {}
-    try:
-        raw = json.loads(scores_path.read_text())
-        return {int(k): float(v) for k, v in raw.items()}
-    except Exception:
-        return {}
+def _has_conflicts(repo: Path) -> list[str]:
+    out = run_cmd(["git", "diff", "--name-only", "--diff-filter=U"], cwd=repo)
+    return [line for line in out.splitlines() if line.strip()]
 
 
-# ---------------------------------------------------------------------------
-# CI status helpers
-# ---------------------------------------------------------------------------
+def attempt_automerge(
+    branch: str,
+    base: str = "main",
+    repo: Optional[Path] = None,
+    strategy: str = "ort",
+) -> MergeResult:
+    """Try to auto-merge *branch* into *base* without conflicts.
 
-
-def _ci_passed(pr_number: int) -> bool:
-    """Return True when the local test suite is green.
-
-    In the current implementation we run the test suite locally via pytest
-    rather than querying the GitHub Checks API (which would require a token).
-    A future version can replace this with a `gh pr checks` call.
+    Returns a :class:`MergeResult` describing the outcome.  The working
+    directory is left clean on both success and failure (the merge is
+    aborted on conflict).
     """
+    cwd = repo or Path(".")
+
+    # Ensure we are on the base branch
+    run_cmd(["git", "checkout", base], cwd=cwd)
+
     try:
-        result = subprocess.run(
-            ["python", "-m", "pytest", "tests/", "-q", "--tb=no", "--no-header"],
-            capture_output=True,
-            text=True,
-            timeout=120,
+        run_cmd(
+            ["git", "merge", "--no-ff", f"--strategy={strategy}", branch],
+            cwd=cwd,
         )
-        return result.returncode == 0
-    except Exception:
-        return False
+    except subprocess.CalledProcessError:
+        conflicts = _has_conflicts(cwd)
+        run_cmd(["git", "merge", "--abort"], cwd=cwd)
+        return MergeResult(
+            success=False,
+            branch=branch,
+            message=f"Merge conflict in {len(conflicts)} file(s)",
+            conflicts=conflicts,
+        )
+
+    return MergeResult(
+        success=True,
+        branch=branch,
+        message=f"Successfully merged {branch!r} into {base!r}",
+        conflicts=[],
+    )
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
+def rebase_branch(
+    branch: str,
+    onto: str = "main",
+    repo: Optional[Path] = None,
+) -> MergeResult:
+    """Rebase *branch* onto *onto*."""
+    cwd = repo or Path(".")
+    run_cmd(["git", "checkout", branch], cwd=cwd)
 
+    try:
+        run_cmd(["git", "rebase", onto], cwd=cwd)
+    except subprocess.CalledProcessError:
+        conflicts = _has_conflicts(cwd)
+        run_cmd(["git", "rebase", "--abort"], cwd=cwd)
+        return MergeResult(
+            success=False,
+            branch=branch,
+            message=f"Rebase conflict in {len(conflicts)} file(s)",
+            conflicts=conflicts,
+        )
 
-def check_eligibility(
-    pr_number: int,
-    *,
-    min_score: float = 80.0,
-    scores_path: Path | None = None,
-    skip_ci: bool = False,
-) -> MergeDecision:
-    """Determine whether *pr_number* is eligible for auto-merge.
-
-    Args:
-        pr_number: GitHub PR number to evaluate.
-        min_score: Minimum PR score required for eligibility (default 80).
-        scores_path: Path to the pr_scores JSON file.  Defaults to
-            ``pr_scores.json`` in the current working directory.
-        skip_ci: If *True*, skip the local pytest run (useful in tests).
-
-    Returns:
-        A :class:`MergeDecision` with ``eligible=True`` only when *all*
-        gates pass.
-    """
-    if scores_path is None:
-        scores_path = Path("pr_scores.json")
-
-    reasons: list[str] = []
-    eligible = True
-
-    # --- Gate 1: PR score ------------------------------------------------
-    scores = _load_scores(scores_path)
-    score = scores.get(pr_number)
-    if score is None:
-        reasons.append(f"PR #{pr_number} not found in score file ({scores_path})")
-        eligible = False
-    elif score < min_score:
-        reasons.append(f"PR score {score:.1f} < threshold {min_score:.1f}")
-        eligible = False
-
-    # --- Gate 2: CI ------------------------------------------------------
-    if skip_ci:
-        ci_ok: Optional[bool] = None
-    else:
-        ci_ok = _ci_passed(pr_number)
-        if not ci_ok:
-            reasons.append("Local test suite failed")
-            eligible = False
-
-    if eligible:
-        reasons.append("All gates passed")
-
-    return MergeDecision(
-        pr_number=pr_number,
-        eligible=eligible,
-        reasons=reasons,
-        score=score,
-        ci_passed=ci_ok,
+    return MergeResult(
+        success=True,
+        branch=branch,
+        message=f"Successfully rebased {branch!r} onto {onto!r}",
+        conflicts=[],
     )

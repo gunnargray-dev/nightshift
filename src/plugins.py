@@ -1,195 +1,128 @@
-"""Plugin registry and loader for Awake.
-
-Provides a simple, file-based plugin system that lets third-party packages
-extend Awake with custom commands, hooks, and middleware.
-
-A plugin is any Python package that declares an entry point under the group
-``awake.plugins``.  The registry discovers installed plugins at import time
-and provides helper methods to list, load, and invoke them.
-
-CLI
----
-    awake plugins                  # List registered plugins
-    awake plugins --json           # Emit JSON
-    awake plugins --reload         # Force reload all plugins
-"""
-
+"""Plugin management for Awake."""
 from __future__ import annotations
 
 import importlib
-import importlib.metadata
 import importlib.util
 import sys
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Optional
 
 
-# ---------------------------------------------------------------------------
-# Data models
-# ---------------------------------------------------------------------------
-
-
 @dataclass
-class PluginInfo:
-    """Metadata about a single discovered plugin."""
+class PluginMetadata:
+    """Metadata for an installed plugin."""
 
     name: str
-    version: str
-    entry_point: str
-    module: str
-    loaded: bool = False
-    error: str = ""
-    commands: list[str] = field(default_factory=list)
-    hooks: list[str] = field(default_factory=list)
-
-    def to_dict(self) -> dict:
-        """Return a dictionary representation of the plugin info."""
-        return asdict(self)
+    version: str = "0.0.0"
+    description: str = ""
+    author: str = ""
+    entry_point: str = ""
 
 
 @dataclass
-class PluginRegistry:
-    """Registry of all discovered and loaded plugins."""
+class Plugin:
+    """A loaded Awake plugin."""
 
-    plugins: list[PluginInfo] = field(default_factory=list)
-    _loaded_modules: dict[str, Any] = field(default_factory=dict, repr=False)
+    metadata: PluginMetadata
+    module: Any = None
+    hooks: dict[str, Callable] = field(default_factory=dict)
 
-    def to_dict(self) -> dict:
-        """Return a dictionary representation of the plugin registry."""
-        return {
-            "total": len(self.plugins),
-            "loaded": sum(1 for p in self.plugins if p.loaded),
-            "failed": sum(1 for p in self.plugins if p.error),
-            "plugins": [p.to_dict() for p in self.plugins],
-        }
+    @property
+    def name(self) -> str:
+        return self.metadata.name
 
-    def get(self, name: str) -> Optional[PluginInfo]:
-        """Retrieve a plugin by name."""
-        for p in self.plugins:
-            if p.name == name:
-                return p
-        return None
+    @property
+    def version(self) -> str:
+        return self.metadata.version
 
-    def loaded_module(self, name: str) -> Optional[Any]:
-        """Return the loaded module object for a plugin."""
-        return self._loaded_modules.get(name)
+    @property
+    def description(self) -> str:
+        return self.metadata.description
 
 
-# ---------------------------------------------------------------------------
-# Discovery
-# ---------------------------------------------------------------------------
+class PluginManager:
+    """Manages loading, unloading, and querying plugins."""
 
+    DEFAULT_DIR = Path.home() / ".awake" / "plugins"
 
-def _discover_plugins() -> list[PluginInfo]:
-    """Discover plugins via importlib.metadata entry points."""
-    infos: list[PluginInfo] = []
-    try:
-        eps = importlib.metadata.entry_points(group="awake.plugins")
-    except Exception:
-        return []
+    def __init__(self, plugin_dir: Optional[Path] = None) -> None:
+        self.plugin_dir = plugin_dir or self.DEFAULT_DIR
+        self.plugin_dir.mkdir(parents=True, exist_ok=True)
+        self._plugins: dict[str, Plugin] = {}
+        self._load_all()
 
-    for ep in eps:
-        dist = ep.dist
-        version = "unknown"
-        if dist is not None:
+    # ------------------------------------------------------------------
+    # Internal
+    # ------------------------------------------------------------------
+
+    def _load_all(self) -> None:
+        """Load all plugins found in the plugin directory."""
+        for path in sorted(self.plugin_dir.glob("*.py")):
             try:
-                version = dist.metadata["Version"]
-            except Exception:
+                self._load_from_path(path)
+            except Exception:  # pragma: no cover
                 pass
-        infos.append(
-            PluginInfo(
-                name=ep.name,
-                version=version,
-                entry_point=str(ep.value),
-                module=ep.value.split(":")[0],
-            )
+
+    def _load_from_path(self, path: Path) -> Plugin:
+        """Load a single plugin from a .py file."""
+        spec = importlib.util.spec_from_file_location(path.stem, path)
+        if spec is None or spec.loader is None:  # pragma: no cover
+            raise ImportError(f"Cannot load plugin from {path}")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[path.stem] = module
+        spec.loader.exec_module(module)  # type: ignore[union-attr]
+
+        metadata = PluginMetadata(
+            name=getattr(module, "__plugin_name__", path.stem),
+            version=getattr(module, "__version__", "0.0.0"),
+            description=getattr(module, "__description__", ""),
+            author=getattr(module, "__author__", ""),
         )
-    return infos
+        hooks: dict[str, Callable] = {}
+        for attr in dir(module):
+            fn = getattr(module, attr)
+            if callable(fn) and getattr(fn, "_awake_hook", False):
+                hooks[attr] = fn
 
+        plugin = Plugin(metadata=metadata, module=module, hooks=hooks)
+        self._plugins[metadata.name] = plugin
+        return plugin
 
-# ---------------------------------------------------------------------------
-# Loader
-# ---------------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
 
+    def list_plugins(self) -> list[Plugin]:
+        """Return all loaded plugins."""
+        return list(self._plugins.values())
 
-def _load_plugin(info: PluginInfo, registry: PluginRegistry) -> None:
-    """Attempt to import and initialise a plugin module."""
-    try:
-        mod = importlib.import_module(info.module)
-        registry._loaded_modules[info.name] = mod
-        info.loaded = True
+    def get(self, name: str) -> Optional[Plugin]:
+        """Return a plugin by name, or None."""
+        return self._plugins.get(name)
 
-        # Introspect for commands and hooks
-        if hasattr(mod, "AWAKE_COMMANDS"):
-            info.commands = list(mod.AWAKE_COMMANDS)
-        if hasattr(mod, "AWAKE_HOOKS"):
-            info.hooks = list(mod.AWAKE_HOOKS)
-    except Exception as exc:
-        info.error = str(exc)
-        info.loaded = False
+    def install(self, name: str) -> None:
+        """Stub: install a plugin by name (would fetch from registry in production)."""
+        # In production this would download from a plugin registry
+        raise NotImplementedError(f"Plugin registry install not yet implemented for {name!r}")
 
+    def uninstall(self, name: str) -> None:
+        """Remove a plugin by name."""
+        plugin = self._plugins.pop(name, None)
+        if plugin is None:
+            raise KeyError(f"Plugin {name!r} not found")
+        # Remove the .py file
+        candidate = self.plugin_dir / f"{name}.py"
+        if candidate.exists():
+            candidate.unlink()
+        # Remove from sys.modules
+        sys.modules.pop(name, None)
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
-
-
-def load_plugins(force_reload: bool = False) -> PluginRegistry:
-    """Discover and load all registered Awake plugins."""
-    registry = PluginRegistry()
-    infos = _discover_plugins()
-    for info in infos:
-        if force_reload and info.module in sys.modules:
-            del sys.modules[info.module]
-        _load_plugin(info, registry)
-        registry.plugins.append(info)
-    return registry
-
-
-def list_plugins(registry: Optional[PluginRegistry] = None) -> PluginRegistry:
-    """Return the plugin registry, loading plugins if needed."""
-    if registry is None:
-        registry = load_plugins()
-    return registry
-
-
-def invoke_hook(
-    registry: PluginRegistry,
-    hook_name: str,
-    *args: Any,
-    **kwargs: Any,
-) -> list[Any]:
-    """Invoke a named hook across all loaded plugins that declare it."""
-    results: list[Any] = []
-    for info in registry.plugins:
-        if hook_name not in info.hooks:
-            continue
-        mod = registry.loaded_module(info.name)
-        if mod is None:
-            continue
-        hook_fn: Optional[Callable] = getattr(mod, hook_name, None)
-        if callable(hook_fn):
-            try:
-                results.append(hook_fn(*args, **kwargs))
-            except Exception as exc:
-                results.append({"error": str(exc)})
-    return results
-
-
-def render_markdown(registry: PluginRegistry) -> str:
-    """Render the plugin list as a Markdown table."""
-    lines = [
-        "## Awake Plugins",
-        "",
-        "| Plugin | Version | Status | Commands | Hooks |",
-        "|--------|---------|--------|----------|-------|",
-    ]
-    for p in registry.plugins:
-        status = "loaded" if p.loaded else f"ERROR: {p.error[:40]}"
-        cmds = ", ".join(p.commands) or "-"
-        hooks = ", ".join(p.hooks) or "-"
-        lines.append(f"| `{p.name}` | {p.version} | {status} | {cmds} | {hooks} |")
-    if not registry.plugins:
-        lines.append("| _No plugins installed_ | | | | |")
-    return "\n".join(lines)
+    def call_hook(self, hook_name: str, *args: Any, **kwargs: Any) -> list[Any]:
+        """Call a named hook on all plugins that implement it."""
+        results = []
+        for plugin in self._plugins.values():
+            fn = plugin.hooks.get(hook_name)
+            if fn is not None:
+                results.append(fn(*args, **kwargs))
+        return results
