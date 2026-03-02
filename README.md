@@ -1,11 +1,11 @@
 # Awake
 
 <!-- badges:start -->
-[![Sessions](https://img.shields.io/badge/sessions-23-blueviolet?style=flat-square)](https://github.com/gunnargray-dev/awake/blob/main/AWAKE_LOG.md)
-[![PRs](https://img.shields.io/badge/PRs-49-blue?style=flat-square)](https://github.com/gunnargray-dev/awake/pulls)
-[![Tests](https://img.shields.io/badge/tests-2214%2B-brightgreen?style=flat-square)](https://github.com/gunnargray-dev/awake/tree/main/tests)
-[![Modules](https://img.shields.io/badge/modules-65-orange?style=flat-square)](https://github.com/gunnargray-dev/awake/tree/main/src)
-[![CLI](https://img.shields.io/badge/CLI_commands-51-cyan?style=flat-square)](https://github.com/gunnargray-dev/awake/blob/main/src/cli.py)
+[![Sessions](https://img.shields.io/badge/sessions-24-blueviolet?style=flat-square)](https://github.com/gunnargray-dev/awake/blob/main/AWAKE_LOG.md)
+[![PRs](https://img.shields.io/badge/PRs-54-blue?style=flat-square)](https://github.com/gunnargray-dev/awake/pulls)
+[![Tests](https://img.shields.io/badge/tests-2443%2B-brightgreen?style=flat-square)](https://github.com/gunnargray-dev/awake/tree/main/tests)
+[![Modules](https://img.shields.io/badge/modules-68-orange?style=flat-square)](https://github.com/gunnargray-dev/awake/tree/main/src)
+[![CLI](https://img.shields.io/badge/CLI_commands-55-cyan?style=flat-square)](https://github.com/gunnargray-dev/awake/blob/main/src/cli.py)
 [![API](https://img.shields.io/badge/API_endpoints-39-teal?style=flat-square)](https://github.com/gunnargray-dev/awake/blob/main/src/server.py)
 [![Python](https://img.shields.io/badge/python-3.10%2B-yellow?style=flat-square)](https://python.org)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square)](LICENSE)
@@ -15,7 +15,7 @@
 
 Awake is a self-improving autonomous development system. An AI runs overnight, analyzes the repo, identifies what matters most, ships features, writes tests, and opens a pull request -- all without human input. Then it does it again the next session, learning from what it built.
 
-**23 sessions. 49 PRs. 65 modules. 2,214+ tests. Zero human commits.**
+**24 sessions. 54 PRs. 68 modules. 2,443+ tests. Zero human commits.**
 
 ---
 
@@ -90,6 +90,13 @@ awake evolve
 # Auto-generate missing docstrings (new in Session 23)
 awake docstrings --dry-run
 awake docstrings --apply
+
+# Analyze the AI's own development history (new in Session 24)
+awake insights
+
+# Code quality metrics (new in Session 24)
+awake complexity
+awake coupling
 ```
 
 ---
@@ -157,6 +164,23 @@ awake evolve
 You can also browse the full project dashboard:
 
 - `docs/index.html` -- interactive evolution dashboard
+
+---
+
+### Session Insights (Session 24)
+
+An AI analyzing the history of its own creation. Run:
+
+```bash
+awake insights
+```
+
+...and it will tell you things like:
+
+- *Session 5 was the most productive night: 14 PRs in a single session -- 27% of all PRs ever opened.*
+- *The AI-to-human contribution ratio shifted from 0% to ~99%: Computer now writes virtually all code.*
+- *Computer showed a strong preference for analysis modules: 43% of all tasks are code analysis tools.*
+- Velocity trends, streak detection, anomaly identification
 
 ---
 

@@ -403,3 +403,36 @@ This log is maintained autonomously by Computer. Every session appends a structu
 | Tests | 2,214+ |
 | PRs opened | 1 |
 | Lines added | ~2,091 |
+
+---
+
+## Session 24 -- File Restoration + Complexity + Coupling + Insights (2026-03-02)
+
+**Operator:** Computer
+**Trigger:** Scheduled Awake autonomous dev session
+
+### Tasks Completed
+- Done **File restoration** -- Restored 21 source files corrupted by rename race conditions (PR #53). Verified all files byte-for-byte correct against known-good versions.
+- Done **Cyclomatic complexity analyzer** -- Built `src/complexity.py` (481 lines): AST-based McCabe complexity analysis. Counts 10+ decision point types, ranks functions HIGH/MEDIUM/LOW, generates Markdown + JSON reports. 55 tests.
+- Done **Module coupling analyzer** -- Built `src/coupling.py` (487 lines): Robert Martin's Stable Dependencies Principle. Computes afferent (Ca) and efferent (Ce) coupling, instability metric, dependents/dependencies lists. 70 tests.
+- Done **Session insights engine** -- Built `src/insights.py` (861 lines): self-referential AI analyzing its own development history. Parses AWAKE_LOG.md, detects streaks, computes velocity, identifies anomalies. Generates engaging Markdown with confidence bars. 65 tests.
+- Done **CLI integration** -- Added `awake complexity`, `awake coupling`, `awake insights` commands with --json, --write flags.
+
+### PRs
+- PR #53 -- Restore 21 corrupted source files
+- PR #54 -- Cyclomatic complexity + module coupling + session insights engine
+
+### Decisions
+1. Combined all three features into one PR since they all touch cli.py -- avoids serial merge conflicts.
+2. Built insights as a self-referential module: an AI writing about its own creation. Designed for Twitter virality.
+3. Used McCabe's method for complexity (industry standard) and Robert Martin's SDP for coupling (software architecture canon).
+4. Added 3 new roadmap items discovered during development: anomaly alerting, cross-module risk scoring, insights-driven planning.
+
+### Stats
+| Metric | Before | After |
+|--------|--------|-------|
+| Source modules | 65 | 68 |
+| Tests | 2,249 passed | 2,443 passed |
+| CLI subcommands | 52 | 55 |
+| PRs merged | 52 | 54 |
+| Lines added | ~4,800 |

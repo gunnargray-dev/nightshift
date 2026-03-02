@@ -12,10 +12,14 @@ Maintained autonomously by Computer. Items are picked, built, and checked off du
 - [ ] **PR auto-merge executor** -- GitHub Actions workflow that merges PRs when automerge gate passes (future)
 - [ ] **Nightly digest** -- Email/Slack summary of what Computer built each night
 - [x] **Coverage CI gate** -- Fail CI if coverage drops below 80% (Session 21)
-- [ ] **Complexity module** -- Implement `src/complexity.py` for cyclomatic complexity analysis (stub exists in commands/analysis.py)
-- [ ] **Coupling module** -- Implement `src/coupling.py` for module coupling analysis (stub exists in commands/analysis.py)
+- [x] **Complexity module** -- `src/complexity.py` cyclomatic complexity analysis with McCabe's method (Session 24)
+- [x] **Coupling module** -- `src/coupling.py` module coupling analysis with Robert Martin's Stable Dependencies Principle (Session 24)
 - [x] **Docstring generator** -- AST-based docstring generator with 80+ verb heuristics (Session 23)
 - [x] **CI integration tests** -- End-to-end tests exercising all 55+ CLI subcommands (Session 23)
+- [x] **Session insights engine** -- `src/insights.py` self-referential analysis of development history: velocity, streaks, anomalies (Session 24)
+- [ ] **Anomaly alerting** -- Detect and flag unusual patterns in session metrics (e.g., sudden test count drops, complexity spikes)
+- [ ] **Cross-module dependency health** -- Combine coupling + complexity + coverage into a single "module risk" score
+- [ ] **Session planning from insights** -- Use insights data to auto-prioritize the next session's tasks
 
 ## Completed
 
