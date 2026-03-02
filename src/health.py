@@ -1,376 +1,313 @@
 """Code health monitor for Awake.
 
 Analyzes the repository's source code for quality metrics:
-- Lines of code and file counts
-- Complexity indicators (long files, large functions)
-- TODO / FIXME / HACK comment density
-- Test coverage ratio (estimated from test file presence)
-- Import hygiene (stdlib vs third-party vs local)
+- Line count per file and totals
+- Function/class count (complexity proxy)
+- TODO/FIXME/HACK comment density
+- Long line violations (>88 chars, PEP 8 relaxed limit)
+- Blank line ratio (readability proxy)
+- Docstring coverage (% of public functions with docstrings)
+- Overall health score (0–100)
 
-CLI: awake health [--json] [--threshold N]
-API: GET /api/health
+Produces a structured HealthReport that can be rendered as Markdown
+for inclusion in AWAKE_LOG.md or saved as health_report.md.
 """
 
 from __future__ import annotations
 
 import ast
-import json
-import os
 import re
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, field, asdict
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Optional
 
 
 # ---------------------------------------------------------------------------
-# Configuration
+# Data classes
 # ---------------------------------------------------------------------------
 
-DEFAULT_THRESHOLD = 70          # health score below which a warning is emitted
-MAX_FILE_LINES = 400            # files over this are flagged as too long
-MAX_FUNCTION_LINES = 60         # functions over this are flagged as complex
-SRC_EXTENSIONS = {".py"}        # source file extensions to analyze
-EXCLUDE_DIRS = {                # directories to skip
-    "__pycache__", ".git", ".awake", ".venv", "venv", "env",
-    "node_modules", "dist", "build", ".tox",
-}
-
-
-# ---------------------------------------------------------------------------
-# Data structures
-# ---------------------------------------------------------------------------
 
 @dataclass
-class FileHealthRecord:
-    """Health metrics for a single source file."""
+class FileHealth:
+    """Health metrics for a single Python source file."""
 
     path: str
-    lines: int
-    functions: int
-    classes: int
-    long_functions: int         # functions exceeding MAX_FUNCTION_LINES
-    todo_count: int             # TODO / FIXME / HACK comments
-    has_test: bool              # True if a corresponding test file exists
-    complexity_flag: bool       # True if file exceeds MAX_FILE_LINES
+    total_lines: int = 0
+    code_lines: int = 0
+    blank_lines: int = 0
+    comment_lines: int = 0
+    long_lines: int = 0          # lines > MAX_LINE_LENGTH
+    function_count: int = 0
+    class_count: int = 0
+    todo_count: int = 0          # TODO / FIXME / HACK / XXX markers
+    docstring_coverage: float = 0.0   # 0.0–1.0
+    parse_error: bool = False
+
+    def to_dict(self) -> dict:
+        """Return a dictionary representation of this file's health metrics"""
+        return asdict(self)
+
+    @property
+    def health_score(self) -> float:
+        """Compute a 0–100 health score for this file.
+
+        Penalties (applied as subtractions from 100):
+        - Each long line:        -0.5 pts (capped at -20)
+        - Each TODO/FIXME:       -2 pts   (capped at -20)
+        - Low docstring coverage:-up to 20 pts
+        - Parse error:           -50 pts
+        """
+        if self.parse_error:
+            return 50.0
+
+        score = 100.0
+
+        # Long lines penalty
+        long_penalty = min(self.long_lines * 0.5, 20.0)
+        score -= long_penalty
+
+        # TODO/FIXME penalty
+        todo_penalty = min(self.todo_count * 2.0, 20.0)
+        score -= todo_penalty
+
+        # Docstring coverage penalty (max -20 for 0% coverage)
+        doc_penalty = (1.0 - self.docstring_coverage) * 20.0
+        score -= doc_penalty
+
+        return max(0.0, round(score, 1))
 
 
 @dataclass
 class HealthReport:
     """Aggregate health report for the repository."""
 
-    score: int                  # 0–100
-    grade: str                  # A / B / C / D / F
-    total_files: int
-    total_lines: int
-    total_functions: int
-    total_classes: int
-    long_files: int
-    long_functions: int
-    todo_density: float         # TODOs per 100 lines
-    test_coverage_ratio: float  # fraction of src files with a test file
-    file_records: List[FileHealthRecord]
-    top_issues: List[str]
-    summary: str
+    files: list[FileHealth] = field(default_factory=list)
+    generated_at: str = ""
+
+    def to_dict(self) -> dict:
+        """Return a dictionary representation of the aggregate health report"""
+        return asdict(self)
+
+    @property
+    def total_lines(self) -> int:
+        """Return the sum of total lines across all analyzed files"""
+        return sum(f.total_lines for f in self.files)
+
+    @property
+    def total_code_lines(self) -> int:
+        """Return the sum of code lines across all analyzed files"""
+        return sum(f.code_lines for f in self.files)
+
+    @property
+    def total_functions(self) -> int:
+        """Return the sum of function counts across all analyzed files"""
+        return sum(f.function_count for f in self.files)
+
+    @property
+    def total_classes(self) -> int:
+        """Return the sum of class counts across all analyzed files"""
+        return sum(f.class_count for f in self.files)
+
+    @property
+    def total_todos(self) -> int:
+        """Return the sum of TODO/FIXME markers across all analyzed files"""
+        return sum(f.todo_count for f in self.files)
+
+    @property
+    def total_long_lines(self) -> int:
+        """Return the sum of long line violations across all analyzed files"""
+        return sum(f.long_lines for f in self.files)
+
+    @property
+    def overall_docstring_coverage(self) -> float:
+        """Weighted average docstring coverage across all files."""
+        if not self.files:
+            return 0.0
+        weighted = sum(
+            f.docstring_coverage * max(f.function_count + f.class_count, 1)
+            for f in self.files
+        )
+        total_items = sum(
+            max(f.function_count + f.class_count, 1) for f in self.files
+        )
+        return round(weighted / total_items, 3) if total_items else 0.0
+
+    @property
+    def overall_health_score(self) -> float:
+        """Average health score across all analyzed files."""
+        if not self.files:
+            return 100.0
+        return round(sum(f.health_score for f in self.files) / len(self.files), 1)
+
+    def to_markdown(self) -> str:
+        """Render the health report as Markdown."""
+        lines = [
+            "# Code Health Report",
+            "",
+            f"*Generated: {self.generated_at or 'N/A'}*",
+            "",
+            "## Summary",
+            "",
+            f"| Metric | Value |",
+            f"|--------|-------|",
+            f"| Overall health score | **{self.overall_health_score}/100** |",
+            f"| Total source lines | {self.total_lines} |",
+            f"| Code lines | {self.total_code_lines} |",
+            f"| Functions | {self.total_functions} |",
+            f"| Classes | {self.total_classes} |",
+            f"| Docstring coverage | {self.overall_docstring_coverage:.1%} |",
+            f"| TODO/FIXME markers | {self.total_todos} |",
+            f"| Long lines (>88 chars) | {self.total_long_lines} |",
+            "",
+            "## Per-File Breakdown",
+            "",
+            "| File | Lines | Score | Docstrings | TODOs | Long Lines |",
+            "|------|-------|-------|------------|-------|-----------|",
+        ]
+
+        for fh in sorted(self.files, key=lambda f: f.path):
+            score_str = f"{fh.health_score}/100"
+            doc_str = f"{fh.docstring_coverage:.0%}"
+            lines.append(
+                f"| `{fh.path}` | {fh.total_lines} | {score_str} | {doc_str} | {fh.todo_count} | {fh.long_lines} |"
+            )
+
+        lines += ["", "---", ""]
+        return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
-# File discovery
+# Analysis functions
 # ---------------------------------------------------------------------------
 
-def _discover_python_files(root: Path) -> list[Path]:
-    """Recursively discover Python source files, skipping excluded dirs."""
-    found: list[Path] = []
-    for dirpath, dirnames, filenames in os.walk(root):
-        # Prune excluded directories in-place
-        dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS]
-        for fname in filenames:
-            p = Path(dirpath) / fname
-            if p.suffix in SRC_EXTENSIONS:
-                found.append(p)
-    return sorted(found)
+MAX_LINE_LENGTH = 88
+TODO_PATTERN = re.compile(r"\b(TODO|FIXME|HACK|XXX)\b", re.IGNORECASE)
 
 
-# ---------------------------------------------------------------------------
-# Per-file analysis
-# ---------------------------------------------------------------------------
+def _count_docstring_coverage(tree: ast.Module) -> float:
+    """Return the fraction of public functions/classes/methods with docstrings."""
+    total = 0
+    documented = 0
 
-_TODO_RE = re.compile(r"#\s*(TODO|FIXME|HACK|XXX)", re.IGNORECASE)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            # Skip private/dunder items
+            if node.name.startswith("_"):
+                continue
+            total += 1
+            if (
+                node.body
+                and isinstance(node.body[0], ast.Expr)
+                and isinstance(node.body[0].value, ast.Constant)
+                and isinstance(node.body[0].value.value, str)
+            ):
+                documented += 1
+
+    if total == 0:
+        return 1.0  # No public items → full coverage by convention
+    return round(documented / total, 3)
 
 
-def _analyze_file(path: Path, root: Path) -> Optional[FileHealthRecord]:
-    """Analyze a single Python file. Returns None if the file cannot be parsed."""
+def _count_ast_items(tree: ast.Module) -> tuple[int, int]:
+    """Return (function_count, class_count) from a parsed AST."""
+    functions = sum(
+        1
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    )
+    classes = sum(
+        1 for node in ast.walk(tree) if isinstance(node, ast.ClassDef)
+    )
+    return functions, classes
+
+
+def analyze_file(path: Path) -> FileHealth:
+    """Analyze a single Python source file and return a FileHealth record."""
+    fh = FileHealth(path=str(path))
+
     try:
         source = path.read_text(encoding="utf-8", errors="replace")
     except OSError:
-        return None
+        fh.parse_error = True
+        return fh
 
-    lines = source.splitlines()
-    line_count = len(lines)
-    todo_count = sum(1 for ln in lines if _TODO_RE.search(ln))
+    raw_lines = source.splitlines()
+    fh.total_lines = len(raw_lines)
+
+    for line in raw_lines:
+        stripped = line.strip()
+        if not stripped:
+            fh.blank_lines += 1
+        elif stripped.startswith("#"):
+            fh.comment_lines += 1
+        else:
+            fh.code_lines += 1
+
+        if len(line) > MAX_LINE_LENGTH:
+            fh.long_lines += 1
+
+        if TODO_PATTERN.search(line):
+            fh.todo_count += 1
 
     # AST-based analysis
-    functions = 0
-    classes = 0
-    long_functions = 0
     try:
         tree = ast.parse(source, filename=str(path))
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                functions += 1
-                if hasattr(node, "end_lineno") and node.end_lineno:
-                    fn_lines = node.end_lineno - node.lineno
-                    if fn_lines > MAX_FUNCTION_LINES:
-                        long_functions += 1
-            elif isinstance(node, ast.ClassDef):
-                classes += 1
+        fh.function_count, fh.class_count = _count_ast_items(tree)
+        fh.docstring_coverage = _count_docstring_coverage(tree)
     except SyntaxError:
-        pass
+        fh.parse_error = True
 
-    # Test file heuristic: look for tests/test_<stem>.py or test_<stem>.py
-    rel = path.relative_to(root)
-    stem = path.stem
-    test_candidates = [
-        root / "tests" / f"test_{stem}.py",
-        root / "test" / f"test_{stem}.py",
-        path.parent / f"test_{stem}.py",
-    ]
-    has_test = any(c.exists() for c in test_candidates)
-
-    return FileHealthRecord(
-        path=str(rel),
-        lines=line_count,
-        functions=functions,
-        classes=classes,
-        long_functions=long_functions,
-        todo_count=todo_count,
-        has_test=has_test,
-        complexity_flag=line_count > MAX_FILE_LINES,
-    )
+    return fh
 
 
-# ---------------------------------------------------------------------------
-# Scoring
-# ---------------------------------------------------------------------------
+def analyze_directory(
+    root: Path,
+    glob: str = "src/**/*.py",
+    exclude: Optional[list[str]] = None,
+) -> list[FileHealth]:
+    """Analyze all Python files matching a glob pattern under root."""
+    exclude_patterns = exclude or []
+    results = []
 
-def _compute_score(records: list[FileHealthRecord]) -> int:
-    """Compute a 0-100 health score from aggregate file metrics."""
-    if not records:
-        return 100
+    for py_file in sorted(root.glob(glob)):
+        # Skip excluded patterns
+        rel = py_file.relative_to(root)
+        if any(ex in str(rel) for ex in exclude_patterns):
+            continue
+        fh = analyze_file(py_file)
+        # Store relative path for readability
+        fh.path = str(rel)
+        results.append(fh)
 
-    total = len(records)
+    return results
 
-    # Component scores (each 0-100, weighted)
-    # 1. Long-file ratio (lower = better)
-    long_file_ratio = sum(1 for r in records if r.complexity_flag) / total
-    long_file_score = max(0, 100 - int(long_file_ratio * 150))
-
-    # 2. Long-function ratio
-    total_fns = sum(r.functions for r in records) or 1
-    long_fn_ratio = sum(r.long_functions for r in records) / total_fns
-    long_fn_score = max(0, 100 - int(long_fn_ratio * 200))
-
-    # 3. TODO density (per 100 lines)
-    total_lines = sum(r.lines for r in records) or 1
-    todo_density = (sum(r.todo_count for r in records) / total_lines) * 100
-    todo_score = max(0, 100 - int(todo_density * 15))
-
-    # 4. Test coverage ratio
-    coverage_ratio = sum(1 for r in records if r.has_test) / total
-    coverage_score = int(coverage_ratio * 100)
-
-    # Weighted average
-    score = int(
-        long_file_score * 0.25
-        + long_fn_score * 0.30
-        + todo_score * 0.15
-        + coverage_score * 0.30
-    )
-    return max(0, min(100, score))
-
-
-def _grade(score: int) -> str:
-    if score >= 90: return "A"
-    if score >= 80: return "B"
-    if score >= 70: return "C"
-    if score >= 60: return "D"
-    return "F"
-
-
-# ---------------------------------------------------------------------------
-# Report assembly
-# ---------------------------------------------------------------------------
 
 def generate_health_report(
-    root: Optional[Path] = None,
-    threshold: int = DEFAULT_THRESHOLD,
+    repo_path: Optional[Path] = None,
+    *,
+    glob: str = "src/**/*.py",
+    exclude: Optional[list[str]] = None,
+    timestamp: str = "",
 ) -> HealthReport:
-    """Generate a code health report for the repository at *root*."""
-    root = root or Path.cwd()
-    files = _discover_python_files(root)
+    """Generate a full health report for the repository.
 
-    records: list[FileHealthRecord] = []
-    for f in files:
-        rec = _analyze_file(f, root)
-        if rec is not None:
-            records.append(rec)
+    Args:
+        repo_path: Root of the repository. Defaults to CWD.
+        glob: Glob pattern for Python source files.
+        exclude: List of path substrings to exclude from analysis.
+        timestamp: ISO timestamp string for the report header.
 
-    total_lines = sum(r.lines for r in records)
-    total_fns = sum(r.functions for r in records)
-    total_cls = sum(r.classes for r in records)
-    long_files = sum(1 for r in records if r.complexity_flag)
-    long_fns = sum(r.long_functions for r in records)
-    total_todos = sum(r.todo_count for r in records)
-    todo_density = (total_todos / total_lines * 100) if total_lines else 0.0
-    coverage_ratio = (
-        sum(1 for r in records if r.has_test) / len(records)
-        if records else 0.0
-    )
+    Returns:
+        HealthReport with per-file and aggregate metrics.
+    """
+    from datetime import datetime, timezone
 
-    score = _compute_score(records)
-    grade = _grade(score)
-
-    # Build top issues list
-    top_issues: list[str] = []
-    if long_files:
-        worst = sorted(records, key=lambda r: r.lines, reverse=True)[:3]
-        for r in worst:
-            if r.complexity_flag:
-                top_issues.append(f"Long file ({r.lines} lines): {r.path}")
-    if long_fns > 0:
-        top_issues.append(f"{long_fns} function(s) exceed {MAX_FUNCTION_LINES} lines")
-    if todo_density > 1.0:
-        top_issues.append(f"High TODO density: {todo_density:.1f} per 100 lines")
-    if coverage_ratio < 0.5:
-        top_issues.append(
-            f"Low test coverage: {coverage_ratio:.0%} of files have a test file"
-        )
-    if score < threshold:
-        top_issues.append(
-            f"Health score {score} is below threshold {threshold} — review required"
-        )
-
-    summary = (
-        f"Score {score}/100 (Grade {grade}). "
-        f"{len(records)} files, {total_lines} lines. "
-        f"{long_files} long files, {long_fns} long functions. "
-        f"TODO density {todo_density:.1f}/100 lines. "
-        f"Test coverage ~{coverage_ratio:.0%}."
-    )
-
-    return HealthReport(
-        score=score,
-        grade=grade,
-        total_files=len(records),
-        total_lines=total_lines,
-        total_functions=total_fns,
-        total_classes=total_cls,
-        long_files=long_files,
-        long_functions=long_fns,
-        todo_density=round(todo_density, 2),
-        test_coverage_ratio=round(coverage_ratio, 4),
-        file_records=records,
-        top_issues=top_issues,
-        summary=summary,
-    )
+    root = repo_path or Path.cwd()
+    files = analyze_directory(root, glob=glob, exclude=exclude or ["__init__"])
+    ts = timestamp or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    return HealthReport(files=files, generated_at=ts)
 
 
-# ---------------------------------------------------------------------------
-# Formatting
-# ---------------------------------------------------------------------------
-
-def format_health_report(report: HealthReport) -> str:
-    """Format a HealthReport as a human-readable string."""
-
-    grade_style = {
-        "A": "✅", "B": "🟢", "C": "🟡", "D": "🟠", "F": "🔴",
-    }.get(report.grade, "")
-
-    lines = [
-        "═" * 70,
-        "  AWAKE — CODE HEALTH REPORT",
-        "═" * 70,
-        f"  Score    : {report.score}/100  Grade: {report.grade} {grade_style}",
-        f"  Files    : {report.total_files}  Lines: {report.total_lines}",
-        f"  Functions: {report.total_functions}  Classes: {report.total_classes}",
-        f"  Long files   : {report.long_files}  Long functions: {report.long_functions}",
-        f"  TODO density : {report.todo_density}/100 lines",
-        f"  Test coverage: {report.test_coverage_ratio:.0%}",
-        f"  Summary  : {report.summary}",
-        "",
-    ]
-
-    if report.top_issues:
-        lines += [
-            "─" * 70,
-            "  TOP ISSUES",
-            "─" * 70,
-        ]
-        for issue in report.top_issues:
-            lines.append(f"  ⚠  {issue}")
-        lines.append("")
-
-    if report.file_records:
-        lines += [
-            "─" * 70,
-            "  FILE BREAKDOWN (sorted by lines desc)",
-            "─" * 70,
-        ]
-        sorted_records = sorted(report.file_records, key=lambda r: r.lines, reverse=True)
-        for r in sorted_records[:20]:
-            flags = []
-            if r.complexity_flag:
-                flags.append("LONG")
-            if r.long_functions:
-                flags.append(f"{r.long_functions}×complex-fn")
-            if r.todo_count:
-                flags.append(f"{r.todo_count}×TODO")
-            if not r.has_test:
-                flags.append("no-test")
-            flag_str = "  [" + ", ".join(flags) + "]" if flags else ""
-            lines.append(
-                f"  {r.lines:>5}  {r.functions:>3}fn  {r.classes:>2}cls  "
-                f"{r.path}{flag_str}"
-            )
-        lines.append("")
-
-    lines.append("═" * 70)
-    return "\n".join(lines)
-
-
-# ---------------------------------------------------------------------------
-# CLI entry point
-# ---------------------------------------------------------------------------
-
-def main(args=None) -> int:
-    """CLI entry point for `awake health`."""
-    import argparse
-
-    parser = argparse.ArgumentParser(
-        prog="awake health",
-        description="Analyze repository code health",
-    )
-    parser.add_argument("--json", action="store_true", help="Output as JSON")
-    parser.add_argument(
-        "--threshold", type=int, default=DEFAULT_THRESHOLD,
-        help=f"Score threshold for warnings (default: {DEFAULT_THRESHOLD})",
-    )
-    parser.add_argument(
-        "--root", type=str, default=None,
-        help="Repository root path (default: cwd)",
-    )
-
-    parsed = parser.parse_args(args)
-    root = Path(parsed.root) if parsed.root else None
-
-    report = generate_health_report(root=root, threshold=parsed.threshold)
-
-    if parsed.json:
-        print(json.dumps(asdict(report), indent=2))
-    else:
-        print(format_health_report(report))
-
-    return 0 if report.score >= parsed.threshold else 1
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+def save_health_report(report: HealthReport, output_path: Path) -> None:
+    """Write the health report Markdown to disk."""
+    output_path.write_text(report.to_markdown(), encoding="utf-8")
