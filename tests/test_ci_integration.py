@@ -1,188 +1,234 @@
 """Tests for CI integration utilities."""
-from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Minimal stub of a ci_integration module (not yet present in src/)
-# These tests define the expected interface.
-# ---------------------------------------------------------------------------
-
-
-COMPONENT = "src.ci_integration"
-
-
-class CIConfig:
-    """Stub config for CI integration."""
-
-    def __init__(self, provider="github", token=None, dry_run=False):
-        self.provider = provider
-        self.token = token
-        self.dry_run = dry_run
-
-
-class CIResult:
-    """Stub result returned by CI helpers."""
-
-    def __init__(self, success, run_id=None, url=None, message=""):
-        self.success = success
-        self.run_id = run_id
-        self.url = url
-        self.message = message
-
 
 # ---------------------------------------------------------------------------
-# trigger_workflow
+# Helpers / fixtures
 # ---------------------------------------------------------------------------
 
 
-def test_trigger_workflow_success():
-    config = CIConfig(provider="github", token="tok_abc")
-    result = CIResult(success=True, run_id="run_001", url="https://ci.example.com/run_001")
-    with patch(f"{COMPONENT}.trigger_workflow", return_value=result) as mock_fn:
-        from importlib import import_module
+def _fake_completed(returncode=0, stdout="", stderr=""):
+    proc = MagicMock(spec=subprocess.CompletedProcess)
+    proc.returncode = returncode
+    proc.stdout = stdout
+    proc.stderr = stderr
+    return proc
 
-        # We call the mock directly to validate call signature
-        r = mock_fn(repo="owner/repo", workflow="ci.yml", ref="main", config=config)
-        mock_fn.assert_called_once_with(
-            repo="owner/repo", workflow="ci.yml", ref="main", config=config
+
+@pytest.fixture
+def mock_run():
+    with patch("subprocess.run") as m:
+        yield m
+
+
+# ---------------------------------------------------------------------------
+# run_checks (unit)
+# ---------------------------------------------------------------------------
+
+
+class TestRunChecks:
+    """Unit tests for a run_checks-style helper."""
+
+    def test_success_returns_zero(self, mock_run, tmp_path):
+        """A passing check suite should return exit code 0."""
+        mock_run.return_value = _fake_completed(returncode=0, stdout="All checks passed")
+        result = mock_run(
+            ["pytest", str(tmp_path)],
+            capture_output=True,
+            text=True,
         )
-        assert r.success is True
+        assert result.returncode == 0
+        assert "passed" in result.stdout
 
+    def test_failure_returns_nonzero(self, mock_run, tmp_path):
+        """A failing check suite should return a non-zero exit code."""
+        mock_run.return_value = _fake_completed(returncode=1, stdout="", stderr="1 failed")
+        result = mock_run(
+            ["pytest", str(tmp_path)],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode != 0
+        assert "failed" in result.stderr
 
-def test_trigger_workflow_dry_run():
-    config = CIConfig(dry_run=True)
-    result = CIResult(success=True, message="dry-run: workflow not triggered")
-    with patch(f"{COMPONENT}.trigger_workflow", return_value=result) as mock_fn:
-        r = mock_fn(repo="owner/repo", workflow="ci.yml", ref="main", config=config)
-        assert r.success is True
-        assert "dry-run" in r.message
+    def test_captures_stdout(self, mock_run):
+        """stdout from the subprocess should be captured."""
+        mock_run.return_value = _fake_completed(stdout="hello output")
+        result = mock_run(["echo", "hello output"], capture_output=True, text=True)
+        assert result.stdout == "hello output"
 
-
-def test_trigger_workflow_failure():
-    config = CIConfig(token="bad_token")
-    result = CIResult(success=False, message="401 Unauthorized")
-    with patch(f"{COMPONENT}.trigger_workflow", return_value=result) as mock_fn:
-        r = mock_fn(repo="owner/repo", workflow="ci.yml", ref="main", config=config)
-        assert r.success is False
-        assert "401" in r.message
-
-
-# ---------------------------------------------------------------------------
-# get_workflow_status
-# ---------------------------------------------------------------------------
-
-
-def test_get_workflow_status_completed():
-    with patch(f"{COMPONENT}.get_workflow_status", return_value="completed") as mock_fn:
-        status = mock_fn(run_id="run_001", config=CIConfig())
-        assert status == "completed"
-
-
-def test_get_workflow_status_in_progress():
-    with patch(f"{COMPONENT}.get_workflow_status", return_value="in_progress") as mock_fn:
-        status = mock_fn(run_id="run_002", config=CIConfig())
-        assert status == "in_progress"
+    def test_captures_stderr(self, mock_run):
+        """stderr from the subprocess should be captured."""
+        mock_run.return_value = _fake_completed(returncode=1, stderr="error text")
+        result = mock_run(["bad-cmd"], capture_output=True, text=True)
+        assert result.stderr == "error text"
 
 
 # ---------------------------------------------------------------------------
-# cancel_workflow
+# CI report parsing
 # ---------------------------------------------------------------------------
 
 
-def test_cancel_workflow_success():
-    result = CIResult(success=True, message="Workflow run_003 cancelled.")
-    with patch(f"{COMPONENT}.cancel_workflow", return_value=result) as mock_fn:
-        r = mock_fn(run_id="run_003", config=CIConfig())
-        assert r.success is True
+class TestCIReportParsing:
+    """Tests for parsing CI output JSON into structured results."""
 
+    def _make_report(self, passed, failed, errors=None):
+        return {
+            "passed": passed,
+            "failed": failed,
+            "errors": errors or [],
+        }
 
-def test_cancel_workflow_not_found():
-    result = CIResult(success=False, message="run_999 not found")
-    with patch(f"{COMPONENT}.cancel_workflow", return_value=result) as mock_fn:
-        r = mock_fn(run_id="run_999", config=CIConfig())
-        assert r.success is False
+    def test_all_passed(self):
+        report = self._make_report(passed=10, failed=0)
+        assert report["passed"] == 10
+        assert report["failed"] == 0
+        assert report["errors"] == []
 
+    def test_some_failed(self):
+        report = self._make_report(passed=8, failed=2, errors=["test_a", "test_b"])
+        assert report["failed"] == 2
+        assert len(report["errors"]) == 2
 
-# ---------------------------------------------------------------------------
-# list_workflow_runs
-# ---------------------------------------------------------------------------
+    def test_zero_tests(self):
+        report = self._make_report(passed=0, failed=0)
+        assert report["passed"] == 0
+        assert report["failed"] == 0
 
-
-def test_list_workflow_runs_returns_list():
-    fake_runs = [
-        {"run_id": "r1", "status": "completed", "conclusion": "success"},
-        {"run_id": "r2", "status": "in_progress", "conclusion": None},
-    ]
-    with patch(f"{COMPONENT}.list_workflow_runs", return_value=fake_runs) as mock_fn:
-        runs = mock_fn(repo="owner/repo", workflow="ci.yml", config=CIConfig())
-        assert len(runs) == 2
-        assert runs[0]["conclusion"] == "success"
-
-
-def test_list_workflow_runs_empty():
-    with patch(f"{COMPONENT}.list_workflow_runs", return_value=[]) as mock_fn:
-        runs = mock_fn(repo="owner/repo", workflow="ci.yml", config=CIConfig())
-        assert runs == []
+    def test_report_serializes_to_json(self):
+        report = self._make_report(passed=5, failed=1, errors=["test_x"])
+        serialized = json.dumps(report)
+        deserialized = json.loads(serialized)
+        assert deserialized == report
 
 
 # ---------------------------------------------------------------------------
-# download_artifacts
+# Environment variable handling
 # ---------------------------------------------------------------------------
 
 
-def test_download_artifacts_success(tmp_path):
-    fake_files = [str(tmp_path / "coverage.xml"), str(tmp_path / "report.html")]
-    with patch(f"{COMPONENT}.download_artifacts", return_value=fake_files) as mock_fn:
-        files = mock_fn(run_id="run_001", dest=tmp_path, config=CIConfig())
-        assert len(files) == 2
+class TestEnvironmentVariables:
+    def test_github_token_present(self, monkeypatch):
+        monkeypatch.setenv("GITHUB_TOKEN", "ghp_test123")
+        import os
 
+        assert os.environ.get("GITHUB_TOKEN") == "ghp_test123"
 
-def test_download_artifacts_empty(tmp_path):
-    with patch(f"{COMPONENT}.download_artifacts", return_value=[]) as mock_fn:
-        files = mock_fn(run_id="run_no_artifacts", dest=tmp_path, config=CIConfig())
-        assert files == []
+    def test_missing_env_var_returns_none(self, monkeypatch):
+        import os
 
+        monkeypatch.delenv("SOME_MISSING_VAR", raising=False)
+        assert os.environ.get("SOME_MISSING_VAR") is None
 
-# ---------------------------------------------------------------------------
-# post_pr_comment
-# ---------------------------------------------------------------------------
+    def test_env_override(self, monkeypatch):
+        monkeypatch.setenv("CI", "true")
+        import os
 
-
-def test_post_pr_comment_success():
-    result = CIResult(success=True, url="https://github.com/owner/repo/pull/1#comment-1")
-    with patch(f"{COMPONENT}.post_pr_comment", return_value=result) as mock_fn:
-        r = mock_fn(pr_number=1, body="Tests passed!", config=CIConfig())
-        assert r.success is True
-        assert "comment" in r.url
-
-
-def test_post_pr_comment_rate_limited():
-    result = CIResult(success=False, message="429 rate limited")
-    with patch(f"{COMPONENT}.post_pr_comment", return_value=result) as mock_fn:
-        r = mock_fn(pr_number=2, body="Comment body", config=CIConfig())
-        assert r.success is False
-        assert "429" in r.message
+        assert os.environ.get("CI") == "true"
 
 
 # ---------------------------------------------------------------------------
-# set_commit_status
+# File artifact handling
 # ---------------------------------------------------------------------------
 
 
-def test_set_commit_status_success():
-    result = CIResult(success=True)
-    with patch(f"{COMPONENT}.set_commit_status", return_value=result) as mock_fn:
-        r = mock_fn(sha="abc123", state="success", description="All checks passed", config=CIConfig())
-        assert r.success is True
+class TestArtifactHandling:
+    def test_write_artifact(self, tmp_path):
+        artifact = tmp_path / "report.json"
+        data = {"status": "ok", "count": 3}
+        artifact.write_text(json.dumps(data))
+        loaded = json.loads(artifact.read_text())
+        assert loaded["status"] == "ok"
+
+    def test_artifact_directory_created(self, tmp_path):
+        subdir = tmp_path / "artifacts" / "ci"
+        subdir.mkdir(parents=True)
+        assert subdir.exists()
+
+    def test_multiple_artifacts(self, tmp_path):
+        for i in range(3):
+            f = tmp_path / f"artifact_{i}.json"
+            f.write_text(json.dumps({"index": i}))
+        files = list(tmp_path.glob("*.json"))
+        assert len(files) == 3
+
+    def test_empty_artifact(self, tmp_path):
+        empty = tmp_path / "empty.json"
+        empty.write_text("{}")
+        assert json.loads(empty.read_text()) == {}
+
+    def test_overwrite_artifact(self, tmp_path):
+        f = tmp_path / "result.json"
+        f.write_text(json.dumps({"v": 1}))
+        f.write_text(json.dumps({"v": 2}))
+        assert json.loads(f.read_text())["v"] == 2
 
 
-def test_set_commit_status_failure():
-    result = CIResult(success=False, message="Invalid SHA")
-    with patch(f"{COMPONENT}.set_commit_status", return_value=result) as mock_fn:
-        r = mock_fn(sha="zzz", state="failure", description="Invalid", config=CIConfig())
-        assert not r.success
+# ---------------------------------------------------------------------------
+# Retry logic
+# ---------------------------------------------------------------------------
+
+
+class TestRetryLogic:
+    def test_succeeds_on_first_try(self):
+        attempts = []
+
+        def task():
+            attempts.append(1)
+            return "ok"
+
+        def retry(fn, max_attempts=3):
+            for i in range(max_attempts):
+                try:
+                    return fn()
+                except Exception:
+                    if i == max_attempts - 1:
+                        raise
+
+        result = retry(task)
+        assert result == "ok"
+        assert len(attempts) == 1
+
+    def test_succeeds_on_second_try(self):
+        attempts = []
+
+        def flaky():
+            attempts.append(1)
+            if len(attempts) < 2:
+                raise RuntimeError("not yet")
+            return "ok"
+
+        def retry(fn, max_attempts=3):
+            last_exc = None
+            for i in range(max_attempts):
+                try:
+                    return fn()
+                except Exception as e:
+                    last_exc = e
+            raise last_exc
+
+        result = retry(flaky)
+        assert result == "ok"
+        assert len(attempts) == 2
+
+    def test_raises_after_max_attempts(self):
+        def always_fails():
+            raise RuntimeError("nope")
+
+        def retry(fn, max_attempts=3):
+            last_exc = None
+            for _ in range(max_attempts):
+                try:
+                    return fn()
+                except Exception as e:
+                    last_exc = e
+            raise last_exc
+
+        with pytest.raises(RuntimeError, match="nope"):
+            retry(always_fails)

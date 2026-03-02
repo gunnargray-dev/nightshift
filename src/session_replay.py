@@ -1,385 +1,280 @@
-"""Session replay module for Awake.
-
-Reconstructs a complete picture of what any previous Awake session did:
-files changed, analyses run, PRs opened, refactors applied, health deltas.
-
-Data sources (all optional -- gracefully absent):
-- ``.awake/sessions/<session_id>/`` -- per-session JSON artefacts
-- ``docs/``                          -- latest analysis outputs
-- ``git log``                        -- commit history for the session window
-
-Public API
-----------
-- ``SessionEvent``     -- a single timestamped event
-- ``SessionReplay``    -- full reconstruction for one session
-- ``replay_session(session_id, repo_path)`` -> ``SessionReplay``
-- ``list_sessions(repo_path)``               -> list of session IDs
-- ``save_replay(replay, out_path)``
-
-CLI
----
-    awake replay                       # List sessions
-    awake replay <session_id>          # Replay a specific session
-    awake replay <session_id> --json   # Output raw JSON
-    awake replay <session_id> --write  # Write docs/replay_<id>.md
-"""
-
-from __future__ import annotations
+"""Session replay utilities for awake."""
 
 import json
-import subprocess
+import re
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
-
-
-# ---------------------------------------------------------------------------
-# Data classes
-# ---------------------------------------------------------------------------
+from typing import Any, Iterator, Optional
 
 
 @dataclass
-class SessionEvent:
-    """A single event that occurred during a session."""
+class ReplayEvent:
+    """A single event captured during an awake session."""
 
-    timestamp: str       # ISO-8601 string or empty
-    kind: str            # "analysis" | "pr_opened" | "refactor" | "commit" | "plugin" | "error" | "info"
-    summary: str         # One-line description
-    detail: Optional[dict] = None  # Optional structured detail
-
-    def to_dict(self) -> dict:
-        """Return a serialisable dict."""
-        return {
-            "timestamp": self.timestamp,
-            "kind": self.kind,
-            "summary": self.summary,
-            "detail": self.detail,
-        }
-
-    def to_markdown_row(self) -> str:
-        """Render as a Markdown table row."""
-        ts = self.timestamp[:19] if self.timestamp else "\u2014"
-        return f"| {ts} | `{self.kind}` | {self.summary} |"
+    timestamp: datetime
+    kind: str  # e.g. 'tool_call', 'llm_response', 'file_write', 'shell_exec'
+    payload: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
-class SessionReplay:
-    """Full reconstruction of a session."""
+class ReplaySession:
+    """A full recorded session."""
 
     session_id: str
-    repo_path: str
-    events: list[SessionEvent] = field(default_factory=list)
-    health_before: Optional[float] = None
-    health_after: Optional[float] = None
-    files_changed: list[str] = field(default_factory=list)
-    prs_opened: list[int] = field(default_factory=list)
-    errors: list[str] = field(default_factory=list)
-
-    @property
-    def health_delta(self) -> Optional[float]:
-        """The health score change during the session."""
-        if self.health_before is not None and self.health_after is not None:
-            return self.health_after - self.health_before
-        return None
-
-    def to_dict(self) -> dict:
-        """Return a serialisable dict."""
-        return {
-            "session_id": self.session_id,
-            "repo_path": self.repo_path,
-            "events": [e.to_dict() for e in self.events],
-            "health_before": self.health_before,
-            "health_after": self.health_after,
-            "health_delta": self.health_delta,
-            "files_changed": self.files_changed,
-            "prs_opened": self.prs_opened,
-            "errors": self.errors,
-        }
-
-    def to_markdown(self) -> str:
-        """Render the replay as a Markdown report."""
-        lines = [
-            f"# Session Replay: `{self.session_id}`",
-            "",
-            "## Summary",
-            "",
-            f"| Metric | Value |",
-            f"|--------|-------|",
-            f"| Session ID | `{self.session_id}` |",
-            f"| Events | {len(self.events)} |",
-            f"| Files changed | {len(self.files_changed)} |",
-            f"| PRs opened | {len(self.prs_opened)} |",
-        ]
-        if self.health_before is not None:
-            lines.append(f"| Health before | {self.health_before:.1f} |")
-        if self.health_after is not None:
-            lines.append(f"| Health after | {self.health_after:.1f} |")
-        if self.health_delta is not None:
-            sign = "+" if self.health_delta >= 0 else ""
-            lines.append(f"| Health delta | {sign}{self.health_delta:.1f} |")
-        lines.append("")
-
-        if self.files_changed:
-            lines += ["## Files Changed", ""]
-            for f in self.files_changed:
-                lines.append(f"- `{f}`")
-            lines.append("")
-
-        if self.events:
-            lines += [
-                "## Event Timeline",
-                "",
-                "| Timestamp | Kind | Summary |",
-                "|-----------|------|---------|",
-            ]
-            for event in self.events:
-                lines.append(event.to_markdown_row())
-            lines.append("")
-
-        if self.errors:
-            lines += ["## Errors", ""]
-            for err in self.errors:
-                lines.append(f"- {err}")
-            lines.append("")
-
-        return "\n".join(lines)
+    events: list[ReplayEvent] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
-# Session directory helpers
+# Serialization
 # ---------------------------------------------------------------------------
 
 
-def _session_dir(repo_path: Path, session_id: str) -> Path:
-    """Return the path to a session's artefact directory."""
-    return repo_path / ".awake" / "sessions" / session_id
+def _serialize_event(event: ReplayEvent) -> dict:
+    return {
+        "timestamp": event.timestamp.isoformat(),
+        "kind": event.kind,
+        "payload": event.payload,
+        "metadata": event.metadata,
+    }
 
 
-def list_sessions(repo_path: str | Path) -> list[str]:
-    """Return a sorted list of session IDs found on disk.
+def _deserialize_event(data: dict) -> ReplayEvent:
+    return ReplayEvent(
+        timestamp=datetime.fromisoformat(data["timestamp"]),
+        kind=data["kind"],
+        payload=data.get("payload", {}),
+        metadata=data.get("metadata", {}),
+    )
 
-    Parameters
-    ----------
-    repo_path:
-        Repository root.
 
-    Returns
-    -------
-    list[str]
+def save_session(session: ReplaySession, path: str) -> None:
     """
-    sessions_dir = Path(repo_path) / ".awake" / "sessions"
-    if not sessions_dir.exists():
-        return []
-    return sorted(p.name for p in sessions_dir.iterdir() if p.is_dir())
+    Persist a ReplaySession to a JSON file.
 
-
-def _load_session_json(session_dir: Path, filename: str) -> Optional[dict]:
-    """Load a JSON file from the session directory."""
-    path = session_dir / filename
-    if not path.exists():
-        return None
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return None
-
-
-# ---------------------------------------------------------------------------
-# Git helpers
-# ---------------------------------------------------------------------------
-
-
-def _git_commits_in_window(repo_path: Path, since: str, until: str) -> list[dict]:
-    """Return commits between two ISO timestamps."""
-    try:
-        result = subprocess.run(
-            [
-                "git", "log",
-                f"--after={since}",
-                f"--before={until}",
-                "--pretty=format:%H|%ai|%s",
-            ],
-            cwd=str(repo_path),
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        commits = []
-        for line in result.stdout.splitlines():
-            parts = line.split("|", 2)
-            if len(parts) == 3:
-                commits.append({"sha": parts[0], "timestamp": parts[1], "subject": parts[2]})
-        return commits
-    except Exception:
-        return []
-
-
-# ---------------------------------------------------------------------------
-# Replay builder
-# ---------------------------------------------------------------------------
-
-
-def replay_session(
-    session_id: str,
-    repo_path: str | Path,
-) -> SessionReplay:
-    """Reconstruct a ``SessionReplay`` for the given *session_id*.
-
-    Parameters
-    ----------
-    session_id:
-        The session UUID or name.
-    repo_path:
-        Path to the repository root.
-
-    Returns
-    -------
-    SessionReplay
+    Args:
+        session: The session to save.
+        path: Output file path.
     """
-    repo = Path(repo_path).expanduser().resolve()
-    s_dir = _session_dir(repo, session_id)
-    replay = SessionReplay(session_id=session_id, repo_path=str(repo))
-
-    if not s_dir.exists():
-        replay.errors.append(f"Session directory not found: {s_dir}")
-        return replay
-
-    # Load session manifest
-    manifest = _load_session_json(s_dir, "manifest.json")
-    if manifest:
-        replay.health_before = manifest.get("health_before")
-        replay.health_after = manifest.get("health_after")
-        replay.files_changed = manifest.get("files_changed", [])
-        replay.prs_opened = manifest.get("prs_opened", [])
-
-        # Add events from manifest
-        for raw_event in manifest.get("events", []):
-            replay.events.append(
-                SessionEvent(
-                    timestamp=raw_event.get("timestamp", ""),
-                    kind=raw_event.get("kind", "info"),
-                    summary=raw_event.get("summary", ""),
-                    detail=raw_event.get("detail"),
-                )
-            )
-
-    # Load health snapshots
-    health_data = _load_session_json(s_dir, "health_report.json")
-    if health_data:
-        score = health_data.get("overall_score")
-        if score is not None:
-            replay.events.append(
-                SessionEvent(
-                    timestamp=health_data.get("generated_at", ""),
-                    kind="analysis",
-                    summary=f"Health analysis complete: score={score:.1f}",
-                    detail={"score": score},
-                )
-            )
-
-    # Load refactor report
-    refactor_data = _load_session_json(s_dir, "refactor_report.json")
-    if refactor_data:
-        n = refactor_data.get("total_suggestions", 0)
-        replay.events.append(
-            SessionEvent(
-                timestamp="",
-                kind="refactor",
-                summary=f"Refactor scan: {n} suggestion(s) found",
-                detail={"total": n},
-            )
-        )
-
-    # Load PR data
-    pr_data = _load_session_json(s_dir, "pr_score.json")
-    if pr_data:
-        pr_num = pr_data.get("pr_number")
-        score = pr_data.get("score")
-        if pr_num:
-            replay.prs_opened.append(pr_num)
-            replay.events.append(
-                SessionEvent(
-                    timestamp="",
-                    kind="pr_opened",
-                    summary=f"PR #{pr_num} scored: {score:.1f}" if score else f"PR #{pr_num} opened",
-                    detail=pr_data,
-                )
-            )
-
-    # Sort events by timestamp
-    replay.events.sort(key=lambda e: e.timestamp or "")
-    return replay
+    payload = {
+        "session_id": session.session_id,
+        "metadata": session.metadata,
+        "events": [_serialize_event(e) for e in session.events],
+    }
+    Path(path).write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
-# ---------------------------------------------------------------------------
-# Persistence
-# ---------------------------------------------------------------------------
-
-
-def save_replay(replay: SessionReplay, out_path: str | Path) -> None:
-    """Save a ``SessionReplay`` as JSON.
-
-    Parameters
-    ----------
-    replay:
-        The replay to save.
-    out_path:
-        Output file path.
+def load_session(path: str) -> ReplaySession:
     """
-    Path(out_path).write_text(
-        json.dumps(replay.to_dict(), indent=2) + "\n",
-        encoding="utf-8",
+    Load a ReplaySession from a JSON file.
+
+    Args:
+        path: Path to the JSON file.
+
+    Returns:
+        A ReplaySession instance.
+    """
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    return ReplaySession(
+        session_id=data["session_id"],
+        events=[_deserialize_event(e) for e in data.get("events", [])],
+        metadata=data.get("metadata", {}),
     )
 
 
 # ---------------------------------------------------------------------------
-# CLI
+# Filtering and slicing
 # ---------------------------------------------------------------------------
 
 
-def main(argv=None) -> int:
-    """CLI entry point for session replay."""
-    import argparse
+def filter_events(
+    session: ReplaySession,
+    kind: Optional[str] = None,
+    since: Optional[datetime] = None,
+    until: Optional[datetime] = None,
+    payload_key: Optional[str] = None,
+    payload_value: Optional[Any] = None,
+) -> list[ReplayEvent]:
+    """
+    Return events matching all supplied filters.
 
-    p = argparse.ArgumentParser(prog="awake-replay")
-    p.add_argument("session_id", nargs="?", default=None, help="Session ID to replay")
-    p.add_argument("--repo", default=None, help="Repository root")
-    p.add_argument("--json", action="store_true", help="Output raw JSON")
-    p.add_argument("--write", action="store_true", help="Write markdown to docs/")
-    args = p.parse_args(argv)
+    Args:
+        session: The session to filter.
+        kind: If given, only return events of this kind.
+        since: If given, only return events at or after this timestamp.
+        until: If given, only return events at or before this timestamp.
+        payload_key: If given (with payload_value), filter by payload field.
+        payload_value: Required when payload_key is set.
 
-    if args.repo:
-        repo_path = Path(args.repo).expanduser().resolve()
-    else:
-        repo_path = Path(__file__).resolve().parents[1]
+    Returns:
+        Filtered list of ReplayEvent objects.
+    """
+    events = session.events
+    if kind:
+        events = [e for e in events if e.kind == kind]
+    if since:
+        events = [e for e in events if e.timestamp >= since]
+    if until:
+        events = [e for e in events if e.timestamp <= until]
+    if payload_key is not None:
+        events = [e for e in events if e.payload.get(payload_key) == payload_value]
+    return events
 
-    if not args.session_id:
-        # List sessions
-        sessions = list_sessions(repo_path)
-        if not sessions:
-            print("No sessions found.")
+
+def slice_session(
+    session: ReplaySession,
+    start_index: int = 0,
+    end_index: Optional[int] = None,
+) -> ReplaySession:
+    """
+    Return a new ReplaySession containing a slice of the events.
+
+    Args:
+        session: The source session.
+        start_index: First event index (inclusive).
+        end_index: Last event index (exclusive). Defaults to end.
+
+    Returns:
+        A new ReplaySession with the sliced events.
+    """
+    return ReplaySession(
+        session_id=session.session_id,
+        events=session.events[start_index:end_index],
+        metadata=dict(session.metadata),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Replay execution
+# ---------------------------------------------------------------------------
+
+
+def iter_events(
+    session: ReplaySession,
+    *,
+    reverse: bool = False,
+) -> Iterator[ReplayEvent]:
+    """
+    Iterate over session events, optionally in reverse.
+
+    Args:
+        session: The session to iterate.
+        reverse: If True, iterate newest-first.
+
+    Yields:
+        ReplayEvent objects.
+    """
+    events = list(session.events)
+    if reverse:
+        events = list(reversed(events))
+    yield from events
+
+
+def replay_events(
+    session: ReplaySession,
+    handler: Any,
+    *,
+    kind_filter: Optional[str] = None,
+    dry_run: bool = False,
+) -> list[Any]:
+    """
+    Replay session events by dispatching each to a handler.
+
+    The handler should be a callable or an object with methods named
+    ``handle_<kind>`` (e.g. ``handle_tool_call``).  If neither form
+    matches, the event is skipped.
+
+    Args:
+        session: The session to replay.
+        handler: Callable or object with ``handle_<kind>`` methods.
+        kind_filter: If given, only replay events of this kind.
+        dry_run: If True, log events without calling the handler.
+
+    Returns:
+        List of handler return values.
+    """
+    results = []
+    for event in iter_events(session):
+        if kind_filter and event.kind != kind_filter:
+            continue
+
+        if dry_run:
+            results.append({"dry_run": True, "event": _serialize_event(event)})
+            continue
+
+        if callable(handler):
+            results.append(handler(event))
         else:
-            for s in sessions:
-                print(s)
-        return 0
+            method_name = f"handle_{event.kind}"
+            method = getattr(handler, method_name, None)
+            if method:
+                results.append(method(event))
 
-    replay = replay_session(args.session_id, repo_path)
-
-    if args.json:
-        print(json.dumps(replay.to_dict(), indent=2))
-    else:
-        md = replay.to_markdown()
-        if args.write:
-            docs = repo_path / "docs"
-            docs.mkdir(exist_ok=True)
-            out_path = docs / f"replay_{args.session_id[:8]}.md"
-            out_path.write_text(md, encoding="utf-8")
-            print(f"  Wrote {out_path}")
-        else:
-            print(md)
-
-    return 0
+    return results
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+# ---------------------------------------------------------------------------
+# Diff / comparison utilities
+# ---------------------------------------------------------------------------
+
+
+def diff_sessions(
+    baseline: ReplaySession,
+    candidate: ReplaySession,
+) -> dict[str, Any]:
+    """
+    Produce a high-level diff between two sessions.
+
+    Args:
+        baseline: The reference session.
+        candidate: The session to compare against the baseline.
+
+    Returns:
+        A dict with keys: added_kinds, removed_kinds, event_count_delta.
+    """
+    baseline_kinds = {e.kind for e in baseline.events}
+    candidate_kinds = {e.kind for e in candidate.events}
+    return {
+        "added_kinds": sorted(candidate_kinds - baseline_kinds),
+        "removed_kinds": sorted(baseline_kinds - candidate_kinds),
+        "event_count_delta": len(candidate.events) - len(baseline.events),
+    }
+
+
+def search_events(
+    session: ReplaySession,
+    pattern: str,
+    *,
+    fields: Optional[list[str]] = None,
+    case_sensitive: bool = False,
+) -> list[ReplayEvent]:
+    """
+    Search events whose payload fields match a regex pattern.
+
+    Args:
+        session: The session to search.
+        pattern: Regex pattern to match against string field values.
+        fields: Specific payload keys to search; defaults to all string values.
+        case_sensitive: Whether the pattern match is case-sensitive.
+
+    Returns:
+        List of matching ReplayEvent objects.
+    """
+    flags = 0 if case_sensitive else re.IGNORECASE
+    compiled = re.compile(pattern, flags)
+    results = []
+
+    for event in session.events:
+        search_fields = (
+            {k: event.payload[k] for k in fields if k in event.payload}
+            if fields
+            else event.payload
+        )
+        for value in search_fields.values():
+            if isinstance(value, str) and compiled.search(value):
+                results.append(event)
+                break
+
+    return results

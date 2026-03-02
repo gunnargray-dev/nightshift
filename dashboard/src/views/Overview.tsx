@@ -12,103 +12,119 @@ import { Badge } from "../components/Badge";
 import { StatCardSkeleton } from "../components/Skeleton";
 
 function computeScore(f: any): number {
-  if (!f) return 0;
-  const pass = f.passed ?? 0;
-  const fail = f.failed ?? 0;
-  const skip = f.skipped ?? 0;
-  const total = pass + fail + skip;
-  if (total === 0) return 0;
-  return Math.round((pass / total) * 100);
+  if (f.parse_error) return 50;
+  let score = 100;
+  score -= Math.min((f.long_lines ?? 0) * 0.5, 20);
+  score -= Math.min((f.todo_count ?? 0) * 2, 20);
+  score -= (1 - (f.docstring_coverage ?? 1)) * 20;
+  return Math.max(0, Math.round(score * 10) / 10);
 }
 
-function scoreVariant(
-  score: number
-): "success" | "warning" | "danger" | "neutral" {
-  if (score >= 90) return "success";
-  if (score >= 70) return "warning";
-  if (score >= 1) return "danger";
-  return "neutral";
+function healthBadge(score: number) {
+  if (score >= 85) return <Badge variant="success">Excellent</Badge>;
+  if (score >= 70) return <Badge variant="warning">Good</Badge>;
+  return <Badge variant="error">Needs work</Badge>;
 }
 
 export function Overview() {
-  const { data: stats, isLoading: statsLoading } = useStats();
-  const { data: health } = useHealth();
+  const stats = useStats();
+  const health = useHealth();
 
-  const testScore = computeScore(stats?.tests);
+  const s = stats.data as any;
+  const h = health.data as any;
+
+  const fileList: any[] = Array.isArray(h?.files) ? h.files : [];
+  const overallHealth =
+    fileList.length > 0
+      ? Math.round(fileList.reduce((sum, f) => sum + computeScore(f), 0) / fileList.length)
+      : null;
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-5xl">
       <PageHeader
         title="Overview"
-        subtitle="Summary of your repository health and recent activity."
+        description="Real-time snapshot of the awake autonomous development system."
       />
 
-      {health && (
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-zinc-400">Status:</span>
-          <Badge
-            variant={
-              health.status === "ok"
-                ? "success"
-                : health.status === "degraded"
-                ? "warning"
-                : "danger"
-            }
-          >
-            {health.status}
-          </Badge>
-          {health.version && (
-            <span className="text-zinc-500 text-xs">v{health.version}</span>
-          )}
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {statsLoading ? (
+      <div className="grid grid-cols-5 gap-4 mb-8">
+        {stats.isLoading ? (
           Array.from({ length: 5 }).map((_, i) => <StatCardSkeleton key={i} />)
         ) : (
           <>
             <StatCard
-              title="Open PRs"
-              value={stats?.prs?.open ?? 0}
-              icon={<GitPullRequest className="w-5 h-5" />}
-              variant="default"
+              label="Sessions"
+              value={s?.nights_active ?? "\u2014"}
+              sub="Nights active"
+              icon={<Clock size={15} />}
             />
             <StatCard
-              title="Modules"
-              value={stats?.modules ?? 0}
-              icon={<Blocks className="w-5 h-5" />}
-              variant="default"
+              label="PRs"
+              value={s?.prs_merged ?? "\u2014"}
+              sub="Merged"
+              icon={<GitPullRequest size={15} />}
             />
             <StatCard
-              title="Test Score"
-              value={`${testScore}%`}
-              icon={<TestTubeDiagonal className="w-5 h-5" />}
-              variant={scoreVariant(testScore)}
+              label="Features"
+              value={s?.features_shipped ?? "\u2014"}
+              sub="Shipped"
+              icon={<Blocks size={15} />}
             />
             <StatCard
-              title="Avg Complexity"
-              value={
-                stats?.complexity?.average !== undefined
-                  ? stats.complexity.average.toFixed(1)
-                  : "N/A"
-              }
-              icon={<TrendingUp className="w-5 h-5" />}
-              variant="default"
+              label="Tests"
+              value={s?.tests_added ?? "\u2014"}
+              sub="Added"
+              icon={<TestTubeDiagonal size={15} />}
             />
             <StatCard
-              title="Last Run"
-              value={
-                stats?.last_run
-                  ? new Date(stats.last_run).toLocaleString()
-                  : "N/A"
-              }
-              icon={<Clock className="w-5 h-5" />}
-              variant="default"
+              label="Health"
+              value={overallHealth !== null ? `${overallHealth}%` : "\u2014"}
+              sub="Code quality"
+              icon={<TrendingUp size={15} />}
             />
           </>
         )}
       </div>
+
+      {health.isLoading ? (
+        <div className="text-sm text-gray-500">Loading health data...</div>
+      ) : (
+        <div className="border border-gray-800 rounded-lg overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-800 bg-gray-900">
+                <th className="text-left px-4 py-2 text-gray-400 font-medium">File</th>
+                <th className="text-left px-4 py-2 text-gray-400 font-medium">Score</th>
+                <th className="text-left px-4 py-2 text-gray-400 font-medium">Status</th>
+                <th className="text-left px-4 py-2 text-gray-400 font-medium">Issues</th>
+              </tr>
+            </thead>
+            <tbody>
+              {fileList.map((f, i) => {
+                const score = computeScore(f);
+                return (
+                  <tr
+                    key={i}
+                    className="border-b border-gray-800 last:border-0 hover:bg-gray-900/50"
+                  >
+                    <td className="px-4 py-2 font-mono text-xs text-gray-300">{f.file}</td>
+                    <td className="px-4 py-2 text-gray-300">{score}%</td>
+                    <td className="px-4 py-2">{healthBadge(score)}</td>
+                    <td className="px-4 py-2 text-gray-500 text-xs">
+                      {[
+                        f.long_lines ? `${f.long_lines} long lines` : null,
+                        f.todo_count ? `${f.todo_count} TODOs` : null,
+                        f.parse_error ? "parse error" : null,
+                      ]
+                        .filter(Boolean)
+                        .join(", ") || "None"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

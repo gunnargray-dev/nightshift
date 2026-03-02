@@ -1,170 +1,251 @@
-"""Tests for README updater."""
-from __future__ import annotations
-
-from pathlib import Path
+"""Tests for the README session-log updater."""
 
 import pytest
 
 from src.readme_updater import (
-    ReadmeConfig,
-    _extract_sections,
-    _generate_badges,
-    _generate_toc,
-    _make_badge,
-    _replace_section,
+    SessionSummary,
+    parse_session_log,
+    render_session_log,
     update_readme,
+    write_readme,
 )
 
 
 # ---------------------------------------------------------------------------
-# _make_badge
+# Fixtures
 # ---------------------------------------------------------------------------
 
 
-def test_make_badge_format():
-    badge = _make_badge("Python", "3.11", "blue")
-    assert badge.startswith("![Python]")
-    assert "img.shields.io" in badge
-    assert "blue" in badge
+@pytest.fixture
+def simple_readme():
+    return """# My Project
+
+Some intro text.
+
+## Session Log
+
+### 2025-03-01
+- Added feature X
+- Fixed bug Y
+
+2 tests added, 1 PRs merged
+
+### 2025-02-15
+- Initial setup
+
+3 tests added
+"""
 
 
-def test_make_badge_encodes_spaces():
-    badge = _make_badge("my label", "my value", "green")
-    assert " " not in badge
+@pytest.fixture
+def readme_no_session(tmp_path):
+    p = tmp_path / "README.md"
+    p.write_text("# Project\n\nNo session log yet.\n")
+    return str(p)
 
 
-def test_make_badge_style():
-    badge = _make_badge("Status", "passing", "green", style="for-the-badge")
-    assert "for-the-badge" in badge
-
-
-# ---------------------------------------------------------------------------
-# _extract_sections
-# ---------------------------------------------------------------------------
-
-
-def test_extract_sections_basic():
-    md = "# Title\nSome intro.\n## Installation\nInstall here.\n## Usage\nUse here."
-    sections = _extract_sections(md)
-    assert "Installation" in sections
-    assert "Usage" in sections
-    assert "Install here." in sections["Installation"]
-
-
-def test_extract_sections_empty():
-    sections = _extract_sections("no headings here")
-    assert sections == {}
-
-
-def test_extract_sections_nested_headings():
-    md = "# H1\n## H2\n### H3\ncontent"
-    sections = _extract_sections(md)
-    assert "H1" in sections
-    assert "H2" in sections
-    assert "H3" in sections
+@pytest.fixture
+def readme_with_session(tmp_path, simple_readme):
+    p = tmp_path / "README.md"
+    p.write_text(simple_readme)
+    return str(p)
 
 
 # ---------------------------------------------------------------------------
-# _generate_toc
+# parse_session_log
 # ---------------------------------------------------------------------------
 
 
-def test_generate_toc_contains_links():
-    md = "# Title\n## Installation\n## Usage\n## Contributing"
-    toc = _generate_toc(md)
-    assert "Installation" in toc
-    assert "Usage" in toc
-    assert "Contributing" in toc
-    assert "#" in toc  # anchor links
+class TestParseSessionLog:
+    def test_parses_two_sessions(self, simple_readme):
+        sessions = parse_session_log(simple_readme)
+        assert len(sessions) == 2
 
+    def test_dates_correct(self, simple_readme):
+        sessions = parse_session_log(simple_readme)
+        dates = {s.date for s in sessions}
+        assert "2025-03-01" in dates
+        assert "2025-02-15" in dates
 
-def test_generate_toc_skips_self():
-    md = "# Title\n## Table of Contents\n## Installation"
-    toc = _generate_toc(md)
-    # Should not include Table of Contents in the TOC itself
-    lines = toc.splitlines()
-    assert not any("Table of Contents" in l for l in lines if l.startswith("-"))
+    def test_features_extracted(self, simple_readme):
+        sessions = parse_session_log(simple_readme)
+        march = next(s for s in sessions if s.date == "2025-03-01")
+        assert "Added feature X" in march.features
+        assert "Fixed bug Y" in march.features
 
+    def test_tests_added_parsed(self, simple_readme):
+        sessions = parse_session_log(simple_readme)
+        march = next(s for s in sessions if s.date == "2025-03-01")
+        assert march.tests_added == 2
 
-def test_generate_toc_indents_subheadings():
-    md = "# H1\n## H2\n### H3"
-    toc = _generate_toc(md)
-    # H3 should be indented more than H2
-    h2_line = next(l for l in toc.splitlines() if "H2" in l)
-    h3_line = next(l for l in toc.splitlines() if "H3" in l)
-    assert h3_line.startswith("  ")  # indented
+    def test_prs_merged_parsed(self, simple_readme):
+        sessions = parse_session_log(simple_readme)
+        march = next(s for s in sessions if s.date == "2025-03-01")
+        assert march.prs_merged == 1
 
-
-# ---------------------------------------------------------------------------
-# _generate_badges
-# ---------------------------------------------------------------------------
-
-
-def test_generate_badges_with_python_files(tmp_path):
-    (tmp_path / "main.py").write_text("# py")
-    badges = _generate_badges(tmp_path)
-    assert "Python" in badges
-
-
-def test_generate_badges_with_license(tmp_path):
-    (tmp_path / "LICENSE").write_text("MIT")
-    (tmp_path / "main.py").write_text("# py")
-    badges = _generate_badges(tmp_path)
-    assert "License" in badges
-
-
-def test_generate_badges_empty_repo(tmp_path):
-    badges = _generate_badges(tmp_path)
-    assert badges == ""
+    def test_no_session_section_returns_empty(self):
+        content = "# Just a readme\n\nNo sessions here.\n"
+        assert parse_session_log(content) == []
 
 
 # ---------------------------------------------------------------------------
-# _replace_section
+# render_session_log
 # ---------------------------------------------------------------------------
 
 
-def test_replace_section_updates_content():
-    md = "# Title\n\n## Installation\n\nOld content.\n\n## Usage\n\nUse it."
-    result = _replace_section(md, "Installation", "New content.")
-    assert "New content." in result
-    assert "Old content." not in result
+class TestRenderSessionLog:
+    def test_newest_first(self):
+        sessions = [
+            SessionSummary(date="2025-01-01", features=[], tests_added=0, prs_merged=0),
+            SessionSummary(date="2025-03-01", features=[], tests_added=0, prs_merged=0),
+        ]
+        rendered = render_session_log(sessions)
+        assert rendered.index("2025-03-01") < rendered.index("2025-01-01")
 
+    def test_contains_section_header(self):
+        rendered = render_session_log([])
+        assert "Session Log" in rendered
 
-def test_replace_section_preserves_other_sections():
-    md = "# Title\n\n## Installation\n\nOld.\n\n## Usage\n\nUse it."
-    result = _replace_section(md, "Installation", "New.")
-    assert "Use it." in result
+    def test_features_rendered(self):
+        sessions = [
+            SessionSummary(
+                date="2025-06-01",
+                features=["feat A", "feat B"],
+                tests_added=0,
+                prs_merged=0,
+            )
+        ]
+        rendered = render_session_log(sessions)
+        assert "feat A" in rendered
+        assert "feat B" in rendered
+
+    def test_meta_rendered(self):
+        sessions = [
+            SessionSummary(
+                date="2025-06-01",
+                features=[],
+                tests_added=5,
+                prs_merged=2,
+            )
+        ]
+        rendered = render_session_log(sessions)
+        assert "5 tests added" in rendered
+        assert "2 PRs merged" in rendered
+
+    def test_notes_rendered(self):
+        sessions = [
+            SessionSummary(
+                date="2025-06-01",
+                features=[],
+                tests_added=0,
+                prs_merged=0,
+                notes="Experimental night",
+            )
+        ]
+        rendered = render_session_log(sessions)
+        assert "Experimental night" in rendered
 
 
 # ---------------------------------------------------------------------------
-# update_readme integration
+# update_readme
 # ---------------------------------------------------------------------------
 
 
-def test_update_readme_no_readme(tmp_path):
-    result = update_readme(tmp_path)
-    assert "error" in result
+class TestUpdateReadme:
+    def test_adds_new_session_to_existing_section(self, readme_with_session):
+        new_session = SessionSummary(
+            date="2025-04-01",
+            features=["new feature"],
+            tests_added=3,
+            prs_merged=1,
+        )
+        result = update_readme(readme_with_session, new_session)
+        assert "2025-04-01" in result
+        assert "new feature" in result
+
+    def test_replaces_session_with_same_date(self, readme_with_session):
+        replacement = SessionSummary(
+            date="2025-03-01",
+            features=["replaced feature"],
+            tests_added=99,
+            prs_merged=5,
+        )
+        result = update_readme(readme_with_session, replacement)
+        assert "replaced feature" in result
+        # Original feature for 2025-03-01 should be gone
+        assert "Added feature X" not in result
+
+    def test_creates_section_when_missing(self, readme_no_session):
+        new_session = SessionSummary(
+            date="2025-05-01",
+            features=["bootstrap"],
+            tests_added=1,
+            prs_merged=0,
+        )
+        result = update_readme(readme_no_session, new_session)
+        assert "Session Log" in result
+        assert "bootstrap" in result
+
+    def test_no_section_created_when_flag_false(self, readme_no_session):
+        new_session = SessionSummary(
+            date="2025-05-01",
+            features=["x"],
+            tests_added=0,
+            prs_merged=0,
+        )
+        result = update_readme(
+            readme_no_session, new_session, create_section_if_missing=False
+        )
+        assert "Session Log" not in result
+
+    def test_preserves_content_before_section(self, readme_with_session):
+        new_session = SessionSummary(
+            date="2025-04-01",
+            features=[],
+            tests_added=0,
+            prs_merged=0,
+        )
+        result = update_readme(readme_with_session, new_session)
+        assert "Some intro text" in result
+
+    def test_existing_sessions_preserved(self, readme_with_session):
+        new_session = SessionSummary(
+            date="2025-04-01",
+            features=["new"],
+            tests_added=0,
+            prs_merged=0,
+        )
+        result = update_readme(readme_with_session, new_session)
+        assert "2025-02-15" in result
 
 
-def test_update_readme_dry_run(tmp_path):
-    readme = tmp_path / "README.md"
-    readme.write_text("# My Project\n\nSome content.\n")
-    (tmp_path / "main.py").write_text("# py")
-    result = update_readme(tmp_path, config=ReadmeConfig(dry_run=True))
-    assert result["path"] == str(readme)
-    # dry_run should return new_content
-    assert "new_content" in result
+# ---------------------------------------------------------------------------
+# write_readme (file I/O)
+# ---------------------------------------------------------------------------
 
 
-def test_update_readme_writes_file(tmp_path):
-    readme = tmp_path / "README.md"
-    readme.write_text(
-        "# My Project\n\n"
-        "[![Python](https://img.shields.io/badge/Python-3.11-blue)](x)\n\n"
-        "## Table of Contents\n\nOld TOC.\n\n## Installation\n\nStuff.\n"
-    )
-    (tmp_path / "main.py").write_text("# py")
-    result = update_readme(tmp_path, config=ReadmeConfig(dry_run=False))
-    assert result["modified"] is True
-    updated = readme.read_text()
-    assert "Installation" in updated
+class TestWriteReadme:
+    def test_writes_file(self, tmp_path):
+        p = tmp_path / "README.md"
+        p.write_text("# Hello\n")
+        new_session = SessionSummary(
+            date="2025-07-01",
+            features=["written"],
+            tests_added=2,
+            prs_merged=1,
+        )
+        write_readme(str(p), new_session)
+        content = p.read_text()
+        assert "written" in content
+
+    def test_file_created_when_missing(self, tmp_path):
+        p = tmp_path / "NEW_README.md"
+        new_session = SessionSummary(
+            date="2025-07-01",
+            features=["brand new"],
+            tests_added=0,
+            prs_merged=0,
+        )
+        write_readme(str(p), new_session)
+        assert p.exists()
+        assert "brand new" in p.read_text()
