@@ -1,368 +1,447 @@
 """PR quality scorer for Awake.
 
-Analyzes pull requests (via the GitHub REST API or local git diff) and
-produces a quality score (0-100) plus structured feedback.  The scoring
-rubric rewards:
+Analyzes pull requests (from GitHub API data or local PR description files)
+and scores them across five dimensions:
 
-- Small, focused diffs (fewer files and lines changed)
-- Presence of tests alongside production changes
-- A descriptive PR title and body
-- Conventional commit messages in the branch
-- Linked issues / keywords ("Fixes #N", "Closes #N")
+1. Description quality  -- Has What/Why/How sections? Word count reasonable?
+2. Test coverage signal -- Test results block present? Test count mentioned?
+3. Code clarity signal  -- Commit message follows convention? Branch name clean?
+4. Diff scope           -- Not too large, not empty. Sweet-spot 50-500 lines.
+5. Session metadata     -- Session number present? Follows PR template?
 
-The scorer can operate in two modes:
-
-``--local``
-    Compare the current branch against ``main`` using ``git diff``.
-
-``--pr N``
-    Fetch PR metadata from the GitHub API (requires ``GITHUB_TOKEN``).
-
-Public API
-----------
-- ``PRInfo``          -- raw PR metadata
-- ``PRScore``         -- scoring result
-- ``score_pr(pr_info)`` -> ``PRScore``
-- ``fetch_pr_info(owner, repo, pr_number)`` -> ``PRInfo``
-- ``score_local_diff(repo_path)`` -> ``PRScore``
-
-CLI
----
-    awake pr-score [--local] [--pr N] [--repo owner/repo]
+Each dimension is scored 0-20, total score is 0-100.
+Scores are stored as JSON and rendered as a Markdown leaderboard.
 """
 
 from __future__ import annotations
 
 import json
-import os
 import re
-import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Optional
 
 
 # ---------------------------------------------------------------------------
-# Data model
+# Data classes
 # ---------------------------------------------------------------------------
 
 
 @dataclass
-class PRInfo:
-    """Raw metadata for a pull request."""
+class DimensionScore:
+    """Score and rationale for a single scoring dimension."""
 
-    title: str
-    body: str
-    files_changed: int
-    lines_added: int
-    lines_deleted: int
-    commits: list[str] = field(default_factory=list)  # commit messages
-    has_tests: bool = False
-    linked_issues: list[int] = field(default_factory=list)
-    labels: list[str] = field(default_factory=list)
+    name: str
+    score: int           # 0-20
+    max_score: int = 20
+    rationale: str = ""
 
 
 @dataclass
 class PRScore:
-    """Scoring result for a pull request."""
+    """Full quality score for a single PR."""
 
-    score: float  # 0-100
-    grade: str    # A / B / C / D / F
-    feedback: list[str] = field(default_factory=list)
-    breakdown: dict[str, float] = field(default_factory=dict)
+    pr_number: int
+    title: str
+    branch: str
+    session: Optional[int]
+    dimensions: list[DimensionScore]
+    scored_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+    @property
+    def total(self) -> int:
+        """Return the sum of all dimension scores"""
+        return sum(d.score for d in self.dimensions)
+
+    @property
+    def max_total(self) -> int:
+        """Return the maximum possible score across all dimensions"""
+        return sum(d.max_score for d in self.dimensions)
+
+    @property
+    def grade(self) -> str:
+        """Compute a letter grade from the total score percentage"""
+        pct = self.total / self.max_total * 100 if self.max_total else 0
+        if pct >= 90:
+            return "A+"
+        elif pct >= 80:
+            return "A"
+        elif pct >= 70:
+            return "B"
+        elif pct >= 60:
+            return "C"
+        elif pct >= 50:
+            return "D"
+        else:
+            return "F"
 
 
-# ---------------------------------------------------------------------------
-# Scorer
-# ---------------------------------------------------------------------------
+@dataclass
+class Leaderboard:
+    """Sorted collection of PR scores."""
 
-_CONVENTIONAL_RE = re.compile(
-    r"^(feat|fix|docs|style|refactor|perf|test|chore|build|ci|revert)(\(.+\))?!?: .+",
-    re.IGNORECASE,
-)
-_LINK_RE = re.compile(r"(fixes|closes|resolves)\s+#(\d+)", re.IGNORECASE)
+    scores: list[PRScore]
 
+    @property
+    def ranked(self) -> list[PRScore]:
+        """Return PR scores sorted by total score descending"""
+        return sorted(self.scores, key=lambda s: s.total, reverse=True)
 
-def score_pr(pr: PRInfo) -> PRScore:
-    """Compute a quality score for *pr* and return a :class:`PRScore`.
+    @property
+    def average(self) -> float:
+        """Compute the mean total score across all PRs"""
+        if not self.scores:
+            return 0.0
+        return round(sum(s.total for s in self.scores) / len(self.scores), 1)
 
-    Parameters
-    ----------
-    pr:
-        Pull request metadata to score.
-
-    Returns
-    -------
-    PRScore
-        The computed score, grade, and feedback.
-    """
-    breakdown: dict[str, float] = {}
-    feedback: list[str] = []
-
-    # --- Diff size (30 pts) ---
-    total_lines = pr.lines_added + pr.lines_deleted
-    if total_lines <= 50:
-        diff_score = 30.0
-    elif total_lines <= 200:
-        diff_score = 25.0
-    elif total_lines <= 500:
-        diff_score = 15.0
-    elif total_lines <= 1000:
-        diff_score = 8.0
-    else:
-        diff_score = 0.0
-        feedback.append("PR is very large (>1000 changed lines). Consider splitting it.")
-    if pr.files_changed > 20:
-        diff_score = max(0.0, diff_score - 5.0)
-        feedback.append(f"PR touches {pr.files_changed} files. Focused PRs are easier to review.")
-    breakdown["diff_size"] = diff_score
-
-    # --- Tests (20 pts) ---
-    if pr.has_tests:
-        test_score = 20.0
-    else:
-        test_score = 0.0
-        feedback.append("No test files detected in the diff.")
-    breakdown["tests"] = test_score
-
-    # --- PR description (20 pts) ---
-    title_ok = len(pr.title.strip()) >= 10
-    body_ok = len(pr.body.strip()) >= 30
-    desc_score = (10.0 if title_ok else 0.0) + (10.0 if body_ok else 0.0)
-    if not title_ok:
-        feedback.append("PR title is too short (< 10 chars).")
-    if not body_ok:
-        feedback.append("PR description is too short. Add context and motivation.")
-    breakdown["description"] = desc_score
-
-    # --- Commit messages (20 pts) ---
-    if not pr.commits:
-        commit_score = 10.0  # can't penalise what we can't see
-    else:
-        conventional = sum(1 for c in pr.commits if _CONVENTIONAL_RE.match(c))
-        ratio = conventional / len(pr.commits)
-        commit_score = round(ratio * 20.0, 1)
-        if ratio < 0.5:
-            feedback.append("Less than half of commit messages follow Conventional Commits.")
-    breakdown["commit_messages"] = commit_score
-
-    # --- Linked issues (10 pts) ---
-    if pr.linked_issues:
-        link_score = 10.0
-    elif _LINK_RE.search(pr.body):
-        link_score = 10.0
-    else:
-        link_score = 0.0
-        feedback.append("No linked issues found. Use 'Fixes #N' or 'Closes #N'.")
-    breakdown["linked_issues"] = link_score
-
-    total = sum(breakdown.values())
-    grade = "A" if total >= 90 else "B" if total >= 75 else "C" if total >= 60 else "D" if total >= 45 else "F"
-
-    return PRScore(score=total, grade=grade, feedback=feedback, breakdown=breakdown)
+    @property
+    def top(self) -> Optional[PRScore]:
+        """Return the highest-scoring PR or None if empty"""
+        return self.ranked[0] if self.ranked else None
 
 
 # ---------------------------------------------------------------------------
-# GitHub API fetcher
+# Scoring rubric
 # ---------------------------------------------------------------------------
 
 
-def _gh_api(endpoint: str, token: str) -> Any:
-    """Make a simple GitHub REST API GET request and return parsed JSON."""
-    import urllib.request
+def _score_description_quality(body: str) -> DimensionScore:
+    """Score the PR description for structure and completeness (0-20)."""
+    score = 0
+    notes = []
 
-    url = f"https://api.github.com/{endpoint.lstrip('/')}"
-    req = urllib.request.Request(
-        url,
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-    )
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        return json.loads(resp.read())
+    # Has ## What section
+    if re.search(r"^##\s+What", body, re.MULTILINE | re.IGNORECASE):
+        score += 5
+        notes.append("Has ## What section (+5)")
+    else:
+        notes.append("Missing ## What section (-5)")
 
+    # Has ## Why section
+    if re.search(r"^##\s+Why", body, re.MULTILINE | re.IGNORECASE):
+        score += 5
+        notes.append("Has ## Why section (+5)")
+    else:
+        notes.append("Missing ## Why section (-5)")
 
-def fetch_pr_info(owner: str, repo: str, pr_number: int) -> PRInfo:
-    """Fetch PR metadata from the GitHub REST API.
+    # Has ## How section
+    if re.search(r"^##\s+How", body, re.MULTILINE | re.IGNORECASE):
+        score += 4
+        notes.append("Has ## How section (+4)")
 
-    Parameters
-    ----------
-    owner:
-        Repository owner.
-    repo:
-        Repository name.
-    pr_number:
-        Pull request number.
+    # Word count: 50-500 words is ideal
+    word_count = len(body.split())
+    if 50 <= word_count <= 500:
+        score += 4
+        notes.append(f"Good word count ({word_count} words) (+4)")
+    elif word_count < 20:
+        notes.append(f"Too brief ({word_count} words) (-0)")
+    elif word_count > 800:
+        score += 2
+        notes.append(f"Verbose but detailed ({word_count} words) (+2)")
+    else:
+        score += 2
+        notes.append(f"Acceptable word count ({word_count} words) (+2)")
 
-    Returns
-    -------
-    PRInfo
-        Metadata for the specified pull request.
-    """
-    token = os.environ.get("GITHUB_TOKEN", "")
-    if not token:
-        raise EnvironmentError("GITHUB_TOKEN environment variable not set")
+    # Has Session: N tag
+    if re.search(r"[Ss]ession:\s*\d+", body):
+        score += 2
+        notes.append("Session tag present (+2)")
 
-    pr_data = _gh_api(f"repos/{owner}/{repo}/pulls/{pr_number}", token)
-    files_data = _gh_api(f"repos/{owner}/{repo}/pulls/{pr_number}/files", token)
-    commits_data = _gh_api(f"repos/{owner}/{repo}/pulls/{pr_number}/commits", token)
-
-    files_changed = len(files_data)
-    lines_added = sum(f.get("additions", 0) for f in files_data)
-    lines_deleted = sum(f.get("deletions", 0) for f in files_data)
-    has_tests = any(
-        "test" in f.get("filename", "").lower() for f in files_data
-    )
-    commits = [c["commit"]["message"].splitlines()[0] for c in commits_data]
-
-    body = pr_data.get("body") or ""
-    linked = [int(m.group(2)) for m in _LINK_RE.finditer(body)]
-
-    return PRInfo(
-        title=pr_data.get("title", ""),
-        body=body,
-        files_changed=files_changed,
-        lines_added=lines_added,
-        lines_deleted=lines_deleted,
-        commits=commits,
-        has_tests=has_tests,
-        linked_issues=linked,
-        labels=[lbl["name"] for lbl in pr_data.get("labels", [])],
+    return DimensionScore(
+        name="Description Quality",
+        score=min(score, 20),
+        rationale="; ".join(notes),
     )
 
 
-# ---------------------------------------------------------------------------
-# Local diff scorer
-# ---------------------------------------------------------------------------
+def _score_test_coverage_signal(body: str) -> DimensionScore:
+    """Score the PR for test evidence in the description (0-20)."""
+    score = 0
+    notes = []
 
-
-def score_local_diff(repo_path: str | Path = ".") -> PRScore:
-    """Score the diff between HEAD and ``origin/main``.
-
-    Parameters
-    ----------
-    repo_path:
-        Path to the git repository.
-
-    Returns
-    -------
-    PRScore
-        Score for the current branch diff.
-    """
-    root = Path(repo_path)
-
-    def _git(*args: str) -> str:
-        try:
-            return subprocess.check_output(
-                ["git"] + list(args), cwd=str(root), text=True, stderr=subprocess.DEVNULL
-            )
-        except subprocess.CalledProcessError:
-            return ""
-
-    # Diff stat
-    stat = _git("diff", "--shortstat", "origin/main...HEAD")
-    files_changed = 0
-    lines_added = 0
-    lines_deleted = 0
-    m = re.search(r"(\d+) file", stat)
-    if m:
-        files_changed = int(m.group(1))
-    m = re.search(r"(\d+) insertion", stat)
-    if m:
-        lines_added = int(m.group(1))
-    m = re.search(r"(\d+) deletion", stat)
-    if m:
-        lines_deleted = int(m.group(1))
-
-    # Changed files
-    changed_files = _git("diff", "--name-only", "origin/main...HEAD").splitlines()
-    has_tests = any("test" in f.lower() for f in changed_files)
-
-    # Commit messages
-    log = _git("log", "--format=%s", "origin/main...HEAD")
-    commits = [l.strip() for l in log.splitlines() if l.strip()]
-
-    pr = PRInfo(
-        title="(local diff)",
-        body="",
-        files_changed=files_changed,
-        lines_added=lines_added,
-        lines_deleted=lines_deleted,
-        commits=commits,
-        has_tests=has_tests,
-    )
-    return score_pr(pr)
-
-
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
-
-
-def main(argv: list[str] | None = None) -> int:
-    """CLI entry point for the PR scorer.
-
-    Parameters
-    ----------
-    argv:
-        Command-line arguments.
-
-    Returns
-    -------
-    int
-        Exit code.
-    """
-    import argparse
-    import sys
-
-    parser = argparse.ArgumentParser(
-        prog="awake pr-score",
-        description="Score a pull request or local branch diff.",
-    )
-    parser.add_argument("--local", action="store_true", help="Score local diff vs origin/main")
-    parser.add_argument("--pr", type=int, default=0, help="PR number to fetch from GitHub")
-    parser.add_argument("--repo", default="", help="owner/repo for GitHub API (e.g. acme/myrepo)")
-    parser.add_argument("--json", action="store_true", help="Emit JSON output")
-    args = parser.parse_args(argv)
-
-    if args.local:
-        result = score_local_diff()
-    elif args.pr:
-        if "/" not in args.repo:
-            print("Error: --repo must be in 'owner/repo' format", file=sys.stderr)
-            return 1
-        owner, repo = args.repo.split("/", 1)
-        pr_info = fetch_pr_info(owner, repo, args.pr)
-        result = score_pr(pr_info)
+    # Has ## Test Results section
+    if re.search(r"^##\s+Test\s+Results?", body, re.MULTILINE | re.IGNORECASE):
+        score += 8
+        notes.append("Has ## Test Results section (+8)")
+    elif re.search(r"test", body, re.IGNORECASE):
+        score += 2
+        notes.append("Mentions tests (+2)")
     else:
-        print("Specify --local or --pr N", file=sys.stderr)
-        return 1
+        notes.append("No test mention (-0)")
 
-    if args.json:
-        print(
-            json.dumps(
-                {
-                    "score": result.score,
-                    "grade": result.grade,
-                    "feedback": result.feedback,
-                    "breakdown": result.breakdown,
-                },
-                indent=2,
-            )
+    # Has actual test output (code block with "passed" or "failed")
+    if re.search(r"```[\s\S]*?\d+ passed[\s\S]*?```", body):
+        score += 8
+        notes.append("Has pytest output in code block (+8)")
+    elif re.search(r"\d+ passed", body):
+        score += 4
+        notes.append("Mentions passing tests (+4)")
+
+    # Mentions test count or coverage
+    if re.search(r"\d+\s+test", body, re.IGNORECASE):
+        score += 4
+        notes.append("Mentions test count (+4)")
+
+    return DimensionScore(
+        name="Test Coverage Signal",
+        score=min(score, 20),
+        rationale="; ".join(notes),
+    )
+
+
+def _score_code_clarity(title: str, branch: str) -> DimensionScore:
+    """Score commit message convention and branch naming (0-20)."""
+    score = 0
+    notes = []
+
+    # Title follows [awake] <type>: <description>
+    if re.match(r"\[awake\]\s+\w+:", title):
+        score += 8
+        notes.append("Title follows [awake] type: desc format (+8)")
+    elif re.match(r"\w+:\s+", title):
+        score += 4
+        notes.append("Title has type prefix (+4)")
+    else:
+        notes.append("Title missing conventional format (-0)")
+
+    # Branch follows awake/session-N-feature pattern
+    if re.match(r"awake/session-\d+-[\w-]+", branch):
+        score += 8
+        notes.append("Branch follows awake/session-N-feature pattern (+8)")
+    elif re.match(r"awake/", branch):
+        score += 4
+        notes.append("Branch has awake/ prefix (+4)")
+    elif "/" in branch:
+        score += 2
+        notes.append("Branch has scope prefix (+2)")
+
+    # Title length: 10-80 chars is good
+    if 10 <= len(title) <= 80:
+        score += 4
+        notes.append(f"Good title length ({len(title)} chars) (+4)")
+    elif len(title) < 10:
+        notes.append("Title too short (-0)")
+    else:
+        score += 2
+        notes.append("Title a bit long (+2)")
+
+    return DimensionScore(
+        name="Code Clarity",
+        score=min(score, 20),
+        rationale="; ".join(notes),
+    )
+
+
+def _score_diff_scope(lines_added: int, lines_deleted: int) -> DimensionScore:
+    """Score based on diff size -- prefer focused changes (0-20)."""
+    score = 0
+    notes = []
+    total = lines_added + lines_deleted
+
+    if total == 0:
+        notes.append("Empty diff (-0)")
+    elif total <= 50:
+        score += 10
+        notes.append(f"Focused change ({total} total lines) (+10)")
+    elif total <= 200:
+        score += 20
+        notes.append(f"Ideal scope ({total} total lines) (+20)")
+    elif total <= 500:
+        score += 16
+        notes.append(f"Substantial change ({total} total lines) (+16)")
+    elif total <= 1000:
+        score += 10
+        notes.append(f"Large change ({total} total lines) (+10)")
+    else:
+        score += 5
+        notes.append(f"Very large diff ({total} total lines) -- consider splitting (+5)")
+
+    # Bonus for good add/delete balance
+    if lines_added > 0 and lines_deleted > 0:
+        ratio = lines_deleted / lines_added
+        if 0.1 <= ratio <= 0.9:
+            score = min(score + 0, 20)
+            notes.append(f"Healthy add/delete ratio ({lines_added}+/{lines_deleted}-)")
+    elif lines_deleted == 0 and lines_added > 0:
+        notes.append("Pure addition -- no deletions")
+
+    return DimensionScore(
+        name="Diff Scope",
+        score=min(score, 20),
+        rationale="; ".join(notes),
+    )
+
+
+def _score_session_metadata(body: str, title: str, branch: str) -> DimensionScore:
+    """Score metadata completeness for session tracking (0-20)."""
+    score = 0
+    notes = []
+
+    # Session number in body
+    session_in_body = bool(re.search(r"[Ss]ession:?\s*\d+", body))
+    if session_in_body:
+        score += 6
+        notes.append("Session number in body (+6)")
+    else:
+        notes.append("No session number in body (-0)")
+
+    # Session number in branch
+    session_in_branch = bool(re.search(r"session-\d+", branch))
+    if session_in_branch:
+        score += 6
+        notes.append("Session number in branch (+6)")
+
+    # [awake] tag in title
+    if "[awake]" in title.lower():
+        score += 4
+        notes.append("[awake] tag in title (+4)")
+
+    # Has a proper body
+    body_lines = [l.strip() for l in body.strip().splitlines() if l.strip()]
+    if len(body_lines) >= 5:
+        score += 4
+        notes.append(f"Detailed body ({len(body_lines)} non-empty lines) (+4)")
+    elif len(body_lines) >= 2:
+        score += 2
+        notes.append(f"Basic body ({len(body_lines)} non-empty lines) (+2)")
+
+    return DimensionScore(
+        name="Session Metadata",
+        score=min(score, 20),
+        rationale="; ".join(notes),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Main scorer
+# ---------------------------------------------------------------------------
+
+
+def score_pr(
+    pr_number: int,
+    title: str,
+    body: str,
+    branch: str,
+    lines_added: int = 0,
+    lines_deleted: int = 0,
+    session: Optional[int] = None,
+) -> PRScore:
+    """Score a single PR across all dimensions and return a PRScore."""
+    # Extract session from body/branch if not provided
+    if session is None:
+        # Check body for "Session: N"
+        m = re.search(r"[Ss]ession:?\s*(\d+)", body)
+        if m:
+            session = int(m.group(1))
+        else:
+            # Check branch for "session-N" pattern
+            bm = re.search(r"session-(\d+)", branch)
+            if bm:
+                session = int(bm.group(1))
+
+    dimensions = [
+        _score_description_quality(body),
+        _score_test_coverage_signal(body),
+        _score_code_clarity(title, branch),
+        _score_diff_scope(lines_added, lines_deleted),
+        _score_session_metadata(body, title, branch),
+    ]
+
+    return PRScore(
+        pr_number=pr_number,
+        title=title,
+        branch=branch,
+        session=session,
+        dimensions=dimensions,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Storage
+# ---------------------------------------------------------------------------
+
+
+def load_scores(storage_path: Path) -> list[PRScore]:
+    """Load stored PR scores from a JSON file."""
+    if not storage_path.exists():
+        return []
+    try:
+        raw = json.loads(storage_path.read_text(encoding="utf-8"))
+        scores = []
+        for item in raw:
+            dims = [DimensionScore(**d) for d in item.pop("dimensions", [])]
+            scores.append(PRScore(**item, dimensions=dims))
+        return scores
+    except (json.JSONDecodeError, TypeError, KeyError):
+        return []
+
+
+def save_scores(scores: list[PRScore], storage_path: Path) -> None:
+    """Persist PR scores to a JSON file."""
+    storage_path.parent.mkdir(parents=True, exist_ok=True)
+    data = []
+    for s in scores:
+        d = asdict(s)
+        data.append(d)
+    storage_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def upsert_score(score: PRScore, storage_path: Path) -> list[PRScore]:
+    """Add or replace a PR score in storage. Returns updated list."""
+    scores = load_scores(storage_path)
+    scores = [s for s in scores if s.pr_number != score.pr_number]
+    scores.append(score)
+    save_scores(scores, storage_path)
+    return scores
+
+
+# ---------------------------------------------------------------------------
+# Renderer
+# ---------------------------------------------------------------------------
+
+
+def render_leaderboard(leaderboard: Leaderboard) -> str:
+    """Render a Markdown leaderboard table from a Leaderboard."""
+    lines = ["# PR Quality Leaderboard\n"]
+    lines.append(f"**Average score:** {leaderboard.average}/100\n")
+
+    lines.append("| Rank | PR | Title | Session | Score | Grade |")
+    lines.append("|------|----|-------|---------|-------|-------|")
+
+    for rank, pr in enumerate(leaderboard.ranked, start=1):
+        session_str = str(pr.session) if pr.session else "--"
+        lines.append(
+            f"| {rank} | #{pr.pr_number} | {pr.title[:50]} | {session_str} "
+            f"| {pr.total}/{pr.max_total} | **{pr.grade}** |"
         )
-    else:
-        print(f"Score: {result.score:.1f}/100  Grade: {result.grade}")
-        for item in result.breakdown.items():
-            print(f"  {item[0]:<20} {item[1]:.1f}")
-        if result.feedback:
-            print("\nFeedback:")
-            for msg in result.feedback:
-                print(f"  - {msg}")
 
-    return 0
+    lines.append("")
+
+    # Dimension breakdown for top PR
+    if leaderboard.top:
+        top = leaderboard.top
+        lines.append(f"## Top PR: #{top.pr_number} -- {top.title}\n")
+        lines.append("| Dimension | Score | Rationale |")
+        lines.append("|-----------|-------|-----------|")
+        for d in top.dimensions:
+            lines.append(f"| {d.name} | {d.score}/{d.max_score} | {d.rationale} |")
+
+    return "\n".join(lines)
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+def render_pr_report(score: PRScore) -> str:
+    """Render a detailed Markdown report for a single PR."""
+    lines = [f"## PR #{score.pr_number} Quality Report\n"]
+    lines.append(f"**Title:** {score.title}")
+    lines.append(f"**Branch:** `{score.branch}`")
+    lines.append(f"**Session:** {score.session or 'unknown'}")
+    lines.append(f"**Total Score:** {score.total}/{score.max_total} (Grade: **{score.grade}**)\n")
+
+    lines.append("| Dimension | Score | Max | Rationale |")
+    lines.append("|-----------|-------|-----|-----------|")
+    for d in score.dimensions:
+        lines.append(f"| {d.name} | {d.score} | {d.max_score} | {d.rationale} |")
+
+    return "\n".join(lines)

@@ -1,314 +1,230 @@
 """Module interconnection visualizer for Awake.
 
-Generates a directed graph of Python module imports within a repository
-and can render it as:
-
-- A `DOT <https://graphviz.org/>`_ file (``--dot``)
-- A Mermaid ``flowchart`` snippet (``--mermaid``)
-- A JSON adjacency list (``--json``)
-
-The graph nodes are Python module paths relative to the repository root
-(e.g. ``src/health.py``).  Edges represent *import* relationships -- an
-edge A -> B means "A imports B".
-
-Public API
-----------
-- ``ModuleNode``        -- single node in the graph
-- ``ModuleGraph``       -- the full graph
-- ``build_module_graph(repo_path)`` -> ``ModuleGraph``
-- ``to_dot(graph)``     -> ``str``
-- ``to_mermaid(graph)`` -> ``str``
-- ``save_graph(graph, out_path)``
+Generates Mermaid flowchart diagrams and ASCII representations showing how
+all src/ modules relate to one another via imports and functional coupling.
 
 CLI
 ---
-    awake graph [--dot] [--mermaid] [--json] [--output PATH]
+    awake modules                  # Print Mermaid diagram to stdout
+    awake modules --ascii          # ASCII art diagram
+    awake modules --write          # Write docs/MODULE_GRAPH.md
+    awake modules --json           # Emit graph as JSON
 """
 
 from __future__ import annotations
 
 import ast
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from pathlib import Path
+from typing import Optional
 
 
-# ---------------------------------------------------------------------------
-# Data model
-# ---------------------------------------------------------------------------
+_LAYER_MAP = {
+    "config": "core", "session_logger": "core", "stats": "core", "cli": "core", "server": "core",
+    "health": "analysis", "health_trend": "analysis", "complexity": "analysis",
+    "coupling": "analysis", "dead_code": "analysis", "security": "analysis",
+    "coverage_tracker": "analysis", "coverage_map": "analysis", "audit": "analysis",
+    "maturity": "analysis", "predict": "analysis", "test_quality": "analysis",
+    "gitstats": "git", "blame": "git", "diff_visualizer": "git",
+    "changelog": "git", "semver": "git", "timeline": "git", "commit_analyzer": "git",
+    "dep_graph": "intelligence", "arch_generator": "intelligence",
+    "refactor": "intelligence", "brain": "intelligence", "dna": "intelligence",
+    "readme_updater": "output", "exporter": "output", "dashboard": "output",
+    "badges": "output", "report": "output", "openapi": "output", "module_graph": "output",
+    "plugins": "extensibility",
+    "diff_sessions": "sessions", "session_replay": "sessions", "compare": "sessions",
+    "doctor": "misc", "issue_triage": "misc", "deps_checker": "misc",
+    "teach": "misc", "story": "misc", "todo_hunter": "misc",
+    "pr_scorer": "misc", "benchmark": "misc", "init_cmd": "misc",
+    "trend_data": "analysis", "release_notes": "git",
+}
+
+_LAYER_STYLES = {
+    "core": "fill:#58a6ff,color:#0d1117,stroke:#1f6feb",
+    "analysis": "fill:#3fb950,color:#0d1117,stroke:#238636",
+    "git": "fill:#f78166,color:#0d1117,stroke:#da3633",
+    "intelligence": "fill:#bc8cff,color:#0d1117,stroke:#8957e5",
+    "output": "fill:#79c0ff,color:#0d1117,stroke:#388bfd",
+    "extensibility": "fill:#ffa657,color:#0d1117,stroke:#e3b341",
+    "sessions": "fill:#56d364,color:#0d1117,stroke:#2ea043",
+    "misc": "fill:#8b949e,color:#0d1117,stroke:#6e7681",
+}
 
 
 @dataclass
 class ModuleNode:
-    """A single Python file (module) in the repository."""
+    """A single module in the dependency graph with its layer and edges"""
 
-    path: str  # relative path, e.g. "src/health.py"
-    imports: list[str] = field(default_factory=list)  # resolved relative paths
-    raw_imports: list[str] = field(default_factory=list)  # as written in source
+    name: str
+    layer: str
+    imports: list[str] = field(default_factory=list)
+    imported_by: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        """Return a dictionary representation of this module node"""
+        return asdict(self)
 
 
 @dataclass
 class ModuleGraph:
-    """Directed import graph for the entire repository."""
+    """The full module interconnection graph with nodes, edges, and layers"""
 
-    nodes: dict[str, ModuleNode] = field(default_factory=dict)  # path -> node
-    root: str = ""
+    nodes: list[ModuleNode] = field(default_factory=list)
+    edges: list[tuple] = field(default_factory=list)
+    layers: dict[str, list[str]] = field(default_factory=dict)
 
-    @property
-    def edges(self) -> list[tuple[str, str]]:
-        """Return all directed edges as (src, dst) pairs."""
-        result: list[tuple[str, str]] = []
-        for node in self.nodes.values():
-            for imp in node.imports:
-                result.append((node.path, imp))
-        return result
+    def to_dict(self) -> dict:
+        """Return a dictionary representation of the full module graph"""
+        return {
+            "nodes": [n.to_dict() for n in self.nodes],
+            "edges": [{"from": e[0], "to": e[1]} for e in self.edges],
+            "layers": self.layers,
+            "total_nodes": len(self.nodes),
+            "total_edges": len(self.edges),
+        }
+
+    def to_mermaid(self, show_all_edges: bool = False) -> str:
+        """Render the module graph as a Mermaid flowchart diagram"""
+        lines = ["```mermaid", "graph TD"]
+        layer_order = ["core", "analysis", "git", "intelligence", "output", "extensibility", "sessions", "misc"]
+        layer_labels = {
+            "core": "Core Infrastructure", "analysis": "Analysis Engines",
+            "git": "Git / History", "intelligence": "Code Intelligence",
+            "output": "Reporting & Output", "extensibility": "Extensibility",
+            "sessions": "Session Management", "misc": "Utilities",
+        }
+        for layer in layer_order:
+            mods = self.layers.get(layer, [])
+            if not mods:
+                continue
+            lines.append(f"    subgraph {layer_labels.get(layer, layer)}")
+            for mod in sorted(mods):
+                node_id = mod.replace("-", "_").replace(".", "_")
+                lines.append(f"        {node_id}[{mod}]")
+            lines.append("    end")
+        lines.append("")
+        drawn: set = set()
+        priority_froms = {"cli", "server", "brain", "audit", "report", "openapi", "dashboard"}
+        for frm, to in self.edges:
+            frm_id = frm.replace("-", "_").replace(".", "_")
+            to_id = to.replace("-", "_").replace(".", "_")
+            key = (frm_id, to_id)
+            if key in drawn:
+                continue
+            if not show_all_edges and frm not in priority_froms:
+                continue
+            drawn.add(key)
+            lines.append(f"    {frm_id} --> {to_id}")
+        lines.append("")
+        for layer, style in _LAYER_STYLES.items():
+            mods = self.layers.get(layer, [])
+            if mods:
+                for mod in mods:
+                    mid = mod.replace("-", "_").replace(".", "_")
+                    lines.append(f"    style {mid} {style}")
+        lines.append("```")
+        return "\n".join(lines)
+
+    def to_ascii(self) -> str:
+        """Render the module graph as an ASCII art diagram"""
+        layer_order = ["core", "analysis", "git", "intelligence", "output", "extensibility", "sessions", "misc"]
+        layer_labels = {
+            "core": "Core Infrastructure", "analysis": "Analysis Engines",
+            "git": "Git / History", "intelligence": "Code Intelligence",
+            "output": "Reporting & Output", "extensibility": "Extensibility",
+            "sessions": "Session Management", "misc": "Utilities",
+        }
+        lines = ["", "  Module Interconnection Graph - Awake", "  " + "-" * 50, ""]
+        for layer in layer_order:
+            mods = self.layers.get(layer, [])
+            if not mods:
+                continue
+            label = layer_labels.get(layer, layer)
+            lines.append(f"  +- {label} {'-' * max(0, 44 - len(label))}+")
+            for mod in sorted(mods):
+                node = next((n for n in self.nodes if n.name == mod), None)
+                imports_str = ""
+                if node and node.imports:
+                    key_imports = [i for i in node.imports if i in ("config", "session_logger", "health", "stats")][:2]
+                    if key_imports:
+                        imports_str = f"  -> uses: {', '.join(key_imports)}"
+                lines.append(f"  |  {mod:<28}{imports_str}")
+            lines.append("  +" + "-" * 49 + "+")
+            lines.append("")
+        lines += [f"  Total modules : {len(self.nodes)}", f"  Total edges   : {len(self.edges)}", ""]
+        return "\n".join(lines)
+
+    def to_markdown(self) -> str:
+        """Render the module graph as a Markdown document with diagram and table"""
+        mermaid = self.to_mermaid()
+        layer_order = ["core", "analysis", "git", "intelligence", "output", "extensibility", "sessions", "misc"]
+        layer_labels = {
+            "core": "Core Infrastructure", "analysis": "Analysis Engines",
+            "git": "Git / History", "intelligence": "Code Intelligence",
+            "output": "Reporting & Output", "extensibility": "Extensibility",
+            "sessions": "Session Management", "misc": "Utilities",
+        }
+        table_rows = []
+        for layer in layer_order:
+            mods = self.layers.get(layer, [])
+            for mod in sorted(mods):
+                node = next((n for n in self.nodes if n.name == mod), None)
+                imports_str = ", ".join(f"`{i}`" for i in (node.imports if node else [])[:5])
+                table_rows.append(f"| `{mod}` | {layer_labels.get(layer, layer)} | {imports_str} |")
+        table = "\n".join(["| Module | Layer | Key Dependencies |", "|--------|-------|-----------------|"] + table_rows)
+        return f"""# Module Interconnection Graph\n\nGenerated by `awake modules`.\n\n## Mermaid Diagram\n\n{mermaid}\n\n## Module Layer Table\n\n{table}\n\n---\n*{len(self.nodes)} modules - {len(self.edges)} dependency edges*\n"""
 
 
-# ---------------------------------------------------------------------------
-# Import resolver
-# ---------------------------------------------------------------------------
+def _discover_modules(src_dir: Path) -> list[str]:
+    return sorted(p.stem for p in src_dir.glob("*.py") if p.stem != "__init__")
 
 
-def _collect_imports(source: str, filename: str) -> list[str]:
-    """Return a list of raw module names imported in *source*."""
+def _extract_imports(src_file: Path, module_names: set) -> list[str]:
     try:
-        tree = ast.parse(source, filename=filename)
+        tree = ast.parse(src_file.read_text(encoding="utf-8", errors="replace"))
     except SyntaxError:
         return []
-
-    names: list[str] = []
+    imported: set = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                names.append(alias.name)
+                base = alias.name.split(".")[0]
+                if base in module_names:
+                    imported.add(base)
         elif isinstance(node, ast.ImportFrom):
             if node.module:
-                prefix = "." * (node.level or 0)
-                names.append(prefix + node.module)
-    return names
+                parts = node.module.split(".")
+                if len(parts) >= 2 and parts[0] == "src" and parts[1] in module_names:
+                    imported.add(parts[1])
+                elif parts[0] in module_names:
+                    imported.add(parts[0])
+    return sorted(imported)
 
 
-def _resolve_import(raw: str, importer: str, all_paths: set[str]) -> str | None:
-    """Try to resolve *raw* import to a relative repo path.
-
-    Returns the resolved path string or *None* if not a local module.
-    """
-    # Strip leading dots (relative imports) - treat as absolute for now
-    module = raw.lstrip(".")
-    parts = module.replace(".", "/")
-
-    # Candidates: direct file, __init__.py in package
-    candidates = [
-        f"{parts}.py",
-        f"{parts}/__init__.py",
-    ]
-    # Also try relative to importer's directory
-    importer_dir = str(Path(importer).parent)
-    candidates += [
-        f"{importer_dir}/{parts}.py",
-        f"{importer_dir}/{parts}/__init__.py",
-    ]
-
-    for c in candidates:
-        # Normalise path separators
-        norm = str(Path(c))
-        if norm in all_paths:
-            return norm
-    return None
-
-
-# ---------------------------------------------------------------------------
-# Builder
-# ---------------------------------------------------------------------------
-
-
-def build_module_graph(repo_path: str | Path) -> ModuleGraph:
-    """Build a :class:`ModuleGraph` for the repository at *repo_path*.
-
-    Parameters
-    ----------
-    repo_path:
-        Root directory of the repository.
-
-    Returns
-    -------
-    ModuleGraph
-        The completed module import graph.
-    """
-    root = Path(repo_path)
-    graph = ModuleGraph(root=str(root))
-
-    py_files = sorted(root.rglob("*.py"))
-    all_paths: set[str] = {str(f.relative_to(root)) for f in py_files}
-
-    for py_file in py_files:
-        rel = str(py_file.relative_to(root))
-        try:
-            source = py_file.read_text(encoding="utf-8")
-        except OSError:
-            continue
-
-        raw_imports = _collect_imports(source, rel)
-        resolved: list[str] = []
-        for raw in raw_imports:
-            r = _resolve_import(raw, rel, all_paths)
-            if r is not None:
-                resolved.append(r)
-
-        graph.nodes[rel] = ModuleNode(
-            path=rel,
-            imports=resolved,
-            raw_imports=raw_imports,
-        )
-
-    return graph
-
-
-# ---------------------------------------------------------------------------
-# Renderers
-# ---------------------------------------------------------------------------
-
-
-def to_dot(graph: ModuleGraph) -> str:
-    """Render *graph* as a Graphviz DOT string.
-
-    Parameters
-    ----------
-    graph:
-        The module graph to render.
-
-    Returns
-    -------
-    str
-        DOT-format string.
-    """
-    lines = ["digraph modules {"]
-    lines.append('    rankdir="LR";')
-    lines.append('    node [shape=box fontname="Helvetica"];')
-    for node in graph.nodes.values():
-        label = node.path.replace("\\", "/")
-        safe = label.replace("/", "_").replace(".", "_")
-        lines.append(f'    {safe} [label="{label}"];')
-    for src, dst in graph.edges:
-        src_safe = src.replace("/", "_").replace(".", "_")
-        dst_safe = dst.replace("/", "_").replace(".", "_")
-        lines.append(f"    {src_safe} -> {dst_safe};")
-    lines.append("}")
-    return "\n".join(lines)
-
-
-def to_mermaid(graph: ModuleGraph) -> str:
-    """Render *graph* as a Mermaid flowchart string.
-
-    Parameters
-    ----------
-    graph:
-        The module graph to render.
-
-    Returns
-    -------
-    str
-        Mermaid flowchart string.
-    """
-    lines = ["flowchart LR"]
-    for node in graph.nodes.values():
-        label = node.path.replace("\\", "/")
-        safe = label.replace("/", "_").replace(".", "_").replace("-", "_")
-        lines.append(f'    {safe}["{label}"]')
-    for src, dst in graph.edges:
-        src_safe = src.replace("/", "_").replace(".", "_").replace("-", "_")
-        dst_safe = dst.replace("/", "_").replace(".", "_").replace("-", "_")
-        lines.append(f"    {src_safe} --> {dst_safe}")
-    return "\n".join(lines)
-
-
-def save_graph(graph: ModuleGraph, out_path: str | Path) -> None:
-    """Serialise *graph* as JSON and write to *out_path*.
-
-    Parameters
-    ----------
-    graph:
-        The module graph to save.
-    out_path:
-        Destination file path.
-    """
-    data = {
-        "root": graph.root,
-        "nodes": [
-            {
-                "path": n.path,
-                "imports": n.imports,
-                "raw_imports": n.raw_imports,
-            }
-            for n in graph.nodes.values()
-        ],
-    }
-    Path(out_path).write_text(json.dumps(data, indent=2), encoding="utf-8")
-
-
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
-
-
-def main(argv: list[str] | None = None) -> int:
-    """CLI entry point for the module graph visualizer.
-
-    Parameters
-    ----------
-    argv:
-        Command-line arguments.
-
-    Returns
-    -------
-    int
-        Exit code.
-    """
-    import argparse
-    import sys
-
-    parser = argparse.ArgumentParser(
-        prog="awake graph",
-        description="Visualise module import relationships.",
-    )
-    parser.add_argument("repo", nargs="?", default=".", help="Repo root")
-    parser.add_argument("--dot", action="store_true", help="Output DOT format")
-    parser.add_argument("--mermaid", action="store_true", help="Output Mermaid format")
-    parser.add_argument("--json", action="store_true", help="Output JSON format")
-    parser.add_argument("--output", "-o", default="", help="Write output to file")
-    args = parser.parse_args(argv)
-
-    root = Path(args.repo).resolve()
-    if not root.is_dir():
-        print(f"Error: {root} is not a directory", file=sys.stderr)
-        return 1
-
-    graph = build_module_graph(root)
-
-    if args.dot:
-        output = to_dot(graph)
-    elif args.mermaid:
-        output = to_mermaid(graph)
-    else:
-        # default to JSON
-        nodes_data = [
-            {
-                "path": n.path,
-                "imports": n.imports,
-                "raw_imports": n.raw_imports,
-            }
-            for n in graph.nodes.values()
-        ]
-        output = json.dumps({"root": graph.root, "nodes": nodes_data}, indent=2)
-
-    if args.output:
-        Path(args.output).write_text(output, encoding="utf-8")
-        print(f"Graph written to {args.output}")
-    else:
-        print(output)
-
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+def generate_module_graph(repo_root: Path) -> ModuleGraph:
+    """Build the full module interconnection graph from AST analysis."""
+    src_dir = repo_root / "src"
+    if not src_dir.exists():
+        return ModuleGraph()
+    module_names = _discover_modules(src_dir)
+    name_set = set(module_names)
+    nodes: list[ModuleNode] = []
+    edges: list = []
+    imported_by: dict = {m: [] for m in module_names}
+    for mod_name in module_names:
+        src_file = src_dir / f"{mod_name}.py"
+        imports = _extract_imports(src_file, name_set)
+        imports = [i for i in imports if i != mod_name]
+        layer = _LAYER_MAP.get(mod_name, "misc")
+        nodes.append(ModuleNode(name=mod_name, layer=layer, imports=imports))
+        for dep in imports:
+            edges.append((mod_name, dep))
+            if dep in imported_by:
+                imported_by[dep].append(mod_name)
+    for node in nodes:
+        node.imported_by = imported_by.get(node.name, [])
+    layers: dict = {}
+    for node in nodes:
+        layers.setdefault(node.layer, []).append(node.name)
+    return ModuleGraph(nodes=nodes, edges=edges, layers=layers)
