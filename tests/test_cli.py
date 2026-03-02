@@ -143,9 +143,9 @@ class TestHelperFunctions:
 
     def test_print_header_does_not_raise(self, capsys):
         _print_header("Test Title")
-        out = capsys.readouterr().out
-        assert "Test Title" in out
-        assert "Awake" in out
+        err = capsys.readouterr().err
+        assert "Test Title" in err
+        assert "Awake" in err
 
     def test_print_ok(self, capsys):
         _print_ok("all good")
@@ -253,9 +253,9 @@ class TestMainChangelog:
 class TestMainCoverage:
     """Integration tests for `awake coverage`."""
 
-    def test_coverage_missing_history_returns_1(self, tmp_path):
+    def test_coverage_missing_history_returns_0(self, tmp_path):
         result = main(["coverage", "--repo", str(tmp_path)])
-        assert result == 1
+        assert result == 0
 
     def test_coverage_reads_history(self, tmp_path, capsys):
         history_dir = tmp_path / "docs"

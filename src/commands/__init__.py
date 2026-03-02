@@ -16,8 +16,8 @@ def _repo(path: str | None) -> Path:
     if path is None:
         return REPO_ROOT
     p = Path(path).expanduser().resolve()
-    if not (p / "src").exists():
-        raise SystemExit(f"Invalid repo path: {p} (missing src/)")
+    if not p.exists():
+        raise SystemExit(f"Invalid repo path: {p} (does not exist)")
     return p
 
 
@@ -43,22 +43,23 @@ def _c(text: str, color: str) -> str:
 
 
 def _print_header(title: str) -> None:
-    bar = "─" * 60
-    print("\n" + bar)
-    print(f"  🌙 Awake  ·  {title}")
-    print(bar + "\n")
+    bar = "\u2500" * 60
+    import sys as _sys
+    _sys.stderr.write("\n" + bar + "\n")
+    _sys.stderr.write(f"  \U0001f319 Awake  \u00b7  {title}\n")
+    _sys.stderr.write(bar + "\n\n")
 
 
 def _print_ok(msg: str) -> None:
-    print(_c("  ✅  " + msg, GREEN))
+    print(_c("  \u2705  " + msg, GREEN))
 
 
 def _print_warn(msg: str) -> None:
-    print(_c("  ⚠️   " + msg, YELLOW))
+    print(_c("  \u26a0\ufe0f   " + msg, YELLOW))
 
 
 def _print_info(msg: str) -> None:
-    print(_c("  ℹ️   " + msg, CYAN))
+    print(_c("  \u2139\ufe0f   " + msg, CYAN))
 
 
 # Re-exported for convenience

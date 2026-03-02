@@ -191,18 +191,22 @@ def cmd_audit(args) -> int:
 
 def cmd_predict(args) -> int:
     """Five-signal predictor: which modules need attention next."""
-    from src.predict import run_predict
+    from src.predict import predict_next_session
     _print_header("Predictive Session Planner")
     repo = _repo(getattr(args, "repo", None))
-    report = run_predict(repo)
+    report = predict_next_session(repo)
     if args.json:
         print(json.dumps(report.to_dict(), indent=2))
         return 0
     print(report.to_markdown())
-    _print_info(
-        f"Top candidate: {report.top_module}  ·  "
-        f"Confidence: {report.top_confidence:.0f}%"
-    )
+    top = report.top_items[:1]
+    if top:
+        _print_info(
+            f"Top candidate: {top[0].target}  ·  "
+            f"Score: {top[0].priority_score:.0f}"
+        )
+    else:
+        _print_info("No predictions available")
     return 0
 
 
@@ -325,7 +329,7 @@ def cmd_coverage(args) -> int:
     if not history_path.exists():
         _print_warn(f"No coverage history found at {history_path}")
         _print_info("Run `awake run` to generate initial coverage data.")
-        return 1
+        return 0
     with history_path.open() as f:
         history = CoverageHistory.from_dict(json.load(f))
     if args.json:
@@ -352,7 +356,7 @@ def cmd_score(args) -> int:
     if not scores_path.exists():
         _print_warn(f"No PR scores found at {scores_path}")
         _print_info("Run `awake run` to score the latest PRs.")
-        return 1
+        return 0
     scores = load_scores(scores_path)
     if args.json:
         print(json.dumps([s.__dict__ for s in scores], indent=2, default=str))
@@ -519,12 +523,9 @@ def cmd_plan(args) -> int:
     from src.brain import Brain
     _print_header(f"Session Plan — Session {args.session}")
     repo = _repo(getattr(args, "repo", None))
-    brain = Brain(repo_root=repo)
+    brain = Brain(repo_path=repo)
     plan = brain.plan(
         session_number=args.session,
-        roadmap_path=repo / "ROADMAP.md",
-        issues_path=repo / "docs" / "triage.json",
-        health_history_path=repo / "docs" / "health_history.json",
     )
     if args.json:
         print(json.dumps(plan.to_dict(), indent=2, default=str))

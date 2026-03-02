@@ -55,18 +55,18 @@ def cmd_init(args) -> int:
 def cmd_deps(args) -> int:
     """Check Python dependency freshness via PyPI."""
     try:
-        from src.deps import check_deps, render_deps_report
+        from src.deps_checker import check_freshness, FreshnessReport
     except ImportError:
         _print_warn("deps module not available")
         return 1
     _print_header("Dependency Freshness Check")
     repo = _repo(getattr(args, "repo", None))
-    report = check_deps(repo)
+    report = check_freshness(repo)
     if args.json:
         print(json.dumps(report.to_dict(), indent=2))
         return 0
-    print(render_deps_report(report))
-    stale = [d for d in report.deps if d.is_stale]
+    print(report.to_markdown())
+    stale = [d for d in report.packages if d.status == "outdated"]
     if stale:
         _print_warn(f"{len(stale)} stale dependencies")
     else:
