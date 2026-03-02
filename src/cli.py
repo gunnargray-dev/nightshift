@@ -11,7 +11,7 @@ This file is a thin dispatcher -- all command implementations live in
                                coveragemap, blame, maturity
   src/commands/meta.py      -- stats, changelog, story, reflect, evolve, status,
                                session_score, timeline, replay, compare, diff,
-                               diff_sessions
+                               diff_sessions, insights
   src/commands/tools.py     -- doctor, todos, benchmark, gitstats, badges, audit,
                                predict, teach, dna, report, export, coverage,
                                score, test_quality, refactor, commits, semver,
@@ -108,6 +108,7 @@ from src.commands.meta import (
     cmd_compare,
     cmd_diff,
     cmd_diff_sessions,
+    cmd_insights,
 )
 
 from src.commands.tools import (
@@ -153,7 +154,7 @@ __all__ = [
     "cmd_security", "cmd_coveragemap", "cmd_blame", "cmd_maturity",
     "cmd_stats", "cmd_changelog", "cmd_story", "cmd_reflect", "cmd_evolve",
     "cmd_status", "cmd_session_score", "cmd_timeline", "cmd_replay",
-    "cmd_compare", "cmd_diff", "cmd_diff_sessions",
+    "cmd_compare", "cmd_diff", "cmd_diff_sessions", "cmd_insights",
     "cmd_doctor", "cmd_todos", "cmd_benchmark", "cmd_gitstats", "cmd_badges",
     "cmd_audit", "cmd_predict", "cmd_teach", "cmd_dna", "cmd_report",
     "cmd_export", "cmd_coverage", "cmd_score", "cmd_test_quality",
@@ -336,6 +337,13 @@ def build_parser() -> argparse.ArgumentParser:
     _add_json(p_diffsessions)
     _add_repo(p_diffsessions)
     p_diffsessions.set_defaults(func=cmd_diff_sessions)
+
+    # insights
+    p_insights = sub.add_parser("insights", help="Analyze patterns across all sessions")
+    _add_write(p_insights)
+    _add_json(p_insights)
+    _add_repo(p_insights)
+    p_insights.set_defaults(func=cmd_insights)
 
     # ------------------------------------------------------------------
     # Tools commands
