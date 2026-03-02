@@ -1,245 +1,117 @@
 """Auto-merge helper for Awake.
 
-This module is intentionally lightweight -- it provides a thin wrapper
-around the GitHub REST API (or ``gh`` CLI) to merge a pull request once a
-configurable set of conditions is satisfied:
+This module is intentionally lightweight and dependency-free.
 
-- All required status checks pass
-- The PR has at least *min_approvals* approving reviews
-- The PR score (from ``pr_scorer.py``) meets a minimum threshold
-- The branch is up-to-date with the base branch
+It provides a small decision engine that can be used in CI or from the CLI
+(to gate whether a PR is eligible for automatic merging).
 
-Public API
-----------
-- ``MergeConditions``  -- configurable merge gate
-- ``AutoMergeResult``  -- outcome of an auto-merge attempt
-- ``check_and_merge(owner, repo, pr_number, conditions)`` -> ``AutoMergeResult``
+Awake's roadmap calls out **PR auto-merge**: merge PRs automatically if:
+- CI passes
+- PR score >= threshold (default: 80)
 
-CLI
----
-    awake automerge --pr N --repo owner/repo [--min-score N] [--min-approvals N]
+The actual merge action is intentionally not implemented here. This keeps the
+core library safe to run locally without requiring GitHub credentials.
+Instead, the module outputs a machine-readable decision that can be consumed
+by a separate GitHub Action step (future work) or by a human.
 """
 
 from __future__ import annotations
 
 import json
-import os
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
+from typing import Optional
 
 
-# ---------------------------------------------------------------------------
-# Data model
-# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class AutoMergeDecision:
+    """A yes/no decision with structured metadata."""
+
+    eligible: bool
+    pr_number: Optional[int] = None
+    pr_score: Optional[int] = None
+    min_score: int = 80
+    ci_passed: Optional[bool] = None
+    reason: str = ""
+
+    def to_dict(self) -> dict:
+        return {
+            "eligible": self.eligible,
+            "pr_number": self.pr_number,
+            "pr_score": self.pr_score,
+            "min_score": self.min_score,
+            "ci_passed": self.ci_passed,
+            "reason": self.reason,
+        }
 
 
-@dataclass
-class MergeConditions:
-    """Conditions that must be met before auto-merge is allowed."""
-
-    min_approvals: int = 1
-    min_pr_score: float = 60.0
-    require_checks_pass: bool = True
-    merge_method: str = "squash"  # "merge" | "squash" | "rebase"
-
-
-@dataclass
-class AutoMergeResult:
-    """Result of an auto-merge attempt."""
-
-    merged: bool
-    reason: str
-    pr_number: int
-    details: dict[str, Any] = field(default_factory=dict)
-
-
-# ---------------------------------------------------------------------------
-# GitHub API helpers (thin wrappers)
-# ---------------------------------------------------------------------------
-
-
-def _gh_get(endpoint: str, token: str) -> Any:
-    """Make a GET request to the GitHub REST API."""
-    import urllib.request
-
-    url = f"https://api.github.com/{endpoint.lstrip('/')}"
-    req = urllib.request.Request(
-        url,
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-    )
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        return json.loads(resp.read())
-
-
-def _gh_put(endpoint: str, token: str, body: dict[str, Any]) -> Any:
-    """Make a PUT request to the GitHub REST API."""
-    import urllib.request
-
-    url = f"https://api.github.com/{endpoint.lstrip('/')}"
-    data = json.dumps(body).encode()
-    req = urllib.request.Request(
-        url,
-        data=data,
-        method="PUT",
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github+json",
-            "Content-Type": "application/json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-    )
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        return json.loads(resp.read())
-
-
-# ---------------------------------------------------------------------------
-# Core logic
-# ---------------------------------------------------------------------------
-
-
-def check_and_merge(
-    owner: str,
-    repo: str,
-    pr_number: int,
-    conditions: MergeConditions | None = None,
-) -> AutoMergeResult:
-    """Evaluate merge conditions and merge the PR if all pass.
+def decide_automerge(*, pr_score: int, ci_passed: bool, min_score: int = 80, pr_number: int | None = None) -> AutoMergeDecision:
+    """Return whether a PR is eligible for auto-merge.
 
     Parameters
     ----------
-    owner:
-        Repository owner.
-    repo:
-        Repository name.
+    pr_score:
+        Quality score (0-100) as produced by ``src.pr_scorer``.
+
+    ci_passed:
+        Whether required checks passed.
+
+    min_score:
+        Minimum quality score required.
+
     pr_number:
-        Pull request number.
-    conditions:
-        Merge conditions to check.  Defaults to :class:`MergeConditions`.
+        Optional PR number for better reporting.
 
-    Returns
-    -------
-    AutoMergeResult
-        Result of the merge attempt.
+    Notes
+    -----
+    This function never raises for ordinary inputs. Validation errors are
+    captured in the returned decision's ``reason`` field.
     """
-    if conditions is None:
-        conditions = MergeConditions()
-
-    token = os.environ.get("GITHUB_TOKEN", "")
-    if not token:
-        return AutoMergeResult(
-            merged=False,
-            reason="GITHUB_TOKEN not set",
+    if not isinstance(pr_score, int) or not (0 <= pr_score <= 100):
+        return AutoMergeDecision(
+            eligible=False,
             pr_number=pr_number,
+            reason=f"Invalid pr_score: {pr_score!r}. Must be int in [0, 100].",
         )
 
-    # Fetch PR data
-    try:
-        pr_data = _gh_get(f"repos/{owner}/{repo}/pulls/{pr_number}", token)
-    except Exception as exc:  # noqa: BLE001
-        return AutoMergeResult(merged=False, reason=str(exc), pr_number=pr_number)
-
-    # Check mergeable state
-    state = pr_data.get("mergeable_state", "unknown")
-    if state == "behind" and conditions.require_checks_pass:
-        return AutoMergeResult(
-            merged=False,
-            reason=f"Branch is behind base (mergeable_state={state!r})",
+    if not ci_passed:
+        return AutoMergeDecision(
+            eligible=False,
             pr_number=pr_number,
+            pr_score=pr_score,
+            min_score=min_score,
+            ci_passed=ci_passed,
+            reason="CI checks did not pass.",
         )
 
-    # Check reviews
-    try:
-        reviews = _gh_get(f"repos/{owner}/{repo}/pulls/{pr_number}/reviews", token)
-        approvals = sum(1 for r in reviews if r.get("state") == "APPROVED")
-    except Exception:  # noqa: BLE001
-        approvals = 0
-
-    if approvals < conditions.min_approvals:
-        return AutoMergeResult(
-            merged=False,
-            reason=f"Insufficient approvals: {approvals} < {conditions.min_approvals}",
+    if pr_score < min_score:
+        return AutoMergeDecision(
+            eligible=False,
             pr_number=pr_number,
-            details={"approvals": approvals},
+            pr_score=pr_score,
+            min_score=min_score,
+            ci_passed=ci_passed,
+            reason=f"PR score {pr_score} is below minimum {min_score}.",
         )
 
-    # Merge
-    try:
-        result = _gh_put(
-            f"repos/{owner}/{repo}/pulls/{pr_number}/merge",
-            token,
-            {"merge_method": conditions.merge_method},
-        )
-        return AutoMergeResult(
-            merged=True,
-            reason="All conditions met",
-            pr_number=pr_number,
-            details=result,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return AutoMergeResult(merged=False, reason=str(exc), pr_number=pr_number)
-
-
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
-
-
-def main(argv: list[str] | None = None) -> int:
-    """CLI entry point for the auto-merge helper.
-
-    Parameters
-    ----------
-    argv:
-        Command-line arguments.
-
-    Returns
-    -------
-    int
-        Exit code.
-    """
-    import argparse
-    import sys
-
-    parser = argparse.ArgumentParser(
-        prog="awake automerge",
-        description="Auto-merge a pull request when conditions are met.",
+    return AutoMergeDecision(
+        eligible=True,
+        pr_number=pr_number,
+        pr_score=pr_score,
+        min_score=min_score,
+        ci_passed=ci_passed,
+        reason="All conditions met.",
     )
-    parser.add_argument("--pr", type=int, required=True, help="PR number")
-    parser.add_argument("--repo", required=True, help="owner/repo")
-    parser.add_argument("--min-score", type=float, default=60.0, help="Minimum PR score")
-    parser.add_argument("--min-approvals", type=int, default=1, help="Minimum approvals")
-    parser.add_argument(
-        "--merge-method",
-        default="squash",
-        choices=["merge", "squash", "rebase"],
-        help="Merge method",
-    )
-    args = parser.parse_args(argv)
-
-    if "/" not in args.repo:
-        print("Error: --repo must be owner/repo", file=sys.stderr)
-        return 1
-
-    owner, repo = args.repo.split("/", 1)
-    conditions = MergeConditions(
-        min_approvals=args.min_approvals,
-        min_pr_score=args.min_score,
-        merge_method=args.merge_method,
-    )
-    result = check_and_merge(owner, repo, args.pr, conditions)
-
-    if result.merged:
-        print(f"PR #{result.pr_number} merged successfully ({result.reason})")
-    else:
-        print(f"PR #{result.pr_number} not merged: {result.reason}")
-        return 1
-
-    return 0
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+def format_decision(decision: AutoMergeDecision) -> str:
+    """Return a human-readable summary of the decision."""
+    status = "ELIGIBLE" if decision.eligible else "NOT ELIGIBLE"
+    lines = [f"Auto-merge decision: {status}"]
+    if decision.pr_number is not None:
+        lines.append(f"  PR: #{decision.pr_number}")
+    if decision.pr_score is not None:
+        lines.append(f"  Score: {decision.pr_score}/{decision.min_score} (min)")
+    if decision.ci_passed is not None:
+        lines.append(f"  CI passed: {decision.ci_passed}")
+    lines.append(f"  Reason: {decision.reason}")
+    return "\n".join(lines)
