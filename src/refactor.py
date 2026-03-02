@@ -1,211 +1,386 @@
-"""AI-powered refactoring engine for Python source files."""
+"""Self-refactor engine for Awake.
+
+Analyzes source files for common code-quality issues and applies automatic
+fixes.  The engine operates in two modes:
+
+``--dry-run`` (default)
+    Report issues found but do not modify any files.
+
+``--apply``
+    Rewrite files in place after user confirmation (or unconditionally
+    when ``--yes`` is passed).
+
+Supported refactors
+-------------------
+- **trailing whitespace** -- strip trailing spaces/tabs from every line.
+- **mixed indentation** -- convert tabs to 4-space indentation.
+- **long lines** -- warn about lines exceeding a configurable column limit
+  (default 120).  Not auto-fixed because wrapping Python safely requires
+  deeper AST knowledge.
+- **unused imports** -- detect names imported but never referenced in the
+  module body (heuristic, not 100 % accurate).
+- **bare except** -- flag ``except:`` clauses with no exception type.
+
+Public API
+----------
+- ``RefactorIssue``      -- a single detected issue
+- ``RefactorReport``     -- all issues for one file
+- ``scan_file(path)``    -> ``RefactorReport``
+- ``scan_repo(root)``    -> list of ``RefactorReport``
+- ``apply_fixes(report)`` -> patched source string
+
+CLI
+---
+    awake refactor [--apply] [--yes] [--max-line-len N]
+"""
+
 from __future__ import annotations
 
 import ast
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+
+
+# ---------------------------------------------------------------------------
+# Data model
+# ---------------------------------------------------------------------------
 
 
 @dataclass
-class RefactorConfig:
-    """Configuration for the refactoring engine."""
+class RefactorIssue:
+    """A single code-quality issue detected in a source file."""
 
-    model: str = "gpt-4o-mini"
-    rules: Optional[list[str]] = None  # None = all rules
-    dry_run: bool = False
-    max_function_lines: int = 50
-    max_complexity: int = 10
-    rename_threshold: float = 0.85  # similarity threshold for rename suggestions
+    kind: str   # e.g. "trailing_whitespace", "unused_import", "bare_except"
+    line: int   # 1-based line number
+    message: str
+    fixable: bool = True  # whether apply_fixes() can resolve it automatically
+
+
+@dataclass
+class RefactorReport:
+    """Collection of issues found in a single source file."""
+
+    path: str
+    issues: list[RefactorIssue] = field(default_factory=list)
+
+    @property
+    def fixable_count(self) -> int:
+        """Number of issues that can be automatically fixed."""
+        return sum(1 for i in self.issues if i.fixable)
 
 
 # ---------------------------------------------------------------------------
-# Rule implementations
+# Checkers
 # ---------------------------------------------------------------------------
 
 
-def _find_long_functions(
-    tree: ast.Module, source_lines: list[str], max_lines: int
-) -> list[dict[str, Any]]:
-    """Find functions that exceed *max_lines* lines."""
-    issues = []
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            length = (node.end_lineno or 0) - node.lineno + 1
-            if length > max_lines:
-                issues.append(
-                    {
-                        "rule": "long-function",
-                        "name": node.name,
-                        "line": node.lineno,
-                        "length": length,
-                        "suggestion": f"Split into smaller functions (currently {length} lines).",
-                    }
+def _check_trailing_whitespace(lines: list[str]) -> list[RefactorIssue]:
+    """Detect trailing whitespace on each line."""
+    issues: list[RefactorIssue] = []
+    for i, line in enumerate(lines, start=1):
+        stripped = line.rstrip("\n").rstrip("\r")
+        if stripped != stripped.rstrip():
+            issues.append(
+                RefactorIssue(
+                    kind="trailing_whitespace",
+                    line=i,
+                    message="Trailing whitespace",
+                    fixable=True,
                 )
+            )
     return issues
 
 
-def _cyclomatic_complexity(node: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
-    """Compute a simple approximation of cyclomatic complexity."""
-    count = 1
-    for child in ast.walk(node):
-        if isinstance(
-            child,
-            (
-                ast.If,
-                ast.While,
-                ast.For,
-                ast.ExceptHandler,
-                ast.With,
-                ast.AsyncWith,
-                ast.AsyncFor,
-                ast.comprehension,
-            ),
-        ):
-            count += 1
-        elif isinstance(child, ast.BoolOp):
-            count += len(child.values) - 1
-    return count
-
-
-def _find_complex_functions(
-    tree: ast.Module, max_complexity: int
-) -> list[dict[str, Any]]:
-    """Find functions with high cyclomatic complexity."""
-    issues = []
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            cc = _cyclomatic_complexity(node)
-            if cc > max_complexity:
-                issues.append(
-                    {
-                        "rule": "high-complexity",
-                        "name": node.name,
-                        "line": node.lineno,
-                        "complexity": cc,
-                        "suggestion": f"Reduce complexity (currently {cc}, threshold {max_complexity}).",
-                    }
+def _check_mixed_indentation(lines: list[str]) -> list[RefactorIssue]:
+    """Detect lines that mix tabs and spaces for indentation."""
+    issues: list[RefactorIssue] = []
+    for i, line in enumerate(lines, start=1):
+        indent = line[: len(line) - len(line.lstrip())]
+        if "\t" in indent and " " in indent:
+            issues.append(
+                RefactorIssue(
+                    kind="mixed_indentation",
+                    line=i,
+                    message="Mixed tabs and spaces in indentation",
+                    fixable=True,
                 )
+            )
+        elif "\t" in indent:
+            issues.append(
+                RefactorIssue(
+                    kind="tab_indentation",
+                    line=i,
+                    message="Tab used for indentation (prefer spaces)",
+                    fixable=True,
+                )
+            )
     return issues
 
 
-def _find_magic_numbers(tree: ast.Module) -> list[dict[str, Any]]:
-    """Flag numeric literals that are not 0, 1, or -1."""
-    issues = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
-            if node.value not in (0, 1, -1, 0.0, 1.0, -1.0, 100, 1000):
-                issues.append(
-                    {
-                        "rule": "magic-number",
-                        "value": node.value,
-                        "line": node.lineno,
-                        "suggestion": "Replace with a named constant.",
-                    }
+def _check_long_lines(lines: list[str], max_len: int = 120) -> list[RefactorIssue]:
+    """Flag lines longer than *max_len* characters."""
+    issues: list[RefactorIssue] = []
+    for i, line in enumerate(lines, start=1):
+        if len(line.rstrip("\n")) > max_len:
+            issues.append(
+                RefactorIssue(
+                    kind="long_line",
+                    line=i,
+                    message=f"Line exceeds {max_len} characters ({len(line.rstrip())} chars)",
+                    fixable=False,
                 )
+            )
     return issues
 
 
-def _find_bare_excepts(tree: ast.Module) -> list[dict[str, Any]]:
-    """Flag bare except clauses."""
-    issues = []
+def _check_bare_except(source: str) -> list[RefactorIssue]:
+    """Detect bare ``except:`` clauses using the AST."""
+    issues: list[RefactorIssue] = []
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return issues
+
     for node in ast.walk(tree):
         if isinstance(node, ast.ExceptHandler) and node.type is None:
             issues.append(
-                {
-                    "rule": "bare-except",
-                    "line": node.lineno,
-                    "suggestion": "Specify the exception type(s) to catch.",
-                }
+                RefactorIssue(
+                    kind="bare_except",
+                    line=node.lineno,
+                    message="Bare 'except:' clause -- catch a specific exception type",
+                    fixable=False,
+                )
             )
     return issues
 
 
-def _find_unused_imports(tree: ast.Module, source: str) -> list[dict[str, Any]]:
-    """Heuristically find imported names that are never used."""
-    issues = []
-    imported_names: list[tuple[str, int]] = []
+def _check_unused_imports(source: str) -> list[RefactorIssue]:
+    """Heuristically detect imported names that are never used."""
+    issues: list[RefactorIssue] = []
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return issues
 
+    imported: dict[str, int] = {}  # name -> line
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                name = alias.asname or alias.name.split(".")[0]
-                imported_names.append((name, node.lineno))
+                local_name = alias.asname or alias.name.split(".")[0]
+                imported[local_name] = node.lineno
         elif isinstance(node, ast.ImportFrom):
             for alias in node.names:
-                name = alias.asname or alias.name
-                if name != "*":
-                    imported_names.append((name, node.lineno))
+                if alias.name == "*":
+                    continue
+                local_name = alias.asname or alias.name
+                imported[local_name] = node.lineno
 
-    for name, lineno in imported_names:
-        # Count occurrences outside the import line itself
-        occurrences = len(re.findall(rf"\b{re.escape(name)}\b", source))
-        if occurrences <= 1:  # only the import statement itself
+    # Collect all Name nodes outside import statements
+    used: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Store):
+            used.add(node.id)
+        elif isinstance(node, ast.Attribute):
+            if isinstance(node.value, ast.Name):
+                used.add(node.value.id)
+
+    for name, lineno in imported.items():
+        if name not in used:
             issues.append(
-                {
-                    "rule": "unused-import",
-                    "name": name,
-                    "line": lineno,
-                    "suggestion": f"Remove unused import {name!r}.",
-                }
+                RefactorIssue(
+                    kind="unused_import",
+                    line=lineno,
+                    message=f"Imported name '{name}' appears unused",
+                    fixable=True,
+                )
             )
     return issues
 
 
 # ---------------------------------------------------------------------------
-# Engine
+# Scanner
 # ---------------------------------------------------------------------------
 
 
-class RefactorEngine:
-    """Runs configured refactoring rules against Python source files."""
+def scan_file(path: str | Path, max_line_len: int = 120) -> RefactorReport:
+    """Scan a single Python file and return a :class:`RefactorReport`.
 
-    ALL_RULES = {
-        "long-function",
-        "high-complexity",
-        "magic-number",
-        "bare-except",
-        "unused-import",
-    }
+    Parameters
+    ----------
+    path:
+        Path to the Python source file.
+    max_line_len:
+        Maximum allowed line length (default 120).
 
-    def __init__(self, config: Optional[RefactorConfig] = None) -> None:
-        self.config = config or RefactorConfig()
-        self.active_rules = (
-            set(self.config.rules) if self.config.rules else self.ALL_RULES
-        )
+    Returns
+    -------
+    RefactorReport
+        All issues found in the file.
+    """
+    path = Path(path)
+    try:
+        source = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return RefactorReport(path=str(path), issues=[RefactorIssue(kind="read_error", line=0, message=str(exc), fixable=False)])
 
-    def analyse_source(self, source: str, path: str = "<string>") -> list[dict[str, Any]]:
-        """Run all active rules on *source* and return a list of issues."""
-        try:
-            tree = ast.parse(source)
-        except SyntaxError as exc:
-            return [{"rule": "syntax-error", "line": exc.lineno, "message": str(exc)}]
+    lines = source.splitlines(keepends=True)
+    report = RefactorReport(path=str(path))
+    report.issues.extend(_check_trailing_whitespace(lines))
+    report.issues.extend(_check_mixed_indentation(lines))
+    report.issues.extend(_check_long_lines(lines, max_line_len))
+    report.issues.extend(_check_bare_except(source))
+    report.issues.extend(_check_unused_imports(source))
+    report.issues.sort(key=lambda i: i.line)
+    return report
 
-        issues: list[dict[str, Any]] = []
-        source_lines = source.splitlines()
 
-        if "long-function" in self.active_rules:
-            issues += _find_long_functions(tree, source_lines, self.config.max_function_lines)
-        if "high-complexity" in self.active_rules:
-            issues += _find_complex_functions(tree, self.config.max_complexity)
-        if "magic-number" in self.active_rules:
-            issues += _find_magic_numbers(tree)
-        if "bare-except" in self.active_rules:
-            issues += _find_bare_excepts(tree)
-        if "unused-import" in self.active_rules:
-            issues += _find_unused_imports(tree, source)
+def scan_repo(root: str | Path, max_line_len: int = 120) -> list[RefactorReport]:
+    """Scan all Python files under *root* and return reports.
 
-        for issue in issues:
-            issue["path"] = path
+    Parameters
+    ----------
+    root:
+        Repository root directory.
+    max_line_len:
+        Maximum allowed line length.
 
-        return issues
+    Returns
+    -------
+    list[RefactorReport]
+        One report per Python file found.
+    """
+    root = Path(root)
+    reports: list[RefactorReport] = []
+    for py_file in sorted(root.rglob("*.py")):
+        reports.append(scan_file(py_file, max_line_len))
+    return reports
 
-    def run(self, root: Path, glob: str = "**/*.py") -> list[dict[str, Any]]:
-        """Analyse all Python files under *root*."""
-        all_issues: list[dict[str, Any]] = []
-        for py_file in sorted(root.glob(glob)):
-            if py_file.is_file():
-                source = py_file.read_text(encoding="utf-8", errors="replace")
-                all_issues += self.analyse_source(source, str(py_file))
-        return all_issues
+
+# ---------------------------------------------------------------------------
+# Auto-fixer
+# ---------------------------------------------------------------------------
+
+
+def apply_fixes(report: RefactorReport) -> str:
+    """Return the source of *report.path* with all fixable issues resolved.
+
+    Parameters
+    ----------
+    report:
+        The report whose file should be patched.
+
+    Returns
+    -------
+    str
+        The patched source code string.
+    """
+    path = Path(report.path)
+    try:
+        source = path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+    lines = source.splitlines(keepends=True)
+
+    # Collect line numbers to fix by kind
+    trailing_ws_lines: set[int] = set()
+    tab_lines: set[int] = set()
+    unused_import_lines: set[int] = set()
+
+    for issue in report.issues:
+        if issue.fixable:
+            if issue.kind in ("trailing_whitespace",):
+                trailing_ws_lines.add(issue.line)
+            elif issue.kind in ("mixed_indentation", "tab_indentation"):
+                tab_lines.add(issue.line)
+            elif issue.kind == "unused_import":
+                unused_import_lines.add(issue.line)
+
+    patched: list[str] = []
+    for i, line in enumerate(lines, start=1):
+        if i in unused_import_lines:
+            continue  # drop the line entirely
+        if i in tab_lines:
+            line = line.replace("\t", "    ")
+        if i in trailing_ws_lines:
+            eol = "\n" if line.endswith("\n") else ""
+            line = line.rstrip() + eol
+        patched.append(line)
+
+    return "".join(patched)
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry point for the refactor engine.
+
+    Parameters
+    ----------
+    argv:
+        Command-line arguments.
+
+    Returns
+    -------
+    int
+        Exit code.
+    """
+    import argparse
+    import sys
+
+    parser = argparse.ArgumentParser(
+        prog="awake refactor",
+        description="Detect and fix code-quality issues.",
+    )
+    parser.add_argument("repo", nargs="?", default=".", help="Repo root")
+    parser.add_argument("--apply", action="store_true", help="Apply fixes")
+    parser.add_argument("--yes", action="store_true", help="Skip confirmation")
+    parser.add_argument(
+        "--max-line-len",
+        type=int,
+        default=120,
+        help="Maximum allowed line length (default: 120)",
+    )
+    args = parser.parse_args(argv)
+
+    root = Path(args.repo).resolve()
+    if not root.is_dir():
+        print(f"Error: {root} is not a directory", file=sys.stderr)
+        return 1
+
+    reports = scan_repo(root, max_line_len=args.max_line_len)
+    total_issues = sum(len(r.issues) for r in reports)
+    fixable = sum(r.fixable_count for r in reports)
+
+    for report in reports:
+        if report.issues:
+            print(f"\n{report.path}")
+            for issue in report.issues:
+                fix_tag = " [fixable]" if issue.fixable else ""
+                print(f"  line {issue.line:>4}: [{issue.kind}] {issue.message}{fix_tag}")
+
+    print(f"\nTotal issues: {total_issues}  ({fixable} fixable)")
+
+    if args.apply and fixable:
+        if not args.yes:
+            ans = input("Apply all fixable issues? [y/N] ").strip().lower()
+            if ans != "y":
+                print("Aborted.")
+                return 0
+        written = 0
+        for report in reports:
+            if report.fixable_count:
+                patched = apply_fixes(report)
+                Path(report.path).write_text(patched, encoding="utf-8")
+                written += 1
+        print(f"Fixed {written} files.")
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
