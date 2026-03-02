@@ -1,109 +1,174 @@
-"""Auto-merge pull requests that pass all checks."""
+"""Auto-merge helper for Awake.
 
-import logging
-import os
+This module is intentionally lightweight and dependency-free.
+
+It provides a small decision engine that can be used in CI or from the CLI
+(to gate whether a PR is eligible for automatic merging).
+
+Awake's roadmap calls out **PR auto-merge**: merge PRs automatically if:
+- CI passes
+- PR score >= threshold (default: 80)
+
+The actual merge action is intentionally not implemented here. This keeps the
+core library safe to run locally without requiring GitHub credentials.
+Instead, the module outputs a machine-readable decision that can be consumed
+by a separate GitHub Action step (future work) or by a human.
+"""
+
+from __future__ import annotations
+
+import json
 from dataclasses import dataclass
 from typing import Optional
 
-from github import Github, GithubException
 
-logger = logging.getLogger(__name__)
+@dataclass(frozen=True)
+class AutoMergeDecision:
+    """A yes/no decision with structured metadata."""
 
+    eligible: bool
+    pr_number: Optional[int] = None
+    pr_score: Optional[int] = None
+    min_score: int = 80
+    ci_passed: Optional[bool] = None
+    reason: str = ""
 
-@dataclass
-class MergeResult:
-    pr_number: int
-    merged: bool
-    reason: str
-
-
-def get_github_client() -> Github:
-    token = os.environ.get("GITHUB_TOKEN")
-    if not token:
-        raise ValueError("GITHUB_TOKEN environment variable not set")
-    return Github(token)
-
-
-def is_mergeable(pr) -> tuple[bool, str]:
-    """Check if a PR is safe to auto-merge."""
-    if pr.draft:
-        return False, "PR is a draft"
-
-    if pr.mergeable_state == "blocked":
-        return False, "PR is blocked (failing checks or required reviews missing)"
-
-    if pr.mergeable_state == "behind":
-        return False, "PR is behind the base branch"
-
-    if pr.mergeable_state not in ("clean", "unstable"):
-        return False, f"PR mergeable state is '{pr.mergeable_state}'"
-
-    labels = [label.name.lower() for label in pr.labels]
-    if "do-not-merge" in labels or "wip" in labels:
-        return False, "PR has a blocking label"
-
-    return True, "OK"
+    def to_dict(self) -> dict:
+        return {
+            "eligible": self.eligible,
+            "pr_number": self.pr_number,
+            "pr_score": self.pr_score,
+            "min_score": self.min_score,
+            "ci_passed": self.ci_passed,
+            "reason": self.reason,
+        }
 
 
-def auto_merge_pr(
-    owner: str,
-    repo_name: str,
-    pr_number: int,
-    merge_method: str = "squash",
-) -> MergeResult:
-    """Attempt to merge a single PR."""
-    g = get_github_client()
-    repo = g.get_repo(f"{owner}/{repo_name}")
-    pr = repo.get_pull(pr_number)
+def decide_automerge(*, pr_score: int, ci_passed: bool, min_score: int = 80, pr_number: int | None = None) -> AutoMergeDecision:
+    """Return whether a PR is eligible for auto-merge.
 
-    ok, reason = is_mergeable(pr)
-    if not ok:
-        logger.info("PR #%d not mergeable: %s", pr_number, reason)
-        return MergeResult(pr_number=pr_number, merged=False, reason=reason)
+    Parameters
+    ----------
+    pr_score:
+        Quality score (0-100) as produced by ``src.pr_scorer``.
+
+    ci_passed:
+        Whether required checks passed.
+
+    min_score:
+        Minimum quality score required.
+
+    pr_number:
+        Optional PR number for better reporting.
+
+    Notes
+    -----
+    This function never raises for ordinary invalid inputs; it returns an
+    ineligible decision with a reason.
+    """
+    if pr_score is None:
+        return AutoMergeDecision(
+            eligible=False,
+            pr_number=pr_number,
+            pr_score=None,
+            min_score=min_score,
+            ci_passed=ci_passed,
+            reason="Missing pr_score",
+        )
+    if not isinstance(pr_score, int):
+        return AutoMergeDecision(
+            eligible=False,
+            pr_number=pr_number,
+            pr_score=None,
+            min_score=min_score,
+            ci_passed=ci_passed,
+            reason="pr_score must be an int",
+        )
+    if pr_score < 0 or pr_score > 100:
+        return AutoMergeDecision(
+            eligible=False,
+            pr_number=pr_number,
+            pr_score=pr_score,
+            min_score=min_score,
+            ci_passed=ci_passed,
+            reason="pr_score must be between 0 and 100",
+        )
+    if not ci_passed:
+        return AutoMergeDecision(
+            eligible=False,
+            pr_number=pr_number,
+            pr_score=pr_score,
+            min_score=min_score,
+            ci_passed=False,
+            reason="CI checks have not passed",
+        )
+    if pr_score < min_score:
+        return AutoMergeDecision(
+            eligible=False,
+            pr_number=pr_number,
+            pr_score=pr_score,
+            min_score=min_score,
+            ci_passed=True,
+            reason=f"PR score {pr_score} below threshold {min_score}",
+        )
+    return AutoMergeDecision(
+        eligible=True,
+        pr_number=pr_number,
+        pr_score=pr_score,
+        min_score=min_score,
+        ci_passed=True,
+        reason="Eligible for auto-merge",
+    )
+
+
+def _parse_bool(s: str) -> bool:
+    s = s.strip().lower()
+    if s in {"1", "true", "yes", "y", "on"}:
+        return True
+    if s in {"0", "false", "no", "n", "off"}:
+        return False
+    raise ValueError(f"Invalid bool: {s}")
+
+
+def main(argv=None) -> int:
+    """CLI entry point: decide whether to auto-merge.
+
+    Examples
+    --------
+    python -m src.automerge --score 92 --ci true
+    python -m src.automerge --score 79 --ci true --min-score 80
+    """
+    import argparse
+
+    p = argparse.ArgumentParser(prog="awake-automerge")
+    p.add_argument("--score", type=int, required=True, help="PR quality score (0-100)")
+    p.add_argument("--ci", type=str, required=True, help="Whether CI passed (true/false)")
+    p.add_argument("--min-score", type=int, default=80, help="Minimum score threshold")
+    p.add_argument("--pr", type=int, default=None, help="PR number")
+    p.add_argument("--json", action="store_true", help="Output JSON")
+    args = p.parse_args(argv)
 
     try:
-        result = pr.merge(
-            commit_title=f"{pr.title} (#{pr_number})",
-            merge_method=merge_method,
-        )
-        if result.merged:
-            logger.info("Merged PR #%d", pr_number)
-            return MergeResult(pr_number=pr_number, merged=True, reason="merged")
-        return MergeResult(
-            pr_number=pr_number, merged=False, reason=result.message or "unknown"
-        )
-    except GithubException as exc:
-        msg = str(exc)
-        logger.warning("Failed to merge PR #%d: %s", pr_number, msg)
-        return MergeResult(pr_number=pr_number, merged=False, reason=msg)
+        ci_passed = _parse_bool(args.ci)
+    except ValueError as e:
+        print(str(e))
+        return 2
+
+    decision = decide_automerge(
+        pr_score=args.score,
+        ci_passed=ci_passed,
+        min_score=args.min_score,
+        pr_number=args.pr,
+    )
+
+    if args.json:
+        print(json.dumps(decision.to_dict(), indent=2))
+    else:
+        status = "ELIGIBLE" if decision.eligible else "INELIGIBLE"
+        print(f"{status}: {decision.reason}")
+
+    return 0 if decision.eligible else 1
 
 
-def auto_merge_all(
-    owner: str,
-    repo_name: str,
-    label: Optional[str] = "auto-merge",
-    merge_method: str = "squash",
-) -> list[MergeResult]:
-    """Merge all open PRs that carry the given label (default: 'auto-merge')."""
-    g = get_github_client()
-    repo = g.get_repo(f"{owner}/{repo_name}")
-
-    query = f"is:pr is:open repo:{owner}/{repo_name}"
-    if label:
-        query += f' label:"{label}"'
-
-    pulls = list(repo.get_pulls(state="open", sort="created"))
-    if label:
-        pulls = [p for p in pulls if any(lb.name == label for lb in p.labels)]
-
-    results = []
-    for pr in pulls:
-        results.append(
-            auto_merge_pr(
-                owner=owner,
-                repo_name=repo_name,
-                pr_number=pr.number,
-                merge_method=merge_method,
-            )
-        )
-    return results
+if __name__ == "__main__":
+    raise SystemExit(main())

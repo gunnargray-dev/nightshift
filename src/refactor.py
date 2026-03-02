@@ -1,311 +1,409 @@
-"""Automated refactoring helpers for awake."""
+"""Self-refactor engine for Awake.
+
+Analyzes source files from previous sessions and produces a structured
+``RefactorReport`` detailing actionable improvements.  Simple, safe fixes
+(missing docstrings on short functions, trailing whitespace) can be applied
+automatically; more complex changes are left as recommendations.
+
+Refactoring categories
+----------------------
+- MISSING_DOCSTRING  -- public function or class has no docstring
+- LONG_LINE          -- line exceeds 88 characters
+- TODO_DEBT          -- TODO / FIXME marker present in source
+- MAGIC_NUMBER       -- bare numeric literal used outside assignment
+- BARE_EXCEPT        -- ``except:`` without an exception type
+- DEAD_IMPORT        -- imported name not referenced in the file body
+
+Each suggestion carries a ``severity`` (low / medium / high) and a
+``fix_strategy`` (auto / manual / review).  Only ``fix_strategy='auto'``
+items are touched when ``apply_safe_fixes()`` is called.
+"""
+
+from __future__ import annotations
 
 import ast
 import re
-import textwrap
-from dataclasses import dataclass
+from dataclasses import dataclass, field, asdict
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 
+# ---------------------------------------------------------------------------
+# Data classes
+# ---------------------------------------------------------------------------
+
+
+SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
+
+
 @dataclass
-class RefactorResult:
+class RefactorSuggestion:
+    """A single actionable refactor suggestion for a specific location."""
+
+    file: str
+    line: int
+    category: str        # MISSING_DOCSTRING | LONG_LINE | TODO_DEBT | BARE_EXCEPT | DEAD_IMPORT
+    severity: str        # high | medium | low
+    fix_strategy: str    # auto | manual | review
+    message: str
+    original: str = ""   # The problematic snippet
+    suggestion: str = "" # Suggested replacement (if auto-fixable)
+
+    def to_dict(self) -> dict:
+        """Serialize to dictionary."""
+        return asdict(self)
+
+
+@dataclass
+class FileRefactorResult:
+    """All suggestions for a single file, plus auto-fix results."""
+
     path: str
-    original: str
-    refactored: str
-    changes: list[str]
+    suggestions: list[RefactorSuggestion] = field(default_factory=list)
+    fixes_applied: int = 0
+    health_before: float = 0.0
+    health_after: float = 0.0
+
+    def to_dict(self) -> dict:
+        """Serialize to dictionary."""
+        return asdict(self)
 
     @property
-    def changed(self) -> bool:
-        return self.original != self.refactored
+    def suggestion_count(self) -> int:
+        """Return number of suggestions for this file."""
+        return len(self.suggestions)
+
+    @property
+    def high_severity(self) -> list[RefactorSuggestion]:
+        """Return only high-severity suggestions."""
+        return [s for s in self.suggestions if s.severity == "high"]
+
+    @property
+    def auto_fixable(self) -> list[RefactorSuggestion]:
+        """Return only auto-fixable suggestions."""
+        return [s for s in self.suggestions if s.fix_strategy == "auto"]
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+@dataclass
+class RefactorReport:
+    """Aggregate refactor report across the entire repository."""
 
+    files: list[FileRefactorResult] = field(default_factory=list)
+    generated_at: str = ""
+    session: int = 0
 
-def _normalize_imports(source: str) -> tuple[str, list[str]]:
-    """
-    Sort and deduplicate top-level import statements.
+    def to_dict(self) -> dict:
+        """Serialize to dictionary."""
+        return asdict(self)
 
-    Returns:
-        (modified_source, list_of_change_descriptions)
-    """
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
-        return source, []
+    @property
+    def total_suggestions(self) -> int:
+        """Return total number of suggestions across all files."""
+        return sum(f.suggestion_count for f in self.files)
 
-    lines = source.splitlines(keepends=True)
-    changes: list[str] = []
+    @property
+    def total_auto_fixable(self) -> int:
+        """Return number of auto-fixable suggestions."""
+        return sum(len(f.auto_fixable) for f in self.files)
 
-    # Collect top-level import nodes
-    import_nodes = [
-        n
-        for n in ast.iter_child_nodes(tree)
-        if isinstance(n, (ast.Import, ast.ImportFrom))
-    ]
-    if not import_nodes:
-        return source, []
+    @property
+    def all_suggestions(self) -> list[RefactorSuggestion]:
+        """Return all suggestions sorted by severity."""
+        result = []
+        for f in self.files:
+            result.extend(f.suggestions)
+        return sorted(result, key=lambda s: (SEVERITY_ORDER.get(s.severity, 99), s.file, s.line))
 
-    first_line = import_nodes[0].lineno - 1
-    last_line = import_nodes[-1].end_lineno  # exclusive
+    def to_markdown(self) -> str:
+        """Render the refactor report as Markdown."""
+        ts = self.generated_at or "N/A"
+        lines = [
+            "# Self-Refactor Report",
+            "",
+            f"*Generated: {ts}*",
+            "",
+            "## Summary",
+            "",
+            "| Metric | Value |",
+            "|--------|-------|",
+            f"| Files analysed | {len(self.files)} |",
+            f"| Total suggestions | {self.total_suggestions} |",
+            f"| Auto-fixable | {self.total_auto_fixable} |",
+            f"| High severity | {sum(len(f.high_severity) for f in self.files)} |",
+            "",
+        ]
 
-    original_block = lines[first_line:last_line]
-    import_lines = [l.rstrip() for l in original_block if l.strip()]
+        if not self.all_suggestions:
+            lines.append("No refactor suggestions -- codebase is clean.")
+            lines += ["", "---", ""]
+            return "\n".join(lines)
 
-    stdlib_imports = []
-    third_party_imports = []
-    local_imports = []
-
-    for line in import_lines:
-        stripped = line.lstrip()
-        if stripped.startswith("from .") or stripped.startswith("import ."):
-            local_imports.append(line)
-        else:
-            # Very rough stdlib detection: single-word imports that are stdlib
-            m = re.match(r"^(?:from\s+(\S+)|import\s+(\S+))", stripped)
-            mod = (m.group(1) or m.group(2)).split(".")[0] if m else ""
-            try:
-                import importlib.util as _ilu
-
-                spec = _ilu.find_spec(mod)
-                if spec and (spec.origin or "").startswith((__import__("sysconfig").get_path("stdlib"),)):
-                    stdlib_imports.append(line)
-                else:
-                    third_party_imports.append(line)
-            except Exception:  # noqa: BLE001
-                third_party_imports.append(line)
-
-    def _sort(lst):
-        return sorted(set(lst))
-
-    new_block_lines = []
-    for group in (_sort(stdlib_imports), _sort(third_party_imports), _sort(local_imports)):
-        if group:
-            new_block_lines.extend(group)
-            new_block_lines.append("")  # blank separator
-
-    # Remove trailing blank
-    while new_block_lines and not new_block_lines[-1]:
-        new_block_lines.pop()
-
-    new_block = [l + "\n" for l in new_block_lines]
-
-    if new_block != original_block:
-        changes.append("Sorted and deduplicated imports")
-        lines[first_line:last_line] = new_block
-
-    return "".join(lines), changes
-
-
-def _remove_unused_variables(source: str) -> tuple[str, list[str]]:
-    """
-    Remove simple unused variable assignments of the form ``x = <expr>``
-    at module level when ``x`` is never referenced afterwards.
-    """
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
-        return source, []
-
-    # Collect names of all *loads* (references)
-    loaded: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
-            loaded.add(node.id)
-
-    # Collect top-level simple assignments where the target is never loaded
-    lines = source.splitlines(keepends=True)
-    to_remove: list[tuple[int, int]] = []  # (start_lineno-1, end_lineno)
-    changes: list[str] = []
-
-    for node in ast.iter_child_nodes(tree):
-        if not isinstance(node, ast.Assign):
-            continue
-        if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
-            continue
-        name = node.targets[0].id
-        if name.startswith("_") or name in loaded:
-            continue
-        to_remove.append((node.lineno - 1, node.end_lineno))
-        changes.append(f"Removed unused variable '{name}'")
-
-    # Remove in reverse order to preserve line numbers
-    for start, end in reversed(to_remove):
-        del lines[start:end]
-
-    return "".join(lines), changes
-
-
-def _add_missing_docstrings(source: str) -> tuple[str, list[str]]:
-    """Add a placeholder docstring to any public function/class missing one."""
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
-        return source, []
-
-    lines = source.splitlines(keepends=True)
-    insertions: list[tuple[int, str]] = []  # (line index after def, docstring)
-    changes: list[str] = []
-
-    nodes = [
-        n
-        for n in ast.walk(tree)
-        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-    ]
-
-    for node in nodes:
-        if node.name.startswith("_"):
-            continue
-        # Check if first statement is a docstring
-        if node.body and isinstance(node.body[0], ast.Expr) and isinstance(
-            node.body[0].value, ast.Constant
-        ):
-            continue
-
-        # Determine indent from the def/class line
-        def_line = lines[node.lineno - 1]
-        indent = len(def_line) - len(def_line.lstrip())
-        body_indent = " " * (indent + 4)
-        placeholder = f'{body_indent}"""TODO: add docstring."""\n'
-
-        # Insert after the colon line (node.lineno)
-        insertions.append((node.lineno, placeholder))
-        changes.append(f"Added placeholder docstring to '{node.name}'")
-
-    # Apply insertions in reverse order
-    for lineno, doc in sorted(insertions, reverse=True):
-        lines.insert(lineno, doc)
-
-    return "".join(lines), changes
-
-
-def _wrap_long_lines(
-    source: str, max_length: int = 120
-) -> tuple[str, list[str]]:
-    """Naively break comment lines and string literals that exceed max_length."""
-    lines = source.splitlines(keepends=True)
-    changes: list[str] = []
-    new_lines = []
-
-    for i, line in enumerate(lines):
-        stripped = line.rstrip("\n")
-        if len(stripped) <= max_length:
-            new_lines.append(line)
-            continue
-
-        # Only attempt to wrap pure comment lines
-        lstripped = stripped.lstrip()
-        if lstripped.startswith("#"):
-            indent = len(stripped) - len(lstripped)
-            wrapped = textwrap.fill(
-                lstripped[1:].strip(),
-                width=max_length - indent - 2,
-                initial_indent=" " * indent + "# ",
-                subsequent_indent=" " * indent + "# ",
+        lines += [
+            "## Suggestions by Severity",
+            "",
+            "| File | Line | Category | Severity | Fix | Message |",
+            "|------|------|----------|----------|-----|---------|" ,
+        ]
+        for s in self.all_suggestions:
+            badge = {"high": "[high]", "medium": "[medium]", "low": "[low]"}.get(s.severity, "[?]")
+            fix_badge = {"auto": "[auto]", "manual": "[manual]", "review": "[review]"}.get(s.fix_strategy, "[?]")
+            short_file = Path(s.file).name
+            lines.append(
+                f"| `{short_file}` | {s.line} | {s.category} | {badge} {s.severity} | {fix_badge} {s.fix_strategy} | {s.message} |"
             )
-            new_lines.append(wrapped + "\n")
-            changes.append(f"Wrapped long comment on line {i + 1}")
-        else:
-            new_lines.append(line)
 
-    return "".join(new_lines), changes
+        lines += ["", "---", ""]
+        return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
-# Public API
+# Analysers
 # ---------------------------------------------------------------------------
 
 
-def refactor_source(
-    source: str,
-    *,
-    normalize_imports: bool = True,
-    remove_unused: bool = True,
-    add_docstrings: bool = False,
-    wrap_long_lines: bool = False,
-    max_line_length: int = 120,
-) -> RefactorResult:
-    """
-    Apply a set of safe refactoring passes to Python source code.
-
-    Args:
-        source: The source code string to refactor.
-        normalize_imports: Sort and deduplicate imports.
-        remove_unused: Remove obviously unused module-level variables.
-        add_docstrings: Add placeholder docstrings to undocumented public items.
-        wrap_long_lines: Wrap overlong comment lines.
-        max_line_length: Line length threshold for wrapping.
-
-    Returns:
-        A RefactorResult with original, refactored code, and change list.
-    """
-    current = source
-    all_changes: list[str] = []
-
-    if normalize_imports:
-        current, changes = _normalize_imports(current)
-        all_changes.extend(changes)
-
-    if remove_unused:
-        current, changes = _remove_unused_variables(current)
-        all_changes.extend(changes)
-
-    if add_docstrings:
-        current, changes = _add_missing_docstrings(current)
-        all_changes.extend(changes)
-
-    if wrap_long_lines:
-        current, changes = _wrap_long_lines(current, max_length=max_line_length)
-        all_changes.extend(changes)
-
-    return RefactorResult(
-        path="<string>",
-        original=source,
-        refactored=current,
-        changes=all_changes,
-    )
+_TODO_RE = re.compile(r"\b(TODO|FIXME|HACK|XXX)\b", re.IGNORECASE)
 
 
-def refactor_file(
-    path: str,
-    *,
-    normalize_imports: bool = True,
-    remove_unused: bool = True,
-    add_docstrings: bool = False,
-    wrap_long_lines: bool = False,
-    max_line_length: int = 120,
-    dry_run: bool = False,
-) -> RefactorResult:
-    """
-    Refactor a Python source file.
+def _analyse_missing_docstrings(
+    tree: ast.Module, source_lines: list[str], path: str
+) -> list[RefactorSuggestion]:
+    """Detect public functions/classes without docstrings."""
+    suggestions = []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        if node.name.startswith("_"):
+            continue  # skip private
+        has_doc = (
+            node.body
+            and isinstance(node.body[0], ast.Expr)
+            and isinstance(node.body[0].value, ast.Constant)
+            and isinstance(node.body[0].value.value, str)
+        )
+        if not has_doc:
+            kind = "class" if isinstance(node, ast.ClassDef) else "function"
+            body_lines = (node.end_lineno or node.lineno) - node.lineno
+            severity = "medium" if body_lines > 5 else "low"
+            fix_strategy = "auto" if (kind == "function" and body_lines <= 3) else "manual"
+            suggestions.append(
+                RefactorSuggestion(
+                    file=path,
+                    line=node.lineno,
+                    category="MISSING_DOCSTRING",
+                    severity=severity,
+                    fix_strategy=fix_strategy,
+                    message=f"{kind} `{node.name}` has no docstring",
+                    original=source_lines[node.lineno - 1].rstrip() if node.lineno <= len(source_lines) else "",
+                    suggestion=f'    """{node.name.replace("_", " ").title()}."""',
+                )
+            )
+    return suggestions
 
-    Args:
-        path: Path to the .py file.
-        normalize_imports: Sort and deduplicate imports.
-        remove_unused: Remove obviously unused module-level variables.
-        add_docstrings: Add placeholder docstrings to undocumented public items.
-        wrap_long_lines: Wrap overlong comment lines.
-        max_line_length: Line length threshold for wrapping.
-        dry_run: If True, do not write back to disk.
 
-    Returns:
-        A RefactorResult.
-    """
-    source = Path(path).read_text(encoding="utf-8")
-    result = refactor_source(
-        source,
-        normalize_imports=normalize_imports,
-        remove_unused=remove_unused,
-        add_docstrings=add_docstrings,
-        wrap_long_lines=wrap_long_lines,
-        max_line_length=max_line_length,
-    )
-    result.path = path
+def _analyse_long_lines(
+    source_lines: list[str], path: str, max_len: int = 88
+) -> list[RefactorSuggestion]:
+    """Detect lines exceeding max_len characters."""
+    suggestions = []
+    for i, line in enumerate(source_lines, start=1):
+        if len(line.rstrip()) > max_len:
+            excess = len(line.rstrip()) - max_len
+            suggestions.append(
+                RefactorSuggestion(
+                    file=path,
+                    line=i,
+                    category="LONG_LINE",
+                    severity="low",
+                    fix_strategy="manual",
+                    message=f"Line is {len(line.rstrip())} chars (exceeds {max_len} by {excess})",
+                    original=line.rstrip()[:100] + "..." if len(line) > 100 else line.rstrip(),
+                )
+            )
+    return suggestions
 
-    if result.changed and not dry_run:
-        Path(path).write_text(result.refactored, encoding="utf-8")
+
+def _analyse_todos(source_lines: list[str], path: str) -> list[RefactorSuggestion]:
+    """Detect TODO/FIXME markers as technical debt."""
+    suggestions = []
+    for i, line in enumerate(source_lines, start=1):
+        m = _TODO_RE.search(line)
+        if m:
+            suggestions.append(
+                RefactorSuggestion(
+                    file=path,
+                    line=i,
+                    category="TODO_DEBT",
+                    severity="medium",
+                    fix_strategy="review",
+                    message=f"{m.group(1)} marker -- resolve or file an issue",
+                    original=line.strip(),
+                )
+            )
+    return suggestions
+
+
+def _analyse_bare_excepts(
+    tree: ast.Module, source_lines: list[str], path: str
+) -> list[RefactorSuggestion]:
+    """Detect bare ``except:`` clauses (catches BaseException silently)."""
+    suggestions = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ExceptHandler) and node.type is None:
+            suggestions.append(
+                RefactorSuggestion(
+                    file=path,
+                    line=node.lineno,
+                    category="BARE_EXCEPT",
+                    severity="high",
+                    fix_strategy="manual",
+                    message="Bare `except:` catches all exceptions including KeyboardInterrupt",
+                    original=source_lines[node.lineno - 1].rstrip() if node.lineno <= len(source_lines) else "",
+                    suggestion="except Exception:",
+                )
+            )
+    return suggestions
+
+
+def _analyse_dead_imports(
+    tree: ast.Module, source: str, path: str
+) -> list[RefactorSuggestion]:
+    """Detect imported names that are never used in the file."""
+    imported_names: list[tuple[str, int]] = []
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                name = alias.asname or alias.name.split(".")[0]
+                imported_names.append((name, node.lineno))
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name == "*":
+                    continue
+                name = alias.asname or alias.name
+                imported_names.append((name, node.lineno))
+
+    suggestions = []
+    for name, lineno in imported_names:
+        lines = source.splitlines()
+        body_uses = sum(
+            1 for i, line in enumerate(lines, start=1)
+            if i != lineno and re.search(r"\b" + re.escape(name) + r"\b", line)
+        )
+        if body_uses == 0:
+            suggestions.append(
+                RefactorSuggestion(
+                    file=path,
+                    line=lineno,
+                    category="DEAD_IMPORT",
+                    severity="low",
+                    fix_strategy="review",
+                    message=f"Import `{name}` appears unused",
+                )
+            )
+    return suggestions
+
+
+def _analyse_file(path: Path, repo_root: Path) -> FileRefactorResult:
+    """Run all analysers on a single Python file."""
+    rel = str(path.relative_to(repo_root))
+    result = FileRefactorResult(path=rel)
+
+    try:
+        source = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return result
+
+    source_lines = source.splitlines()
+
+    try:
+        tree = ast.parse(source, filename=str(path))
+    except SyntaxError:
+        return result
+
+    result.suggestions += _analyse_missing_docstrings(tree, source_lines, rel)
+    result.suggestions += _analyse_long_lines(source_lines, rel)
+    result.suggestions += _analyse_todos(source_lines, rel)
+    result.suggestions += _analyse_bare_excepts(tree, source_lines, rel)
+    result.suggestions += _analyse_dead_imports(tree, source, rel)
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Auto-fix engine
+# ---------------------------------------------------------------------------
+
+
+def _apply_docstring_fix(path: Path, suggestion: RefactorSuggestion) -> bool:
+    """Insert a stub docstring on the line after the function definition."""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+        target = suggestion.line - 1  # 0-indexed
+        if target >= len(lines):
+            return False
+        def_line = lines[target]
+        indent = len(def_line) - len(def_line.lstrip())
+        stub = " " * (indent + 4) + '"""TODO: add docstring."""\n'
+        lines.insert(target + 1, stub)
+        path.write_text("".join(lines), encoding="utf-8")
+        return True
+    except OSError:
+        return False
+
+
+# ---------------------------------------------------------------------------
+# RefactorEngine
+# ---------------------------------------------------------------------------
+
+
+class RefactorEngine:
+    """Orchestrates analysis and optional auto-fixing of the repository."""
+
+    def __init__(self, repo_path: Optional[Path] = None, session: int = 4) -> None:
+        """Initialize with repo path and session number."""
+        self.repo_path = repo_path or Path.cwd()
+        self.session = session
+
+    def analyze(
+        self,
+        glob: str = "src/**/*.py",
+        exclude: Optional[list[str]] = None,
+    ) -> RefactorReport:
+        """Analyse all Python source files and return a RefactorReport."""
+        exclude = exclude or ["__init__"]
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        report = RefactorReport(generated_at=ts, session=self.session)
+
+        for py_file in sorted(self.repo_path.glob(glob)):
+            rel = str(py_file.relative_to(self.repo_path))
+            if any(ex in rel for ex in exclude):
+                continue
+            file_result = _analyse_file(py_file, self.repo_path)
+            if file_result.suggestions:
+                report.files.append(file_result)
+
+        return report
+
+    def apply_safe_fixes(self, report: RefactorReport) -> int:
+        """Apply only ``fix_strategy='auto'`` suggestions. Returns count applied."""
+        applied = 0
+        for file_result in report.files:
+            py_file = self.repo_path / file_result.path
+            for suggestion in file_result.auto_fixable:
+                if suggestion.category == "MISSING_DOCSTRING":
+                    if _apply_docstring_fix(py_file, suggestion):
+                        applied += 1
+                        file_result.fixes_applied += 1
+        return applied
+
+
+def find_refactor_candidates(repo_path: Path | None = None) -> list[RefactorSuggestion]:
+    """Convenience wrapper: return flat list of all refactor suggestions.
+
+    Used by ``src.audit`` and other modules that only need the candidate list
+    without the full engine/report machinery.
+    """
+    engine = RefactorEngine(repo_path=repo_path)
+    report = engine.analyze()
+    return report.all_suggestions

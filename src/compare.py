@@ -102,15 +102,15 @@ class SessionComparison:
         a = self.session_a
         b = self.session_b
 
-        sep_a = "─" * 29
-        sep_b = "─" * 29
+        sep_a = "\u2500" * 29
+        sep_b = "\u2500" * 29
         lines = [
             f"# Session Comparison: Session {a.session_number} vs Session {b.session_number}",
             "",
             "## Overview",
             "",
             f"| Metric | Session {a.session_number} ({a.date}) | Session {b.session_number} ({b.date}) | Delta |",
-            "|--------|─" + sep_a + "|─" + sep_b + "|-------|",
+            "|--------|\u2500" + sep_a + "|\u2500" + sep_b + "|-------|",
         ]
 
         for m in self.metrics:

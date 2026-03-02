@@ -1,229 +1,298 @@
-"""Test quality analysis utilities for awake."""
+"""Test quality analyzer for Awake.
+
+Grades each test file on assertion density, edge case coverage, mock usage,
+and structural best practices.
+
+CLI
+---
+    awake test-quality             # Show test quality report
+    awake test-quality --json      # Emit JSON
+"""
+
+from __future__ import annotations
 
 import ast
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Optional
 
+from src.scoring import score_to_grade as _grade
 
 @dataclass
-class TestFileReport:
-    """Quality report for a single test file."""
+class TestFileScore:
+    """Hold quality metrics and score for a single test file"""
 
-    path: str
-    test_count: int
-    assertion_count: int
-    parametrize_count: int
-    fixture_count: int
-    missing_docstrings: list[str] = field(default_factory=list)
-    long_tests: list[str] = field(default_factory=list)
-    parse_error: bool = False
+    file: str
+    module: str
+    score: float = 0.0
+    grade: str = ""
+    test_count: int = 0
+    assertion_count: int = 0
+    assertion_density: float = 0.0
+    mock_usage_count: int = 0
+    parametrize_count: int = 0
+    edge_case_markers: int = 0
+    docstring_count: int = 0
+    fixture_count: int = 0
+    setup_present: bool = False
+    teardown_present: bool = False
+    issues: list[str] = field(default_factory=list)
+    highlights: list[str] = field(default_factory=list)
 
-    @property
-    def avg_assertions_per_test(self) -> float:
-        if self.test_count == 0:
-            return 0.0
-        return round(self.assertion_count / self.test_count, 2)
+    def to_dict(self) -> dict:
+        """Return a dictionary representation of the test file score"""
+        return asdict(self)
 
 
 @dataclass
-class SuiteReport:
-    """Aggregate quality report for a test suite."""
+class TestQualityReport:
+    """Hold aggregate test quality metrics across all test files"""
 
-    files: list[TestFileReport] = field(default_factory=list)
+    repo_path: str
+    total_test_files: int = 0
+    total_tests: int = 0
+    total_assertions: int = 0
+    avg_score: float = 0.0
+    overall_grade: str = ""
+    files: list[TestFileScore] = field(default_factory=list)
+    missing_test_files: list[str] = field(default_factory=list)
+    excellent_files: list[str] = field(default_factory=list)
+    weak_files: list[str] = field(default_factory=list)
 
-    @property
-    def total_tests(self) -> int:
-        return sum(f.test_count for f in self.files)
+    def to_dict(self) -> dict:
+        """Return a dictionary representation of the test quality report"""
+        return asdict(self)
 
-    @property
-    def total_assertions(self) -> int:
-        return sum(f.assertion_count for f in self.files)
-
-    @property
-    def files_with_errors(self) -> list[str]:
-        return [f.path for f in self.files if f.parse_error]
-
-
-# ---------------------------------------------------------------------------
-# AST analysis
-# ---------------------------------------------------------------------------
-
-
-def _is_test_function(node: ast.FunctionDef) -> bool:
-    return node.name.startswith("test_")
-
-
-def _count_assertions(func_node: ast.FunctionDef) -> int:
-    """Count assert statements and common assertion calls."""
-    count = 0
-    for node in ast.walk(func_node):
-        if isinstance(node, ast.Assert):
-            count += 1
-        elif isinstance(node, ast.Call):
-            # pytest.raises, unittest assert* methods
-            func = node.func
-            if isinstance(func, ast.Attribute) and func.attr in (
-                "raises",
-                "warns",
-                "approx",
-            ):
-                count += 1
-            elif isinstance(func, ast.Name) and func.id.startswith("assert"):
-                count += 1
-    return count
-
-
-def _has_docstring(node) -> bool:
-    return (
-        bool(node.body)
-        and isinstance(node.body[0], ast.Expr)
-        and isinstance(node.body[0].value, ast.Constant)
-        and isinstance(node.body[0].value.value, str)
-    )
+    def to_markdown(self) -> str:
+        """Render the test quality report as a Markdown table"""
+        lines = [
+            "## Test Quality Analysis", "",
+            "| Metric | Value |", "|--------|-------|" ,
+            f"| Test files analysed | **{self.total_test_files}** |",
+            f"| Total tests | **{self.total_tests}** |",
+            f"| Total assertions | **{self.total_assertions}** |",
+            f"| Avg assertions/test | **{self.total_assertions / max(1, self.total_tests):.1f}** |",
+            f"| Avg file score | **{self.avg_score:.1f}/100** |",
+            f"| Overall grade | **{self.overall_grade}** |",
+            "",
+        ]
+        if self.weak_files:
+            lines += ["### Weakest Test Files", ""]
+            for f in self.weak_files[:5]:
+                lines.append(f"- `{f}`")
+            lines.append("")
+        if self.excellent_files:
+            lines += ["### Excellent Test Files", ""]
+            for f in self.excellent_files[:5]:
+                lines.append(f"- `{f}`")
+            lines.append("")
+        lines += [
+            "### Per-File Scores", "",
+            "| File | Score | Grade | Tests | Asserts | Density |",
+            "|------|-------|-------|-------|---------|---------|" ,
+        ]
+        for fs in sorted(self.files, key=lambda f: -f.score):
+            lines.append(f"| `{fs.file}` | {fs.score:.0f} | {fs.grade} | {fs.test_count} | {fs.assertion_count} | {fs.assertion_density:.1f} |")
+        return "\n".join(lines)
 
 
-def _count_lines(node: ast.FunctionDef, source_lines: list[str]) -> int:
-    return (node.end_lineno or node.lineno) - node.lineno + 1
+_ASSERT_FUNCTIONS = {
+    "assertEqual", "assertNotEqual", "assertTrue", "assertFalse",
+    "assertIs", "assertIsNot", "assertIsNone", "assertIsNotNone",
+    "assertIn", "assertNotIn", "assertIsInstance", "assertRaises",
+    "assertRaisesRegex", "assertAlmostEqual", "assertGreater",
+    "assertGreaterEqual", "assertLess", "assertLessEqual",
+    "assertRegex", "assertCountEqual", "assertDictEqual", "fail", "approx",
+}
+
+_EDGE_CASE_WORDS = {
+    "empty", "none", "null", "zero", "negative", "overflow", "boundary",
+    "edge", "invalid", "error", "exception", "fail", "timeout", "large",
+    "unicode", "special", "malformed",
+}
 
 
-def analyze_test_file(
-    path: str,
-    *,
-    long_test_threshold: int = 50,
-) -> TestFileReport:
-    """
-    Analyze a single pytest-style test file.
+class _TestFileVisitor(ast.NodeVisitor):
+    def __init__(self):
+        self.test_count = 0
+        self.assertion_count = 0
+        self.mock_usage = 0
+        self.parametrize_count = 0
+        self.edge_case_markers = 0
+        self.docstring_count = 0
+        self.fixture_count = 0
+        self.setup_present = False
+        self.teardown_present = False
+        self._has_mock_import = False
 
-    Args:
-        path: Path to the test .py file.
-        long_test_threshold: Number of lines above which a test is flagged as long.
+    def visit_Import(self, node: ast.Import) -> None:
+        """Track mock-related imports"""
+        for alias in node.names:
+            if "mock" in alias.name.lower():
+                self._has_mock_import = True
+        self.generic_visit(node)
 
-    Returns:
-        A TestFileReport.
-    """
-    source = Path(path).read_text(encoding="utf-8")
-    source_lines = source.splitlines()
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        """Track mock and pytest from-imports"""
+        if node.module and ("mock" in node.module.lower() or "pytest" in node.module.lower()):
+            self._has_mock_import = True
+        self.generic_visit(node)
 
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        """Count tests, docstrings, edge cases, parametrize decorators, and fixtures"""
+        name = node.name.lower()
+        if name.startswith("test_"):
+            self.test_count += 1
+            if ast.get_docstring(node):
+                self.docstring_count += 1
+            words = set(re.split(r"[_\s]+", name))
+            if words & _EDGE_CASE_WORDS:
+                self.edge_case_markers += 1
+        if name in ("setup", "setup_method"):
+            self.setup_present = True
+        if name in ("teardown", "teardown_method"):
+            self.teardown_present = True
+        for dec in node.decorator_list:
+            # Unwrap Call nodes: @pytest.mark.parametrize(...) is a Call
+            dec_node = dec.func if isinstance(dec, ast.Call) else dec
+            if isinstance(dec_node, ast.Attribute) and dec_node.attr == "parametrize":
+                self.parametrize_count += 1
+            elif isinstance(dec_node, ast.Name) and dec_node.id == "parametrize":
+                self.parametrize_count += 1
+            elif isinstance(dec_node, ast.Attribute) and "fixture" in dec_node.attr.lower():
+                self.fixture_count += 1
+        self.generic_visit(node)
+
+    visit_AsyncFunctionDef = visit_FunctionDef
+
+    def visit_Assert(self, node: ast.Assert) -> None:
+        """Count bare assert statements"""
+        self.assertion_count += 1
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> None:
+        """Count assertion helper calls and mock usage"""
+        if isinstance(node.func, ast.Attribute):
+            if node.func.attr in _ASSERT_FUNCTIONS:
+                self.assertion_count += 1
+            if node.func.attr in ("patch", "MagicMock", "Mock", "AsyncMock"):
+                self.mock_usage += 1
+        elif isinstance(node.func, ast.Name):
+            if node.func.id in _ASSERT_FUNCTIONS:
+                self.assertion_count += 1
+            if node.func.id in ("patch", "MagicMock", "Mock", "AsyncMock"):
+                self.mock_usage += 1
+        self.generic_visit(node)
+
+    def visit_With(self, node: ast.With) -> None:
+        """Count pytest.raises and pytest.warns context managers as assertions"""
+        for item in node.items:
+            ctx = item.context_expr
+            if isinstance(ctx, ast.Call):
+                if isinstance(ctx.func, ast.Attribute) and ctx.func.attr in ("raises", "warns"):
+                    self.assertion_count += 1
+                elif isinstance(ctx.func, ast.Name) and ctx.func.id in ("raises", "warns"):
+                    self.assertion_count += 1
+        self.generic_visit(node)
+
+
+# _grade imported from src.scoring above
+
+
+def _score_test_file(path: Path, module_name: str) -> TestFileScore:
+    fs = TestFileScore(file=path.name, module=module_name)
     try:
+        source = path.read_text(encoding="utf-8", errors="replace")
         tree = ast.parse(source)
-    except SyntaxError:
-        return TestFileReport(
-            path=path,
-            test_count=0,
-            assertion_count=0,
-            parametrize_count=0,
-            fixture_count=0,
-            parse_error=True,
-        )
-
-    test_count = 0
-    assertion_count = 0
-    parametrize_count = 0
-    fixture_count = 0
-    missing_docstrings: list[str] = []
-    long_tests: list[str] = []
-
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef):
-            # Fixture detection
-            for decorator in node.decorator_list:
-                if isinstance(decorator, ast.Attribute) and decorator.attr == "fixture":
-                    fixture_count += 1
-                elif isinstance(decorator, ast.Name) and decorator.id == "fixture":
-                    fixture_count += 1
-                elif isinstance(decorator, ast.Call):
-                    df = decorator.func
-                    if (
-                        isinstance(df, ast.Attribute) and df.attr == "parametrize"
-                    ) or (
-                        isinstance(df, ast.Name) and df.id == "parametrize"
-                    ):
-                        parametrize_count += 1
-
-            if not _is_test_function(node):
-                continue
-
-            test_count += 1
-            assertion_count += _count_assertions(node)
-
-            if not _has_docstring(node):
-                missing_docstrings.append(node.name)
-
-            if _count_lines(node, source_lines) > long_test_threshold:
-                long_tests.append(node.name)
-
-    return TestFileReport(
-        path=path,
-        test_count=test_count,
-        assertion_count=assertion_count,
-        parametrize_count=parametrize_count,
-        fixture_count=fixture_count,
-        missing_docstrings=missing_docstrings,
-        long_tests=long_tests,
-    )
-
-
-def analyze_test_suite(
-    directory: str,
-    *,
-    pattern: str = "test_*.py",
-    long_test_threshold: int = 50,
-) -> SuiteReport:
-    """
-    Analyze all test files matching a glob pattern in a directory.
-
-    Args:
-        directory: Root directory to search.
-        pattern: Glob pattern for test files.
-        long_test_threshold: Passed through to analyze_test_file.
-
-    Returns:
-        A SuiteReport.
-    """
-    reports = [
-        analyze_test_file(str(p), long_test_threshold=long_test_threshold)
-        for p in sorted(Path(directory).rglob(pattern))
-    ]
-    return SuiteReport(files=reports)
+    except (SyntaxError, OSError):
+        fs.issues.append("could not parse")
+        return fs
+    visitor = _TestFileVisitor()
+    visitor.visit(tree)
+    fs.test_count = visitor.test_count
+    fs.assertion_count = visitor.assertion_count
+    fs.mock_usage_count = visitor.mock_usage + (1 if visitor._has_mock_import else 0)
+    fs.parametrize_count = visitor.parametrize_count
+    fs.edge_case_markers = visitor.edge_case_markers
+    fs.docstring_count = visitor.docstring_count
+    fs.fixture_count = visitor.fixture_count
+    fs.setup_present = visitor.setup_present
+    fs.teardown_present = visitor.teardown_present
+    if fs.test_count > 0:
+        fs.assertion_density = fs.assertion_count / fs.test_count
+    score = 30.0
+    if fs.test_count == 0:
+        score -= 20
+        fs.issues.append("no tests defined")
+    elif fs.test_count < 3:
+        score += 5
+        fs.issues.append("very few tests")
+    elif fs.test_count < 8:
+        score += 12
+    else:
+        score += 20
+        fs.highlights.append(f"{fs.test_count} tests")
+    if fs.assertion_density == 0:
+        score -= 10
+        fs.issues.append("no assertions")
+    elif fs.assertion_density < 1:
+        score += 5
+        fs.issues.append("low assertion density")
+    elif fs.assertion_density < 2:
+        score += 10
+    elif fs.assertion_density < 4:
+        score += 15
+    else:
+        score += 20
+        fs.highlights.append(f"{fs.assertion_density:.1f} asserts/test")
+    if fs.edge_case_markers == 0:
+        fs.issues.append("no edge case tests")
+    elif fs.edge_case_markers < 2:
+        score += 5
+    else:
+        score += 10
+        fs.highlights.append(f"{fs.edge_case_markers} edge cases")
+    if fs.parametrize_count > 0:
+        score += 10
+        fs.highlights.append(f"{fs.parametrize_count} parametrized")
+    if fs.docstring_count > 0:
+        score += 5
+        fs.highlights.append("documented")
+    if 0 < fs.mock_usage_count <= 5:
+        score += 5
+    elif fs.mock_usage_count > 10:
+        fs.issues.append("heavy mock usage")
+    score = max(0.0, min(100.0, score))
+    fs.score = round(score, 1)
+    fs.grade = _grade(score)
+    return fs
 
 
-# ---------------------------------------------------------------------------
-# Text rendering
-# ---------------------------------------------------------------------------
-
-
-def render_report(report: SuiteReport) -> str:
-    """
-    Render a SuiteReport as a human-readable text summary.
-
-    Args:
-        report: The suite report to render.
-
-    Returns:
-        A formatted string.
-    """
-    lines = [
-        "Test Quality Report",
-        "===================",
-        f"Files analyzed : {len(report.files)}",
-        f"Total tests    : {report.total_tests}",
-        f"Total asserts  : {report.total_assertions}",
-        "",
-    ]
-    for fr in report.files:
-        status = "[PARSE ERROR]" if fr.parse_error else ""
-        lines.append(f"  {fr.path} {status}")
-        if not fr.parse_error:
-            lines.append(f"    tests={fr.test_count}  asserts={fr.assertion_count}  fixtures={fr.fixture_count}")
-            if fr.missing_docstrings:
-                lines.append(f"    missing docstrings: {', '.join(fr.missing_docstrings)}")
-            if fr.long_tests:
-                lines.append(f"    long tests (>{50} lines): {', '.join(fr.long_tests)}")
-    if report.files_with_errors:
-        lines.append("")
-        lines.append("Files with parse errors:")
-        for f in report.files_with_errors:
-            lines.append(f"  {f}")
-    return "\n".join(lines) + "\n"
+def analyze_test_quality(repo_root: Path) -> TestQualityReport:
+    """Analyse all test files and produce a quality report."""
+    tests_dir = repo_root / "tests"
+    src_dir = repo_root / "src"
+    report = TestQualityReport(repo_path=str(repo_root))
+    if not tests_dir.exists():
+        return report
+    test_files = sorted(tests_dir.glob("test_*.py"))
+    src_modules = {p.stem for p in src_dir.glob("*.py") if p.stem != "__init__"} if src_dir.exists() else set()
+    covered_modules: set = set()
+    file_scores: list[TestFileScore] = []
+    for tf in test_files:
+        mod = tf.stem.replace("test_", "", 1)
+        covered_modules.add(mod)
+        fs = _score_test_file(tf, mod)
+        file_scores.append(fs)
+    report.missing_test_files = sorted(src_modules - covered_modules - {"__init__", "cli", "server"})
+    report.files = file_scores
+    report.total_test_files = len(file_scores)
+    report.total_tests = sum(f.test_count for f in file_scores)
+    report.total_assertions = sum(f.assertion_count for f in file_scores)
+    report.avg_score = sum(f.score for f in file_scores) / len(file_scores) if file_scores else 0.0
+    report.overall_grade = _grade(report.avg_score)
+    sorted_files = sorted(file_scores, key=lambda f: f.score)
+    report.weak_files = [f.file for f in sorted_files[:5] if f.score < 60]
+    report.excellent_files = [f.file for f in sorted_files if f.score >= 85]
+    return report
