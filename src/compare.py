@@ -162,7 +162,7 @@ def _extract_session(log_content: str, session_number: int) -> Optional[SessionS
     # Split into session blocks
     blocks = re.split(r"(?=^## Session \d+)", log_content, flags=re.MULTILINE)
     for block in blocks:
-        header = re.match(r"## Session (\d+)\s*[—-]\s*(.+?)$", block, flags=re.MULTILINE)
+        header = re.match(r"## Session (\d+)\s*[\u2014-]\s*(.+?)$", block, flags=re.MULTILINE)
         if not header:
             continue
         if int(header.group(1)) != session_number:
