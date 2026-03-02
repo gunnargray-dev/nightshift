@@ -121,7 +121,7 @@ class GitStatsReport:
         """Render the git stats report as a Markdown document"""
         lines: list[str] = ["# Awake Git Statistics Deep-Dive\n"]
         if self.first_commit_date:
-            lines.append(f"*Date range: {self.first_commit_date} \u2192 {self.last_commit_date}*\n")
+            lines.append(f"*Date range: {self.first_commit_date} → {self.last_commit_date}*\n")
 
         lines += [
             "## Overview\n",
@@ -166,7 +166,7 @@ class GitStatsReport:
             for day in days:
                 count = self.commits_by_weekday.get(day, 0)
                 bar_len = int((count / max_count) * 20) if max_count else 0
-                bar = "\u2588" * bar_len
+                bar = "█" * bar_len
                 lines.append(f"  {day[:3]}  {bar:<20} {count}")
             lines.append("")
 
@@ -176,7 +176,7 @@ class GitStatsReport:
             for h in range(24):
                 count = self.commits_by_hour.get(h, 0)
                 bar_len = int((count / max_h) * 15) if max_h else 0
-                bar = "\u2588" * bar_len
+                bar = "█" * bar_len
                 lines.append(f"  {h:02d}h  {bar:<15} {count}")
             lines.append("")
 
