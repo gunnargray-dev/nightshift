@@ -1,442 +1,450 @@
-"""OpenAPI 3.1 specification generator for the Awake REST API.
+"""OpenAPI 3.1 specification generator for the Awake API server.
 
-Inspects all ``@app.route`` (Flask-style) or ``@router.xxx`` (FastAPI-style)
-decorators found in the repository source, then synthesises a minimal but
-valid ``openapi.json`` / ``openapi.yaml`` document.
-
-Features
---------
-- Detects Flask ``@app.route``, ``@bp.route``, and FastAPI ``@router.*``
-  decorators.
-- Extracts path parameters from URL patterns (e.g. ``/users/<user_id>``).
-- Reads function docstrings to populate ``summary`` and ``description``.
-- Infers request/response models from type annotations where possible.
-- Outputs JSON or YAML.
-
-Public API
-----------
-- ``RouteInfo``            -- a single discovered route
-- ``build_openapi_spec(repo_path)`` -> ``dict``
-- ``save_openapi_spec(spec, out_path)``
+Generates a complete OpenAPI 3.1 JSON/YAML document from the route catalogue.
+No external dependencies -- uses only the standard library.
 
 CLI
 ---
-    awake openapi [--yaml] [--output PATH]
+    awake openapi              # Print spec to stdout
+    awake openapi --write      # Write docs/openapi.json + docs/openapi.yaml
+    awake openapi --format yaml
 """
 
 from __future__ import annotations
 
-import ast
 import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
-
-
-# ---------------------------------------------------------------------------
-# Data model
-# ---------------------------------------------------------------------------
+from typing import Any, Optional
 
 
 @dataclass
-class RouteInfo:
-    """Metadata for a single HTTP route."""
-
-    path: str  # URL path, e.g. "/users/{user_id}"
-    methods: list[str]  # ["GET", "POST", ...]
-    handler: str  # function name
-    file: str  # relative source file
-    line: int
-    summary: str = ""
+class OpenAPIParameter:
+    """Represent a single parameter in an OpenAPI operation"""
+    name: str
+    location: str
     description: str = ""
-    params: list[str] = field(default_factory=list)  # path param names
-    query_params: list[str] = field(default_factory=list)
-    request_body_type: str | None = None
-    response_type: str | None = None
+    required: bool = False
+    schema_type: str = "string"
+    schema_format: str = ""
+
+    def to_dict(self) -> dict:
+        """Return an OpenAPI-compliant dictionary for this parameter"""
+        d: dict[str, Any] = {
+            "name": self.name,
+            "in": self.location,
+            "description": self.description,
+            "required": self.required,
+            "schema": {"type": self.schema_type},
+        }
+        if self.schema_format:
+            d["schema"]["format"] = self.schema_format
+        return d
 
 
-# ---------------------------------------------------------------------------
-# AST helpers
-# ---------------------------------------------------------------------------
+@dataclass
+class OpenAPIOperation:
+    """Represent a single API operation with its metadata and response schema"""
+    operation_id: str
+    summary: str
+    description: str = ""
+    tags: list[str] = field(default_factory=list)
+    parameters: list[OpenAPIParameter] = field(default_factory=list)
+    response_description: str = "Successful response"
+    response_example: Optional[dict] = None
+    session_added: str = ""
+
+    def to_dict(self) -> dict:
+        """Return an OpenAPI-compliant dictionary for this operation"""
+        responses: dict[str, Any] = {
+            "200": {
+                "description": self.response_description,
+                "content": {"application/json": {"schema": {"type": "object"}}},
+            },
+            "500": {
+                "description": "Internal server error",
+                "content": {"application/json": {"schema": {"type": "object", "properties": {"error": {"type": "string"}}}}},
+            },
+        }
+        if self.response_example:
+            responses["200"]["content"]["application/json"]["example"] = self.response_example
+        d: dict[str, Any] = {
+            "operationId": self.operation_id,
+            "summary": self.summary,
+            "tags": self.tags,
+            "responses": responses,
+        }
+        if self.description:
+            d["description"] = self.description
+        if self.parameters:
+            d["parameters"] = [p.to_dict() for p in self.parameters]
+        if self.session_added:
+            d["x-session-added"] = self.session_added
+        return d
 
 
-_FLASK_METHODS_DEFAULT = ["GET"]
-_FASTAPI_METHOD_MAP = {
-    "get": "GET",
-    "post": "POST",
-    "put": "PUT",
-    "patch": "PATCH",
-    "delete": "DELETE",
-    "options": "OPTIONS",
-    "head": "HEAD",
-}
+@dataclass
+class OpenAPIPath:
+    """Represent an API endpoint path and its associated operations"""
+    path: str
+    get: Optional[OpenAPIOperation] = None
+
+    def to_dict(self) -> dict:
+        """Return an OpenAPI-compliant dictionary for this path"""
+        d: dict[str, Any] = {}
+        if self.get:
+            d["get"] = self.get.to_dict()
+        return d
 
 
-def _flask_path_to_openapi(path: str) -> tuple[str, list[str]]:
-    """Convert a Flask-style path to OpenAPI path and return param names.
+@dataclass
+class OpenAPISpec:
+    """Represent a complete OpenAPI 3.1 specification document"""
+    title: str = "Awake API"
+    version: str = "1.0.0"
+    description: str = ""
+    paths: list[OpenAPIPath] = field(default_factory=list)
+    server_url: str = "http://127.0.0.1:8710"
 
-    e.g. ``/users/<user_id>`` -> ``("/users/{user_id}", ["user_id"])``
-    """
-    params: list[str] = []
+    def to_dict(self) -> dict:
+        """Return the full OpenAPI 3.1 specification as a dictionary"""
+        paths_dict: dict[str, Any] = {}
+        for p in self.paths:
+            openapi_path = re.sub(r"<([^>]+)>", r"{\1}", p.path)
+            paths_dict[openapi_path] = p.to_dict()
+        return {
+            "openapi": "3.1.0",
+            "info": {
+                "title": self.title,
+                "version": self.version,
+                "description": self.description,
+                "contact": {"name": "Awake", "url": "https://github.com/gunnargray-dev/awake"},
+                "license": {"name": "MIT"},
+            },
+            "servers": [{"url": self.server_url, "description": "Local Awake API server"}],
+            "tags": [
+                {"name": "analysis", "description": "Code analysis endpoints"},
+                {"name": "sessions", "description": "Session management"},
+                {"name": "meta", "description": "Server metadata"},
+            ],
+            "paths": paths_dict,
+        }
 
-    def _replace(m: re.Match) -> str:  # type: ignore[type-arg]
-        inner = m.group(1)
-        # Strip type converter prefix: int:user_id -> user_id
-        if ":" in inner:
-            inner = inner.split(":", 1)[1]
-        params.append(inner)
-        return f"{{{inner}}}"
+    def to_yaml(self) -> str:
+        """Serialize the specification to a YAML string"""
+        return _dict_to_yaml(self.to_dict())
 
-    converted = re.sub(r"<([^>]+)>", _replace, path)
-    return converted, params
-
-
-def _extract_docstring(node: ast.FunctionDef | ast.AsyncFunctionDef) -> tuple[str, str]:
-    """Return (summary, description) from a function's docstring."""
-    body = node.body
-    if not body:
-        return "", ""
-    first = body[0]
-    if not (isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant)):
-        return "", ""
-    doc: str = first.value.value
-    lines = doc.strip().splitlines()
-    summary = lines[0].strip() if lines else ""
-    description = "\n".join(lines[2:]).strip() if len(lines) > 2 else ""
-    return summary, description
-
-
-def _get_return_annotation(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str | None:
-    """Return the string representation of the return annotation, if any."""
-    if node.returns is None:
-        return None
-    return ast.unparse(node.returns)
-
-
-def _get_first_param_annotation(
-    node: ast.FunctionDef | ast.AsyncFunctionDef,
-) -> str | None:
-    """Return the annotation of the first non-self parameter (body type hint)."""
-    args = node.args.args
-    candidates = [a for a in args if a.arg not in ("self", "cls")]
-    if not candidates:
-        return None
-    ann = candidates[0].annotation
-    if ann is None:
-        return None
-    return ast.unparse(ann)
-
-
-# ---------------------------------------------------------------------------
-# Route collector
-# ---------------------------------------------------------------------------
+    def to_markdown(self) -> str:
+        """Render the specification as a Markdown endpoint summary table"""
+        lines = [
+            f"# {self.title}",
+            "",
+            f"> Version `{self.version}` -- {len(self.paths)} endpoints",
+            "",
+            "| Endpoint | Operation | Tags | Description |",
+            "|----------|-----------|------|-------------|",
+        ]
+        for p in self.paths:
+            if p.get:
+                op = p.get
+                tags = ", ".join(op.tags)
+                lines.append(
+                    f"| `{p.path}` | `{op.operation_id}` | {tags} | {op.summary} |"
+                )
+        return "\n".join(lines)
 
 
-class _RouteCollector(ast.NodeVisitor):
-    """Walk an AST file and collect route-decorated functions."""
-
-    def __init__(self, rel_path: str) -> None:
-        self._path = rel_path
-        self.routes: list[RouteInfo] = []
-
-    # ------------------------------------------------------------------
-    def _try_flask_route(self, dec: ast.expr, func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-        """Attempt to parse *dec* as a Flask-style route decorator."""
-        # Matches: app.route("/path", methods=[...])
-        # or:      bp.route("/path")
-        if not isinstance(dec, ast.Call):
-            return False
-        func = dec.func
-        if not (
-            isinstance(func, ast.Attribute)
-            and func.attr == "route"
-        ):
-            return False
-
-        # First positional arg is the URL path
-        if not dec.args:
-            return False
-        path_node = dec.args[0]
-        if not (isinstance(path_node, ast.Constant) and isinstance(path_node.value, str)):
-            return False
-        raw_path: str = path_node.value
-
-        # Extract methods keyword
-        methods: list[str] = list(_FLASK_METHODS_DEFAULT)
-        for kw in dec.keywords:
-            if kw.arg == "methods" and isinstance(kw.value, ast.List):
-                methods = [
-                    elt.value.upper()
-                    for elt in kw.value.elts
-                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
-                ]
-
-        oa_path, params = _flask_path_to_openapi(raw_path)
-        summary, description = _extract_docstring(func_node)
-
-        self.routes.append(
-            RouteInfo(
-                path=oa_path,
-                methods=methods,
-                handler=func_node.name,
-                file=self._path,
-                line=func_node.lineno,
-                summary=summary,
-                description=description,
-                params=params,
-                response_type=_get_return_annotation(func_node),
-                request_body_type=_get_first_param_annotation(func_node)
-                if any(m in ("POST", "PUT", "PATCH") for m in methods)
-                else None,
-            )
+def _dict_to_yaml(obj: Any, indent: int = 0) -> str:
+    """Recursively convert a dict/list/scalar to a YAML string."""
+    pad = "  " * indent
+    if isinstance(obj, dict):
+        if not obj:
+            return "{}\n"
+        lines = []
+        for k, v in obj.items():
+            v_yaml = _dict_to_yaml(v, indent + 1)
+            if v_yaml.startswith("\n") or isinstance(v, (dict, list)):
+                lines.append(f"{pad}{k}:\n{v_yaml}")
+            else:
+                lines.append(f"{pad}{k}: {v_yaml}")
+        return "\n".join(lines) + "\n"
+    elif isinstance(obj, list):
+        if not obj:
+            return "[]\n"
+        lines = []
+        for item in obj:
+            item_yaml = _dict_to_yaml(item, indent + 1)
+            if isinstance(item, (dict, list)):
+                lines.append(f"{pad}-\n{item_yaml}")
+            else:
+                lines.append(f"{pad}- {item_yaml.rstrip()}")
+        return "\n".join(lines) + "\n"
+    elif isinstance(obj, bool):
+        return "true\n" if obj else "false\n"
+    elif isinstance(obj, (int, float)):
+        return f"{obj}\n"
+    elif obj is None:
+        return "null\n"
+    else:
+        s = str(obj)
+        needs_quote = (
+            ":" in s or "#" in s or "\n" in s or s in ("true", "false", "null", "yes", "no")
+            or s.startswith(("{", "[", "'", '"', "|", ">", "!", "&", "*", "?"))
         )
-        return True
-
-    def _try_fastapi_route(self, dec: ast.expr, func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-        """Attempt to parse *dec* as a FastAPI-style route decorator."""
-        # Matches: router.get("/path"), router.post("/path"), ...
-        if not isinstance(dec, ast.Call):
-            return False
-        func = dec.func
-        if not (
-            isinstance(func, ast.Attribute)
-            and func.attr in _FASTAPI_METHOD_MAP
-        ):
-            return False
-
-        if not dec.args:
-            return False
-        path_node = dec.args[0]
-        if not (isinstance(path_node, ast.Constant) and isinstance(path_node.value, str)):
-            return False
-
-        raw_path: str = path_node.value
-        # FastAPI already uses {param} syntax
-        params = re.findall(r"\{([^}]+)\}", raw_path)
-        method = _FASTAPI_METHOD_MAP[func.attr]
-        summary, description = _extract_docstring(func_node)
-
-        self.routes.append(
-            RouteInfo(
-                path=raw_path,
-                methods=[method],
-                handler=func_node.name,
-                file=self._path,
-                line=func_node.lineno,
-                summary=summary,
-                description=description,
-                params=params,
-                response_type=_get_return_annotation(func_node),
-                request_body_type=_get_first_param_annotation(func_node)
-                if method in ("POST", "PUT", "PATCH")
-                else None,
-            )
-        )
-        return True
-
-    # ------------------------------------------------------------------
-    def _visit_func(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
-        """Check function decorators for route declarations."""
-        for dec in node.decorator_list:
-            if self._try_flask_route(dec, node):
-                break
-            if self._try_fastapi_route(dec, node):
-                break
-        self.generic_visit(node)
-
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:  # noqa: N802
-        """Visit a sync function definition."""
-        self._visit_func(node)
-
-    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:  # noqa: N802
-        """Visit an async function definition."""
-        self._visit_func(node)
+        if needs_quote:
+            escaped = s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+            return f'"{escaped}"\n'
+        return f"{s}\n"
 
 
-# ---------------------------------------------------------------------------
-# Spec builder
-# ---------------------------------------------------------------------------
-
-
-def _schema_for_type(type_str: str | None) -> dict[str, Any]:
-    """Return a minimal JSON Schema object for the given Python type string."""
-    if type_str is None:
-        return {}
-    mapping: dict[str, dict[str, Any]] = {
-        "str": {"type": "string"},
-        "int": {"type": "integer"},
-        "float": {"type": "number"},
-        "bool": {"type": "boolean"},
-        "list": {"type": "array", "items": {}},
-        "dict": {"type": "object"},
-        "None": {"type": "null"},
-    }
-    return mapping.get(type_str, {"$ref": f"#/components/schemas/{type_str}"})
-
-
-def build_openapi_spec(repo_path: str | Path) -> dict[str, Any]:
-    """Scan *repo_path* and return an OpenAPI 3.1 spec as a dict.
-
-    Parameters
-    ----------
-    repo_path:
-        Root directory of the repository.
+def build_spec() -> OpenAPISpec:
+    """Build the complete OpenAPI specification for the Awake API.
 
     Returns
     -------
-    dict
-        OpenAPI 3.1 specification dictionary.
+    OpenAPISpec
+        The fully populated specification object.
     """
-    root = Path(repo_path)
-    routes: list[RouteInfo] = []
+    spec = OpenAPISpec(
+        title="Awake API",
+        version="1.0.0",
+        description=(
+            "Awake is an autonomous AI coding assistant that monitors your repo, "
+            "scores code health, opens PRs, and keeps everything documented. "
+            "This API exposes all analysis and session management endpoints."
+        ),
+    )
 
-    for py_file in sorted(root.rglob("*.py")):
-        rel = str(py_file.relative_to(root))
-        try:
-            source = py_file.read_text(encoding="utf-8")
-            tree = ast.parse(source, filename=rel)
-        except (SyntaxError, OSError):
-            continue
-        collector = _RouteCollector(rel)
-        collector.visit(tree)
-        routes.extend(collector.routes)
+    spec.paths.append(
+        OpenAPIPath(
+            path="/ping",
+            get=OpenAPIOperation(
+                operation_id="ping",
+                summary="Health check",
+                description="Returns a simple pong response to confirm the server is alive.",
+                tags=["meta"],
+                response_description="Server is alive",
+                response_example={"pong": True},
+            ),
+        )
+    )
+    spec.paths.append(
+        OpenAPIPath(
+            path="/status",
+            get=OpenAPIOperation(
+                operation_id="status",
+                summary="Server status",
+                description="Returns server version, uptime, and a list of registered routes.",
+                tags=["meta"],
+                response_description="Server status object",
+                response_example={"version": "1.0.0", "uptime_s": 42.3, "routes": ["/ping"]},
+            ),
+        )
+    )
+    spec.paths.append(
+        OpenAPIPath(
+            path="/sessions",
+            get=OpenAPIOperation(
+                operation_id="list_sessions",
+                summary="List all sessions",
+                description="Returns a list of all recorded Awake sessions.",
+                tags=["sessions"],
+                response_description="Array of session summaries",
+            ),
+        )
+    )
+    spec.paths.append(
+        OpenAPIPath(
+            path="/sessions/<session_id>",
+            get=OpenAPIOperation(
+                operation_id="get_session",
+                summary="Get a session by ID",
+                tags=["sessions"],
+                parameters=[
+                    OpenAPIParameter(
+                        name="session_id",
+                        location="path",
+                        description="The session UUID",
+                        required=True,
+                    )
+                ],
+            ),
+        )
+    )
+    spec.paths.append(
+        OpenAPIPath(
+            path="/sessions/<session_id>/replay",
+            get=OpenAPIOperation(
+                operation_id="replay_session",
+                summary="Replay a session",
+                description="Reconstruct what happened during a session.",
+                tags=["sessions"],
+                parameters=[
+                    OpenAPIParameter(
+                        name="session_id",
+                        location="path",
+                        description="The session UUID",
+                        required=True,
+                    )
+                ],
+            ),
+        )
+    )
+    spec.paths.append(
+        OpenAPIPath(
+            path="/analyze/health",
+            get=OpenAPIOperation(
+                operation_id="analyze_health",
+                summary="Run health analysis",
+                description="Scores code health across all files in the repo.",
+                tags=["analysis"],
+                response_description="Health report",
+            ),
+        )
+    )
+    spec.paths.append(
+        OpenAPIPath(
+            path="/analyze/trends",
+            get=OpenAPIOperation(
+                operation_id="analyze_trends",
+                summary="Analyse trends",
+                description="Returns historical health-score trends.",
+                tags=["analysis"],
+            ),
+        )
+    )
+    spec.paths.append(
+        OpenAPIPath(
+            path="/analyze/modules",
+            get=OpenAPIOperation(
+                operation_id="analyze_modules",
+                summary="Analyse module graph",
+                description="Returns the inter-module dependency graph.",
+                tags=["analysis"],
+            ),
+        )
+    )
+    spec.paths.append(
+        OpenAPIPath(
+            path="/analyze/pr",
+            get=OpenAPIOperation(
+                operation_id="analyze_pr",
+                summary="Score a pull request",
+                tags=["analysis"],
+                parameters=[
+                    OpenAPIParameter(
+                        name="pr",
+                        location="query",
+                        description="PR number",
+                        required=True,
+                        schema_type="integer",
+                    )
+                ],
+            ),
+        )
+    )
+    spec.paths.append(
+        OpenAPIPath(
+            path="/analyze/docstrings",
+            get=OpenAPIOperation(
+                operation_id="analyze_docstrings",
+                summary="Scan for missing docstrings",
+                tags=["analysis"],
+            ),
+        )
+    )
+    spec.paths.append(
+        OpenAPIPath(
+            path="/analyze/tests",
+            get=OpenAPIOperation(
+                operation_id="analyze_tests",
+                summary="Grade test quality",
+                tags=["analysis"],
+            ),
+        )
+    )
+    spec.paths.append(
+        OpenAPIPath(
+            path="/analyze/openapi",
+            get=OpenAPIOperation(
+                operation_id="get_openapi_spec",
+                summary="Return this OpenAPI specification",
+                tags=["meta"],
+                parameters=[
+                    OpenAPIParameter(
+                        name="format",
+                        location="query",
+                        description="Response format: json or yaml",
+                        required=False,
+                        schema_type="string",
+                    )
+                ],
+            ),
+        )
+    )
 
-    # Build paths object
-    paths: dict[str, Any] = {}
-    for route in routes:
-        path_item = paths.setdefault(route.path, {})
-        for method in route.methods:
-            method_lower = method.lower()
-            operation: dict[str, Any] = {}
-            if route.summary:
-                operation["summary"] = route.summary
-            if route.description:
-                operation["description"] = route.description
-            operation["operationId"] = f"{route.handler}_{method_lower}"
-
-            # Path parameters
-            if route.params:
-                operation["parameters"] = [
-                    {
-                        "name": p,
-                        "in": "path",
-                        "required": True,
-                        "schema": {"type": "string"},
-                    }
-                    for p in route.params
-                ]
-
-            # Request body
-            if route.request_body_type:
-                operation["requestBody"] = {
-                    "required": True,
-                    "content": {
-                        "application/json": {
-                            "schema": _schema_for_type(route.request_body_type)
-                        }
-                    },
-                }
-
-            # Responses
-            operation["responses"] = {
-                "200": {
-                    "description": "Successful response",
-                    "content": {
-                        "application/json": {
-                            "schema": _schema_for_type(route.response_type)
-                        }
-                    },
-                }
-            }
-
-            path_item[method_lower] = operation
-
-    spec: dict[str, Any] = {
-        "openapi": "3.1.0",
-        "info": {
-            "title": "Awake API",
-            "version": "0.1.0",
-            "description": "Auto-generated OpenAPI specification for Awake.",
-        },
-        "paths": paths,
-    }
     return spec
 
 
-def save_openapi_spec(spec: dict[str, Any], out_path: str | Path) -> None:
-    """Write *spec* to *out_path* as JSON (or YAML if the extension is .yaml/.yml).
+def save_spec(spec: OpenAPISpec, repo_path: str | Path) -> tuple[Path, Path]:
+    """Persist the OpenAPI spec as JSON and YAML under ``docs/``.
 
     Parameters
     ----------
     spec:
-        The OpenAPI spec dict to save.
-    out_path:
-        Destination file path.
-    """
-    out = Path(out_path)
-    if out.suffix in (".yaml", ".yml"):
-        try:
-            import yaml  # type: ignore[import]
-
-            text = yaml.dump(spec, sort_keys=False, allow_unicode=True)
-        except ImportError:
-            # Fallback to JSON with .yaml extension (still valid for most tools)
-            text = json.dumps(spec, indent=2)
-    else:
-        text = json.dumps(spec, indent=2)
-    out.write_text(text, encoding="utf-8")
-
-
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
-
-
-def main(argv: list[str] | None = None) -> int:
-    """CLI entry point for the OpenAPI spec generator.
-
-    Parameters
-    ----------
-    argv:
-        Command-line arguments.
+        The spec to save.
+    repo_path:
+        Repository root.
 
     Returns
     -------
-    int
-        Exit code.
+    tuple[Path, Path]
+        Paths to the JSON and YAML files.
     """
+    docs = Path(repo_path) / "docs"
+    docs.mkdir(exist_ok=True)
+    json_path = docs / "openapi.json"
+    yaml_path = docs / "openapi.yaml"
+    json_path.write_text(json.dumps(spec.to_dict(), indent=2) + "\n", encoding="utf-8")
+    yaml_path.write_text(spec.to_yaml(), encoding="utf-8")
+    return json_path, yaml_path
+
+
+def main(argv=None) -> int:
+    """CLI entry point for OpenAPI spec generation."""
     import argparse
-    import sys
 
-    parser = argparse.ArgumentParser(
-        prog="awake openapi",
-        description="Generate an OpenAPI 3.1 spec from route decorators.",
+    p = argparse.ArgumentParser(prog="awake-openapi")
+    p.add_argument(
+        "--format",
+        choices=["json", "yaml", "markdown"],
+        default="json",
+        help="Output format (default: json)",
     )
-    parser.add_argument("repo", nargs="?", default=".", help="Repo root")
-    parser.add_argument("--yaml", action="store_true", help="Output YAML instead of JSON")
-    parser.add_argument("--output", "-o", default="", help="Write output to file")
-    args = parser.parse_args(argv)
+    p.add_argument("--write", action="store_true", help="Write docs/openapi.{json,yaml}")
+    p.add_argument("--repo", default=None, help="Repository root (default: auto-detect)")
+    args = p.parse_args(argv)
 
-    root = Path(args.repo).resolve()
-    if not root.is_dir():
-        print(f"Error: {root} is not a directory", file=sys.stderr)
-        return 1
-
-    spec = build_openapi_spec(root)
-
-    if args.output:
-        save_openapi_spec(spec, args.output)
-        print(f"OpenAPI spec written to {args.output}")
-    elif args.yaml:
-        try:
-            import yaml  # type: ignore[import]
-
-            print(yaml.dump(spec, sort_keys=False, allow_unicode=True))
-        except ImportError:
-            print(json.dumps(spec, indent=2))
+    if args.repo:
+        repo_path = Path(args.repo).expanduser().resolve()
     else:
-        print(json.dumps(spec, indent=2))
+        repo_path = Path(__file__).resolve().parents[1]
+
+    spec = build_spec()
+
+    if args.write:
+        json_path, yaml_path = save_spec(spec, repo_path)
+        print(f"  Wrote {json_path}")
+        print(f"  Wrote {yaml_path}")
+        return 0
+
+    if args.format == "yaml":
+        print(spec.to_yaml())
+    elif args.format == "markdown":
+        print(spec.to_markdown())
+    else:
+        print(json.dumps(spec.to_dict(), indent=2))
 
     return 0
 

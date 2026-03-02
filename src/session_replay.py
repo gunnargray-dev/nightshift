@@ -1,260 +1,335 @@
 """Session replay module for Awake.
 
-Reconstructs a full developer "session" -- a time-ordered sequence of file
-edits, test runs, and CLI invocations -- from Git history and (optionally)
-shell history files.  The replayed session can be:
+Reconstructs a complete picture of what any previous Awake session did:
+files changed, analyses run, PRs opened, refactors applied, health deltas.
 
-- Printed as a human-readable timeline
-- Exported as JSON for downstream analysis
-- Fed into ``trend_data.py`` for charting
-
-Data sources
-------------
-``git log --stat``
-    File-level change events with timestamps and commit messages.
-
-``~/.bash_history`` / ``~/.zsh_history``
-    Shell commands (best-effort; not always available or reliable).
+Data sources (all optional -- gracefully absent):
+- ``.awake/sessions/<session_id>/`` -- per-session JSON artefacts
+- ``docs/``                          -- latest analysis outputs
+- ``git log``                        -- commit history for the session window
 
 Public API
 ----------
-- ``SessionEvent``     -- a single event in the replay
-- ``Session``          -- ordered list of events
-- ``build_session(repo_path, *, since, until)`` -> ``Session``
-- ``save_session(session, out_path)``
+- ``SessionEvent``     -- a single timestamped event
+- ``SessionReplay``    -- full reconstruction for one session
+- ``replay_session(session_id, repo_path)`` -> ``SessionReplay``
+- ``list_sessions(repo_path)``               -> list of session IDs
+- ``save_replay(replay, out_path)``
 
 CLI
 ---
-    awake replay [--since DATE] [--until DATE] [--json] [--output PATH]
+    awake replay                       # List sessions
+    awake replay <session_id>          # Replay a specific session
+    awake replay <session_id> --json   # Output raw JSON
+    awake replay <session_id> --write  # Write docs/replay_<id>.md
 """
 
 from __future__ import annotations
 
 import json
-import re
 import subprocess
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, Optional
 
 
 # ---------------------------------------------------------------------------
-# Data model
+# Data classes
 # ---------------------------------------------------------------------------
 
 
 @dataclass
 class SessionEvent:
-    """A single event in a developer session."""
+    """A single event that occurred during a session."""
 
-    timestamp: str  # ISO-8601
-    kind: str  # "commit" | "shell"
-    summary: str
-    files_changed: list[str] = field(default_factory=list)
-    author: str = ""
-    sha: str = ""
-    raw: str = ""
+    timestamp: str       # ISO-8601 string or empty
+    kind: str            # "analysis" | "pr_opened" | "refactor" | "commit" | "plugin" | "error" | "info"
+    summary: str         # One-line description
+    detail: Optional[dict] = None  # Optional structured detail
+
+    def to_dict(self) -> dict:
+        """Return a serialisable dict."""
+        return {
+            "timestamp": self.timestamp,
+            "kind": self.kind,
+            "summary": self.summary,
+            "detail": self.detail,
+        }
+
+    def to_markdown_row(self) -> str:
+        """Render as a Markdown table row."""
+        ts = self.timestamp[:19] if self.timestamp else "\u2014"
+        return f"| {ts} | `{self.kind}` | {self.summary} |"
 
 
 @dataclass
-class Session:
-    """An ordered collection of session events."""
+class SessionReplay:
+    """Full reconstruction of a session."""
 
+    session_id: str
+    repo_path: str
     events: list[SessionEvent] = field(default_factory=list)
-    repo: str = ""
-    since: str = ""
-    until: str = ""
+    health_before: Optional[float] = None
+    health_after: Optional[float] = None
+    files_changed: list[str] = field(default_factory=list)
+    prs_opened: list[int] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
 
-    def add(self, event: SessionEvent) -> None:
-        """Append *event* to the session and keep events sorted by timestamp."""
-        self.events.append(event)
-        self.events.sort(key=lambda e: e.timestamp)
+    @property
+    def health_delta(self) -> Optional[float]:
+        """The health score change during the session."""
+        if self.health_before is not None and self.health_after is not None:
+            return self.health_after - self.health_before
+        return None
 
+    def to_dict(self) -> dict:
+        """Return a serialisable dict."""
+        return {
+            "session_id": self.session_id,
+            "repo_path": self.repo_path,
+            "events": [e.to_dict() for e in self.events],
+            "health_before": self.health_before,
+            "health_after": self.health_after,
+            "health_delta": self.health_delta,
+            "files_changed": self.files_changed,
+            "prs_opened": self.prs_opened,
+            "errors": self.errors,
+        }
 
-# ---------------------------------------------------------------------------
-# Git log parser
-# ---------------------------------------------------------------------------
+    def to_markdown(self) -> str:
+        """Render the replay as a Markdown report."""
+        lines = [
+            f"# Session Replay: `{self.session_id}`",
+            "",
+            "## Summary",
+            "",
+            f"| Metric | Value |",
+            f"|--------|-------|",
+            f"| Session ID | `{self.session_id}` |",
+            f"| Events | {len(self.events)} |",
+            f"| Files changed | {len(self.files_changed)} |",
+            f"| PRs opened | {len(self.prs_opened)} |",
+        ]
+        if self.health_before is not None:
+            lines.append(f"| Health before | {self.health_before:.1f} |")
+        if self.health_after is not None:
+            lines.append(f"| Health after | {self.health_after:.1f} |")
+        if self.health_delta is not None:
+            sign = "+" if self.health_delta >= 0 else ""
+            lines.append(f"| Health delta | {sign}{self.health_delta:.1f} |")
+        lines.append("")
 
-_COMMIT_SEP = "AWAKE_COMMIT_SEP"
-_GIT_FORMAT = f"--pretty=format:{_COMMIT_SEP}%H|%ae|%ai|%s"
+        if self.files_changed:
+            lines += ["## Files Changed", ""]
+            for f in self.files_changed:
+                lines.append(f"- `{f}`")
+            lines.append("")
 
+        if self.events:
+            lines += [
+                "## Event Timeline",
+                "",
+                "| Timestamp | Kind | Summary |",
+                "|-----------|------|---------|",
+            ]
+            for event in self.events:
+                lines.append(event.to_markdown_row())
+            lines.append("")
 
-def _run_git(args: list[str], cwd: str) -> str:
-    """Run a git command and return stdout, or empty string on failure."""
-    try:
-        result = subprocess.run(
-            ["git"] + args,
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        return result.stdout
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return ""
+        if self.errors:
+            lines += ["## Errors", ""]
+            for err in self.errors:
+                lines.append(f"- {err}")
+            lines.append("")
 
-
-def _parse_git_log(raw: str) -> list[SessionEvent]:
-    """Parse the output of ``git log --stat`` into :class:`SessionEvent` objects."""
-    events: list[SessionEvent] = []
-    blocks = raw.split(_COMMIT_SEP)
-    for block in blocks:
-        block = block.strip()
-        if not block:
-            continue
-        lines = block.splitlines()
-        if not lines:
-            continue
-        header = lines[0]
-        parts = header.split("|", 3)
-        if len(parts) < 4:
-            continue
-        sha, author, ts_raw, summary = parts
-        # Parse timestamp
-        try:
-            dt = datetime.fromisoformat(ts_raw.strip())
-            ts = dt.astimezone(timezone.utc).isoformat()
-        except ValueError:
-            ts = ts_raw.strip()
-
-        # Collect changed files from --stat output
-        files: list[str] = []
-        for line in lines[1:]:
-            # Stat lines look like: " src/health.py | 42 ++++--"
-            m = re.match(r"^\s+(.+?)\s+\|", line)
-            if m:
-                files.append(m.group(1).strip())
-
-        events.append(
-            SessionEvent(
-                timestamp=ts,
-                kind="commit",
-                summary=summary.strip(),
-                files_changed=files,
-                author=author.strip(),
-                sha=sha.strip(),
-                raw=block,
-            )
-        )
-    return events
+        return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
-# Shell history parser
+# Session directory helpers
 # ---------------------------------------------------------------------------
 
 
-def _parse_bash_history(path: Path) -> list[SessionEvent]:
-    """Parse a ``~/.bash_history`` file into events (no timestamps)."""
-    events: list[SessionEvent] = []
-    try:
-        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-    except OSError:
-        return events
-    for line in lines:
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        events.append(
-            SessionEvent(
-                timestamp="",
-                kind="shell",
-                summary=line[:120],
-                raw=line,
-            )
-        )
-    return events
+def _session_dir(repo_path: Path, session_id: str) -> Path:
+    """Return the path to a session's artefact directory."""
+    return repo_path / ".awake" / "sessions" / session_id
 
 
-# ---------------------------------------------------------------------------
-# Builder
-# ---------------------------------------------------------------------------
-
-
-def build_session(
-    repo_path: str | Path,
-    *,
-    since: str = "",
-    until: str = "",
-    include_shell: bool = False,
-) -> Session:
-    """Reconstruct a developer session from git history.
+def list_sessions(repo_path: str | Path) -> list[str]:
+    """Return a sorted list of session IDs found on disk.
 
     Parameters
     ----------
     repo_path:
-        Path to the git repository.
-    since:
-        Only include commits after this date (ISO-8601 or git date format).
-    until:
-        Only include commits before this date.
-    include_shell:
-        If *True*, attempt to merge shell history events.
+        Repository root.
 
     Returns
     -------
-    Session
-        The reconstructed session.
+    list[str]
     """
-    root = Path(repo_path)
-    session = Session(repo=str(root), since=since, until=until)
+    sessions_dir = Path(repo_path) / ".awake" / "sessions"
+    if not sessions_dir.exists():
+        return []
+    return sorted(p.name for p in sessions_dir.iterdir() if p.is_dir())
 
-    git_args = ["log", "--stat", _GIT_FORMAT]
-    if since:
-        git_args += [f"--after={since}"]
-    if until:
-        git_args += [f"--before={until}"]
 
-    raw_log = _run_git(git_args, cwd=str(root))
-    for event in _parse_git_log(raw_log):
-        session.add(event)
-
-    if include_shell:
-        history_files = [
-            Path.home() / ".bash_history",
-            Path.home() / ".zsh_history",
-        ]
-        for hf in history_files:
-            if hf.exists():
-                for ev in _parse_bash_history(hf):
-                    session.add(ev)
-
-    return session
+def _load_session_json(session_dir: Path, filename: str) -> Optional[dict]:
+    """Load a JSON file from the session directory."""
+    path = session_dir / filename
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
 
 
 # ---------------------------------------------------------------------------
-# Serialiser
+# Git helpers
 # ---------------------------------------------------------------------------
 
 
-def save_session(session: Session, out_path: str | Path) -> None:
-    """Serialise *session* to JSON at *out_path*.
+def _git_commits_in_window(repo_path: Path, since: str, until: str) -> list[dict]:
+    """Return commits between two ISO timestamps."""
+    try:
+        result = subprocess.run(
+            [
+                "git", "log",
+                f"--after={since}",
+                f"--before={until}",
+                "--pretty=format:%H|%ai|%s",
+            ],
+            cwd=str(repo_path),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        commits = []
+        for line in result.stdout.splitlines():
+            parts = line.split("|", 2)
+            if len(parts) == 3:
+                commits.append({"sha": parts[0], "timestamp": parts[1], "subject": parts[2]})
+        return commits
+    except Exception:
+        return []
+
+
+# ---------------------------------------------------------------------------
+# Replay builder
+# ---------------------------------------------------------------------------
+
+
+def replay_session(
+    session_id: str,
+    repo_path: str | Path,
+) -> SessionReplay:
+    """Reconstruct a ``SessionReplay`` for the given *session_id*.
 
     Parameters
     ----------
-    session:
-        The session to serialise.
-    out_path:
-        Destination file path.
+    session_id:
+        The session UUID or name.
+    repo_path:
+        Path to the repository root.
+
+    Returns
+    -------
+    SessionReplay
     """
-    data = {
-        "repo": session.repo,
-        "since": session.since,
-        "until": session.until,
-        "event_count": len(session.events),
-        "events": [
-            {
-                "timestamp": e.timestamp,
-                "kind": e.kind,
-                "summary": e.summary,
-                "files_changed": e.files_changed,
-                "author": e.author,
-                "sha": e.sha,
-            }
-            for e in session.events
-        ],
-    }
-    Path(out_path).write_text(json.dumps(data, indent=2), encoding="utf-8")
+    repo = Path(repo_path).expanduser().resolve()
+    s_dir = _session_dir(repo, session_id)
+    replay = SessionReplay(session_id=session_id, repo_path=str(repo))
+
+    if not s_dir.exists():
+        replay.errors.append(f"Session directory not found: {s_dir}")
+        return replay
+
+    # Load session manifest
+    manifest = _load_session_json(s_dir, "manifest.json")
+    if manifest:
+        replay.health_before = manifest.get("health_before")
+        replay.health_after = manifest.get("health_after")
+        replay.files_changed = manifest.get("files_changed", [])
+        replay.prs_opened = manifest.get("prs_opened", [])
+
+        # Add events from manifest
+        for raw_event in manifest.get("events", []):
+            replay.events.append(
+                SessionEvent(
+                    timestamp=raw_event.get("timestamp", ""),
+                    kind=raw_event.get("kind", "info"),
+                    summary=raw_event.get("summary", ""),
+                    detail=raw_event.get("detail"),
+                )
+            )
+
+    # Load health snapshots
+    health_data = _load_session_json(s_dir, "health_report.json")
+    if health_data:
+        score = health_data.get("overall_score")
+        if score is not None:
+            replay.events.append(
+                SessionEvent(
+                    timestamp=health_data.get("generated_at", ""),
+                    kind="analysis",
+                    summary=f"Health analysis complete: score={score:.1f}",
+                    detail={"score": score},
+                )
+            )
+
+    # Load refactor report
+    refactor_data = _load_session_json(s_dir, "refactor_report.json")
+    if refactor_data:
+        n = refactor_data.get("total_suggestions", 0)
+        replay.events.append(
+            SessionEvent(
+                timestamp="",
+                kind="refactor",
+                summary=f"Refactor scan: {n} suggestion(s) found",
+                detail={"total": n},
+            )
+        )
+
+    # Load PR data
+    pr_data = _load_session_json(s_dir, "pr_score.json")
+    if pr_data:
+        pr_num = pr_data.get("pr_number")
+        score = pr_data.get("score")
+        if pr_num:
+            replay.prs_opened.append(pr_num)
+            replay.events.append(
+                SessionEvent(
+                    timestamp="",
+                    kind="pr_opened",
+                    summary=f"PR #{pr_num} scored: {score:.1f}" if score else f"PR #{pr_num} opened",
+                    detail=pr_data,
+                )
+            )
+
+    # Sort events by timestamp
+    replay.events.sort(key=lambda e: e.timestamp or "")
+    return replay
+
+
+# ---------------------------------------------------------------------------
+# Persistence
+# ---------------------------------------------------------------------------
+
+
+def save_replay(replay: SessionReplay, out_path: str | Path) -> None:
+    """Save a ``SessionReplay`` as JSON.
+
+    Parameters
+    ----------
+    replay:
+        The replay to save.
+    out_path:
+        Output file path.
+    """
+    Path(out_path).write_text(
+        json.dumps(replay.to_dict(), indent=2) + "\n",
+        encoding="utf-8",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -262,75 +337,46 @@ def save_session(session: Session, out_path: str | Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def main(argv: list[str] | None = None) -> int:
-    """CLI entry point for the session replay module.
-
-    Parameters
-    ----------
-    argv:
-        Command-line arguments.
-
-    Returns
-    -------
-    int
-        Exit code.
-    """
+def main(argv=None) -> int:
+    """CLI entry point for session replay."""
     import argparse
-    import sys
 
-    parser = argparse.ArgumentParser(
-        prog="awake replay",
-        description="Reconstruct a developer session from git history.",
-    )
-    parser.add_argument("repo", nargs="?", default=".", help="Repo root")
-    parser.add_argument("--since", default="", help="Include commits after DATE")
-    parser.add_argument("--until", default="", help="Include commits before DATE")
-    parser.add_argument("--json", action="store_true", help="Emit JSON to stdout")
-    parser.add_argument("--shell", action="store_true", help="Include shell history")
-    parser.add_argument("--output", "-o", default="", help="Write to file")
-    args = parser.parse_args(argv)
+    p = argparse.ArgumentParser(prog="awake-replay")
+    p.add_argument("session_id", nargs="?", default=None, help="Session ID to replay")
+    p.add_argument("--repo", default=None, help="Repository root")
+    p.add_argument("--json", action="store_true", help="Output raw JSON")
+    p.add_argument("--write", action="store_true", help="Write markdown to docs/")
+    args = p.parse_args(argv)
 
-    root = Path(args.repo).resolve()
-    if not root.is_dir():
-        print(f"Error: {root} is not a directory", file=sys.stderr)
-        return 1
-
-    session = build_session(
-        root, since=args.since, until=args.until, include_shell=args.shell
-    )
-
-    if args.json or args.output:
-        data = {
-            "repo": session.repo,
-            "since": session.since,
-            "until": session.until,
-            "event_count": len(session.events),
-            "events": [
-                {
-                    "timestamp": e.timestamp,
-                    "kind": e.kind,
-                    "summary": e.summary,
-                    "files_changed": e.files_changed,
-                    "author": e.author,
-                    "sha": e.sha,
-                }
-                for e in session.events
-            ],
-        }
-        json_str = json.dumps(data, indent=2)
-        if args.output:
-            Path(args.output).write_text(json_str, encoding="utf-8")
-            print(f"Session written to {args.output}")
-        else:
-            print(json_str)
+    if args.repo:
+        repo_path = Path(args.repo).expanduser().resolve()
     else:
-        print(f"Session for {session.repo}")
-        if session.since or session.until:
-            print(f"  Range: {session.since or '*'} .. {session.until or '*'}")
-        print(f"  Events: {len(session.events)}")
-        for ev in session.events:
-            ts = ev.timestamp[:19] if ev.timestamp else "(no time)"
-            print(f"  {ts}  [{ev.kind:6s}]  {ev.summary[:80]}")
+        repo_path = Path(__file__).resolve().parents[1]
+
+    if not args.session_id:
+        # List sessions
+        sessions = list_sessions(repo_path)
+        if not sessions:
+            print("No sessions found.")
+        else:
+            for s in sessions:
+                print(s)
+        return 0
+
+    replay = replay_session(args.session_id, repo_path)
+
+    if args.json:
+        print(json.dumps(replay.to_dict(), indent=2))
+    else:
+        md = replay.to_markdown()
+        if args.write:
+            docs = repo_path / "docs"
+            docs.mkdir(exist_ok=True)
+            out_path = docs / f"replay_{args.session_id[:8]}.md"
+            out_path.write_text(md, encoding="utf-8")
+            print(f"  Wrote {out_path}")
+        else:
+            print(md)
 
     return 0
 

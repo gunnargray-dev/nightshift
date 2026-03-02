@@ -1,349 +1,333 @@
 """Executive HTML report generator for Awake.
 
-Combines outputs from all Awake analysis modules into a single polished
-HTML report suitable for sharing with engineering leadership or external
-stakeholders.
+Combines all analysis outputs into a single self-contained HTML page that
+can be shared with stakeholders or committed to the repo.  The report
+includes:
 
-The report includes:
-
-- Repository health score (from ``health.py``)
-- Docstring coverage (from ``docstring_gen.py``)
-- Refactor issues summary (from ``refactor.py``)
-- Test quality grade (from ``test_quality.py``)
-- Module graph statistics (from ``module_graph.py``)
-- Trend sparklines (from ``trend_data.py``)
-
-Each section is collapsible and the file is fully self-contained (no
-external CDN dependencies; CSS and JS are inlined).
-
-Public API
-----------
-- ``ReportSection``     -- one collapsible section in the report
-- ``ReportData``        -- all data needed to render the report
-- ``build_report(repo_path)`` -> ``ReportData``
-- ``render_html(data)`` -> ``str``
-- ``save_report(data, out_path)``
+- Health score summary (with colour-coded gauge)
+- Trend sparklines (ASCII art -- no external image dependencies)
+- Module dependency table
+- Top refactoring suggestions
+- Docstring coverage
+- Test quality summary
+- PR score history (if available)
 
 CLI
 ---
-    awake report [--output PATH]
+    awake report               # Print HTML to stdout
+    awake report --write       # Write docs/report.html
+    awake report --open        # Write + open in default browser
 """
 
 from __future__ import annotations
 
+import html
 import json
+import webbrowser
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any, Optional
 
 
 # ---------------------------------------------------------------------------
-# Data model
+# Data classes
 # ---------------------------------------------------------------------------
 
 
 @dataclass
 class ReportSection:
-    """A single collapsible section in the HTML report."""
-
+    """A single section within the HTML report."""
     title: str
-    score: float | None  # None if this section has no numeric score
-    content_html: str
-    status: str = "ok"   # "ok" | "warn" | "error"
+    content_html: str   # pre-rendered inner HTML
+    icon: str = ""      # emoji or short text icon
+
+    def to_html(self) -> str:
+        """Render the section as an HTML article element."""
+        icon_span = f'<span class="icon">{html.escape(self.icon)}</span> ' if self.icon else ""
+        return (
+            f'<article class="section">\n'
+            f'  <h2>{icon_span}{html.escape(self.title)}</h2>\n'
+            f'  <div class="content">\n{self.content_html}\n  </div>\n'
+            f'</article>\n'
+        )
 
 
 @dataclass
-class ReportData:
-    """All data needed to render the executive report."""
-
-    repo: str
-    generated_at: str
-    overall_score: float
+class AwakeReport:
+    """Full executive report."""
+    title: str = "Awake Report"
+    repo_name: str = ""
+    generated_at: str = ""
     sections: list[ReportSection] = field(default_factory=list)
+
+    def to_html(self) -> str:
+        """Render the full HTML report as a string."""
+        sections_html = "\n".join(s.to_html() for s in self.sections)
+        return _HTML_TEMPLATE.format(
+            title=html.escape(self.title),
+            repo_name=html.escape(self.repo_name),
+            generated_at=html.escape(self.generated_at),
+            sections=sections_html,
+        )
 
 
 # ---------------------------------------------------------------------------
 # HTML template
 # ---------------------------------------------------------------------------
 
-_CSS = """
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-       margin: 0; background: #f8fafc; color: #1a202c; }
-.header { background: #2d3748; color: #fff; padding: 2rem; }
-.header h1 { margin: 0; font-size: 1.8rem; }
-.header p  { margin: 0.25rem 0 0; opacity: 0.8; font-size: 0.9rem; }
-.score-badge { display: inline-block; background: #48bb78; color: #fff;
-               border-radius: 9999px; padding: 0.2rem 0.75rem;
-               font-weight: 700; font-size: 1.2rem; margin-left: 1rem; }
-.score-badge.warn  { background: #ed8936; }
-.score-badge.error { background: #e53e3e; }
-.container { max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
-.section { background: #fff; border-radius: 8px; margin-bottom: 1rem;
-           box-shadow: 0 1px 3px rgba(0,0,0,0.1); overflow: hidden; }
-.section-header { padding: 1rem 1.5rem; cursor: pointer;
-                  display: flex; justify-content: space-between;
-                  align-items: center; user-select: none; }
-.section-header:hover { background: #f7fafc; }
-.section-title { font-weight: 600; font-size: 1rem; }
-.section-score { font-size: 0.9rem; font-weight: 700; }
-.section-score.ok    { color: #38a169; }
-.section-score.warn  { color: #d69e2e; }
-.section-score.error { color: #e53e3e; }
-.section-body { padding: 1rem 1.5rem; border-top: 1px solid #e2e8f0;
-                display: none; }
-.section-body.open { display: block; }
-pre { background: #2d3748; color: #e2e8f0; padding: 1rem;
-      border-radius: 4px; overflow-x: auto; font-size: 0.8rem; }
-table { border-collapse: collapse; width: 100%; font-size: 0.875rem; }
-th, td { padding: 0.5rem 0.75rem; text-align: left;
-         border-bottom: 1px solid #e2e8f0; }
-th { background: #f7fafc; font-weight: 600; }
-"""
-
-_JS = """
-document.querySelectorAll('.section-header').forEach(function(h) {
-  h.addEventListener('click', function() {
-    var body = h.nextElementSibling;
-    body.classList.toggle('open');
-  });
-});
-"""
-
-
-def _score_cls(score: float | None) -> str:
-    """Return a CSS class name based on the score value."""
-    if score is None:
-        return "ok"
-    if score >= 75:
-        return "ok"
-    if score >= 50:
-        return "warn"
-    return "error"
-
-
-# ---------------------------------------------------------------------------
-# Stub builders
-# ---------------------------------------------------------------------------
-# These functions attempt to import each Awake module and fall back to empty
-# data if it is not yet available, so the report runner stays functional even
-# on a partially-built checkout.
-
-
-def _health_section(root: Path) -> ReportSection:
-    """Build the repository health section of the report."""
-    try:
-        from health import HealthReport, scan_repo  # type: ignore[import]
-
-        report: HealthReport = scan_repo(root)
-        rows = "".join(
-            f"<tr><td>{f.path}</td><td>{f.score:.0f}</td>"
-            f"<td>{len(f.issues)}</td></tr>"
-            for f in sorted(report.files, key=lambda x: x.score)
-        )
-        html = (
-            f"<p>Overall health score: <strong>{report.overall_score:.1f}/100</strong></p>"
-            "<table><thead><tr><th>File</th><th>Score</th><th>Issues</th></tr></thead>"
-            f"<tbody>{rows}</tbody></table>"
-        )
-        return ReportSection(
-            title="Repository Health",
-            score=report.overall_score,
-            content_html=html,
-            status=_score_cls(report.overall_score),
-        )
-    except Exception as exc:  # noqa: BLE001
-        return ReportSection(
-            title="Repository Health",
-            score=None,
-            content_html=f"<p>Could not load health data: {exc}</p>",
-            status="warn",
-        )
-
-
-def _docstring_section(root: Path) -> ReportSection:
-    """Build the docstring coverage section of the report."""
-    try:
-        from docstring_gen import DocstringReport, scan_missing_docstrings  # type: ignore[import]
-
-        report: DocstringReport = scan_missing_docstrings(root)
-        pct = report.coverage * 100
-        html = (
-            f"<p>Docstring coverage: <strong>{pct:.1f}%</strong> "
-            f"({len(report.missing)} missing out of {report.total_items} items)</p>"
-        )
-        return ReportSection(
-            title="Docstring Coverage",
-            score=pct,
-            content_html=html,
-            status=_score_cls(pct),
-        )
-    except Exception as exc:  # noqa: BLE001
-        return ReportSection(
-            title="Docstring Coverage",
-            score=None,
-            content_html=f"<p>Could not load docstring data: {exc}</p>",
-            status="warn",
-        )
-
-
-def _refactor_section(root: Path) -> ReportSection:
-    """Build the refactor issues section of the report."""
-    try:
-        from refactor import scan_repo  # type: ignore[import]
-
-        reports = scan_repo(root)
-        total = sum(len(r.issues) for r in reports)
-        fixable = sum(r.fixable_count for r in reports)
-        score = max(0.0, 100.0 - total * 0.5)
-        rows = "".join(
-            f"<tr><td>{r.path}</td><td>{len(r.issues)}</td><td>{r.fixable_count}</td></tr>"
-            for r in reports
-            if r.issues
-        )
-        html = (
-            f"<p>{total} issues found ({fixable} auto-fixable).</p>"
-            "<table><thead><tr><th>File</th><th>Issues</th><th>Fixable</th></tr></thead>"
-            f"<tbody>{rows}</tbody></table>"
-        )
-        return ReportSection(
-            title="Refactor Issues",
-            score=score,
-            content_html=html,
-            status=_score_cls(score),
-        )
-    except Exception as exc:  # noqa: BLE001
-        return ReportSection(
-            title="Refactor Issues",
-            score=None,
-            content_html=f"<p>Could not load refactor data: {exc}</p>",
-            status="warn",
-        )
-
-
-def _test_quality_section(root: Path) -> ReportSection:
-    """Build the test quality section of the report."""
-    try:
-        from test_quality import TestQualityReport, analyze_test_quality  # type: ignore[import]
-
-        report: TestQualityReport = analyze_test_quality(root)
-        html = (
-            f"<p>Overall test quality: <strong>{report.overall_score:.1f}/100</strong> "
-            f"across {len(report.files)} test files ({report.total_tests} tests, "
-            f"{report.total_issues} issues)</p>"
-        )
-        return ReportSection(
-            title="Test Quality",
-            score=report.overall_score,
-            content_html=html,
-            status=_score_cls(report.overall_score),
-        )
-    except Exception as exc:  # noqa: BLE001
-        return ReportSection(
-            title="Test Quality",
-            score=None,
-            content_html=f"<p>Could not load test quality data: {exc}</p>",
-            status="warn",
-        )
-
-
-# ---------------------------------------------------------------------------
-# Build & render
-# ---------------------------------------------------------------------------
-
-
-def build_report(repo_path: str | Path) -> ReportData:
-    """Collect data from all Awake modules and return a :class:`ReportData`.
-
-    Parameters
-    ----------
-    repo_path:
-        Root of the repository.
-
-    Returns
-    -------
-    ReportData
-        All data needed to render the HTML report.
-    """
-    from datetime import datetime, timezone
-
-    root = Path(repo_path)
-    sections = [
-        _health_section(root),
-        _docstring_section(root),
-        _refactor_section(root),
-        _test_quality_section(root),
-    ]
-    scored = [s.score for s in sections if s.score is not None]
-    overall = sum(scored) / len(scored) if scored else 0.0
-    return ReportData(
-        repo=str(root),
-        generated_at=datetime.now(timezone.utc).isoformat(),
-        overall_score=overall,
-        sections=sections,
-    )
-
-
-def render_html(data: ReportData) -> str:
-    """Render *data* as a self-contained HTML string.
-
-    Parameters
-    ----------
-    data:
-        Report data to render.
-
-    Returns
-    -------
-    str
-        Full HTML document as a string.
-    """
-    badge_cls = _score_cls(data.overall_score)
-    sections_html = ""
-    for sec in data.sections:
-        score_txt = f"{sec.score:.1f}" if sec.score is not None else "N/A"
-        sections_html += (
-            f'<div class="section">'
-            f'<div class="section-header">'
-            f'<span class="section-title">{sec.title}</span>'
-            f'<span class="section-score {sec.status}">{score_txt}</span>'
-            f"</div>"
-            f'<div class="section-body">{sec.content_html}</div>'
-            f"</div>"
-        )
-
-    return f"""<!DOCTYPE html>
+_HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Awake Report – {data.repo}</title>
-<style>{_CSS}</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{title}</title>
+  <style>
+    :root {{
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #c9d1d9;
+      --muted: #8b949e;
+      --green: #3fb950;
+      --yellow: #d29922;
+      --red: #f85149;
+      --blue: #58a6ff;
+      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    }}
+    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+    body {{ background: var(--bg); color: var(--text); font-family: var(--font); line-height: 1.6; }}
+    header {{ background: var(--surface); border-bottom: 1px solid var(--border); padding: 1.5rem 2rem; }}
+    header h1 {{ font-size: 1.5rem; color: var(--blue); }}
+    header p {{ color: var(--muted); font-size: 0.875rem; margin-top: 0.25rem; }}
+    main {{ max-width: 1200px; margin: 0 auto; padding: 2rem; display: grid; gap: 1.5rem; }}
+    .section {{ background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 1.5rem; }}
+    .section h2 {{ font-size: 1.1rem; margin-bottom: 1rem; color: var(--blue); }}
+    .icon {{ margin-right: 0.5rem; }}
+    table {{ width: 100%; border-collapse: collapse; font-size: 0.875rem; }}
+    th {{ background: var(--bg); color: var(--muted); text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }}
+    td {{ padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: top; }}
+    tr:last-child td {{ border-bottom: none; }}
+    .badge {{ display: inline-block; padding: 0.2rem 0.5rem; border-radius: 3px; font-size: 0.75rem; font-weight: 600; }}
+    .green {{ color: var(--green); }}
+    .yellow {{ color: var(--yellow); }}
+    .red {{ color: var(--red); }}
+    .muted {{ color: var(--muted); }}
+    pre {{ background: var(--bg); padding: 1rem; border-radius: 4px; font-size: 0.8rem; overflow-x: auto; }}
+    .gauge {{ font-size: 2rem; font-weight: bold; }}
+  </style>
 </head>
 <body>
-<div class="header">
-  <h1>Awake Report
-    <span class="score-badge {badge_cls}">{data.overall_score:.1f}</span>
-  </h1>
-  <p>{data.repo} &nbsp;·&nbsp; Generated {data.generated_at}</p>
-</div>
-<div class="container">
-{sections_html}
-</div>
-<script>{_JS}</script>
+  <header>
+    <h1>Awake Report -- {repo_name}</h1>
+    <p>Generated {generated_at}</p>
+  </header>
+  <main>
+{sections}
+  </main>
 </body>
 </html>"""
 
 
-def save_report(data: ReportData, out_path: str | Path) -> None:
-    """Write the rendered HTML report to *out_path*.
+# ---------------------------------------------------------------------------
+# Data loaders
+# ---------------------------------------------------------------------------
+
+
+def _load_json(path: Path) -> Optional[dict]:
+    """Load and parse a JSON file, returning None on failure."""
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+
+
+def _color_class(score: float) -> str:
+    """Return a CSS class name based on a 0-100 score."""
+    if score >= 80:
+        return "green"
+    if score >= 60:
+        return "yellow"
+    return "red"
+
+
+def _ascii_sparkline(values: list[float], width: int = 20) -> str:
+    """Build a simple ASCII sparkline from a list of values."""
+    if not values:
+        return ""
+    CHARS = " _.-~=+*#@"
+    mn, mx = min(values), max(values)
+    span = mx - mn or 1
+    result = ""
+    for v in values[-width:]:
+        idx = int((v - mn) / span * (len(CHARS) - 1))
+        result += CHARS[idx]
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Section builders
+# ---------------------------------------------------------------------------
+
+
+def _build_health_section(docs: Path) -> Optional[ReportSection]:
+    """Build the health score section from health_report.json."""
+    data = _load_json(docs / "health_report.json")
+    if not data:
+        return None
+    score = data.get("overall_score", 0.0)
+    cc = _color_class(float(score))
+    inner = (
+        f'<p class="gauge {cc}">{score:.1f} / 100</p>'
+        f'<p class="muted" style="margin-top:0.5rem">'
+        f'{data.get("files_scored", "?")} files scored</p>'
+    )
+    return ReportSection(title="Health Score", content_html=inner, icon="")
+
+
+def _build_trends_section(docs: Path) -> Optional[ReportSection]:
+    """Build the trends section from trend_data.json."""
+    data = _load_json(docs / "trend_data.json")
+    if not data:
+        return None
+    snapshots = data.get("snapshots", [])
+    if not snapshots:
+        return None
+    scores = [s.get("overall_score", 0) for s in snapshots[-20:]]
+    spark = _ascii_sparkline(scores)
+    inner = (
+        f'<pre>{html.escape(spark)}</pre>'
+        f'<p class="muted">Last {len(scores)} snapshots. '
+        f'Latest: {scores[-1]:.1f}</p>'
+    )
+    return ReportSection(title="Score Trends", content_html=inner, icon="")
+
+
+def _build_modules_section(docs: Path) -> Optional[ReportSection]:
+    """Build the module dependency section from module_graph.json."""
+    data = _load_json(docs / "module_graph.json")
+    if not data:
+        return None
+    nodes = data.get("nodes", [])
+    rows = ""
+    for n in nodes[:20]:
+        name = html.escape(str(n.get("name", "")))
+        imports = n.get("imports", 0)
+        imported = n.get("imported_by", 0)
+        rows += f"<tr><td>{name}</td><td>{imports}</td><td>{imported}</td></tr>\n"
+    inner = (
+        "<table><thead><tr>"
+        "<th>Module</th><th>Imports</th><th>Imported by</th>"
+        f"</tr></thead><tbody>{rows}</tbody></table>"
+    )
+    return ReportSection(title="Module Graph", content_html=inner, icon="")
+
+
+def _build_refactor_section(docs: Path) -> Optional[ReportSection]:
+    """Build the refactoring suggestions section from refactor_report.json."""
+    data = _load_json(docs / "refactor_report.json")
+    if not data:
+        return None
+    suggestions = data.get("suggestions", [])
+    rows = ""
+    for s in suggestions[:10]:
+        f = html.escape(s.get("file", ""))
+        k = html.escape(s.get("kind", ""))
+        d = html.escape(s.get("description", "")[:80])
+        rows += f"<tr><td>{f}</td><td>{k}</td><td>{d}</td></tr>\n"
+    total = data.get("total_suggestions", 0)
+    inner = (
+        f"<p class='muted' style='margin-bottom:0.75rem'>{total} total suggestion(s)</p>"
+        "<table><thead><tr>"
+        "<th>File</th><th>Kind</th><th>Description</th>"
+        f"</tr></thead><tbody>{rows}</tbody></table>"
+    )
+    return ReportSection(title="Refactor Suggestions", content_html=inner, icon="")
+
+
+def _build_docstring_section(docs: Path) -> Optional[ReportSection]:
+    """Build the docstring coverage section from docstring_report.json."""
+    data = _load_json(docs / "docstring_report.json")
+    if not data:
+        return None
+    pct = data.get("coverage_pct", 0.0)
+    cc = _color_class(float(pct))
+    inner = (
+        f'<p class="gauge {cc}">{pct:.1f}%</p>'
+        f'<p class="muted" style="margin-top:0.5rem">'
+        f'{data.get("documented", "?")} / {data.get("total_items", "?")} items documented</p>'
+    )
+    return ReportSection(title="Docstring Coverage", content_html=inner, icon="")
+
+
+def _build_test_section(docs: Path) -> Optional[ReportSection]:
+    """Build the test quality section from test_quality_report.json."""
+    data = _load_json(docs / "test_quality_report.json")
+    if not data:
+        return None
+    score = data.get("overall_score", 0.0)
+    cc = _color_class(float(score))
+    inner = (
+        f'<p class="gauge {cc}">{score:.1f} / 100</p>'
+        f'<p class="muted" style="margin-top:0.5rem">'
+        f'{data.get("files_graded", "?")} test files graded</p>'
+    )
+    return ReportSection(title="Test Quality", content_html=inner, icon="")
+
+
+# ---------------------------------------------------------------------------
+# Report builder
+# ---------------------------------------------------------------------------
+
+
+def build_report(repo_path: str | Path) -> AwakeReport:
+    """Build the full executive report from all available docs.
 
     Parameters
     ----------
-    data:
-        Report data to save.
-    out_path:
-        Destination file path.
+    repo_path:
+        Path to the repository root.
+
+    Returns
+    -------
+    AwakeReport
     """
-    html = render_html(data)
-    Path(out_path).write_text(html, encoding="utf-8")
+    import datetime
+
+    repo = Path(repo_path).expanduser().resolve()
+    docs = repo / "docs"
+    repo_name = repo.name
+
+    report = AwakeReport(
+        title=f"Awake Report -- {repo_name}",
+        repo_name=repo_name,
+        generated_at=datetime.datetime.now().strftime("%Y-%m-%d %H:%M UTC"),
+    )
+
+    builders = [
+        _build_health_section,
+        _build_trends_section,
+        _build_modules_section,
+        _build_refactor_section,
+        _build_docstring_section,
+        _build_test_section,
+    ]
+    for builder in builders:
+        section = builder(docs)
+        if section:
+            report.sections.append(section)
+
+    if not report.sections:
+        report.sections.append(
+            ReportSection(
+                title="No Data",
+                content_html="<p class='muted'>Run <code>awake health</code> first to generate data.</p>",
+                icon="",
+            )
+        )
+
+    return report
 
 
 # ---------------------------------------------------------------------------
@@ -351,44 +335,35 @@ def save_report(data: ReportData, out_path: str | Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def main(argv: list[str] | None = None) -> int:
-    """CLI entry point for the executive report generator.
-
-    Parameters
-    ----------
-    argv:
-        Command-line arguments.
-
-    Returns
-    -------
-    int
-        Exit code.
-    """
+def main(argv=None) -> int:
+    """CLI entry point for the executive report generator."""
     import argparse
-    import sys
 
-    parser = argparse.ArgumentParser(
-        prog="awake report",
-        description="Generate an executive HTML report.",
-    )
-    parser.add_argument("repo", nargs="?", default=".", help="Repo root")
-    parser.add_argument(
-        "--output",
-        "-o",
-        default="awake_report.html",
-        help="Output file path (default: awake_report.html)",
-    )
-    args = parser.parse_args(argv)
+    p = argparse.ArgumentParser(prog="awake-report")
+    p.add_argument("--repo", default=None, help="Repository root")
+    p.add_argument("--write", action="store_true", help="Write docs/report.html")
+    p.add_argument("--open", action="store_true", help="Open in default browser after writing")
+    args = p.parse_args(argv)
 
-    root = Path(args.repo).resolve()
-    if not root.is_dir():
-        print(f"Error: {root} is not a directory", file=sys.stderr)
-        return 1
+    if args.repo:
+        repo_path = Path(args.repo).expanduser().resolve()
+    else:
+        repo_path = Path(__file__).resolve().parents[1]
 
-    data = build_report(root)
-    save_report(data, args.output)
-    print(f"Report written to {args.output}")
-    print(f"Overall score: {data.overall_score:.1f}/100")
+    report = build_report(repo_path)
+    html_content = report.to_html()
+
+    if args.write or args.open:
+        docs = repo_path / "docs"
+        docs.mkdir(exist_ok=True)
+        out_path = docs / "report.html"
+        out_path.write_text(html_content, encoding="utf-8")
+        print(f"  Wrote {out_path}")
+        if args.open:
+            webbrowser.open(out_path.as_uri())
+        return 0
+
+    print(html_content)
     return 0
 
 

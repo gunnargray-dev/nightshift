@@ -1,314 +1,376 @@
 """Self-refactor engine for Awake.
 
-Analyzes source files for common code-quality issues and applies automatic
-fixes.  The engine operates in two modes:
+Analyzes source files from previous sessions and suggests (or applies) targeted
+refactoring improvements.  The engine uses only the standard library -- no
+external AI calls.  It focuses on structural anti-patterns:
 
-``--dry-run`` (default)
-    Report issues found but do not modify any files.
+- Functions / methods that exceed a configurable line threshold
+- Deeply nested blocks (if/for/while/with/try beyond N levels)
+- Duplicate code blocks (simple token-hash similarity)
+- Missing type annotations on public functions
+- Magic numbers / strings that should be named constants
 
-``--apply``
-    Rewrite files in place after user confirmation (or unconditionally
-    when ``--yes`` is passed).
-
-Supported refactors
--------------------
-- **trailing whitespace** -- strip trailing spaces/tabs from every line.
-- **mixed indentation** -- convert tabs to 4-space indentation.
-- **long lines** -- warn about lines exceeding a configurable column limit
-  (default 120).  Not auto-fixed because wrapping Python safely requires
-  deeper AST knowledge.
-- **unused imports** -- detect names imported but never referenced in the
-  module body (heuristic, not 100 % accurate).
-- **bare except** -- flag ``except:`` clauses with no exception type.
-
-Public API
-----------
-- ``RefactorIssue``      -- a single detected issue
-- ``RefactorReport``     -- all issues for one file
-- ``scan_file(path)``    -> ``RefactorReport``
-- ``scan_repo(root)``    -> list of ``RefactorReport``
-- ``apply_fixes(report)`` -> patched source string
+For each finding the engine produces a ``RefactorSuggestion`` with:
+- A plain-English description
+- The affected file + line range
+- An optional *patch* (unified-diff text) that can be applied directly
 
 CLI
 ---
-    awake refactor [--apply] [--yes] [--max-line-len N]
+    awake refactor             # Print suggestions to stdout
+    awake refactor --apply     # Apply auto-fixable suggestions
+    awake refactor --write     # Write JSON report to docs/
+    awake refactor --json      # Output raw JSON
 """
 
 from __future__ import annotations
 
 import ast
+import hashlib
+import json
 import re
+import textwrap
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
 
 
 # ---------------------------------------------------------------------------
-# Data model
+# Data classes
 # ---------------------------------------------------------------------------
 
 
 @dataclass
-class RefactorIssue:
-    """A single code-quality issue detected in a source file."""
+class RefactorSuggestion:
+    """A single refactoring suggestion."""
 
-    kind: str   # e.g. "trailing_whitespace", "unused_import", "bare_except"
-    line: int   # 1-based line number
-    message: str
-    fixable: bool = True  # whether apply_fixes() can resolve it automatically
+    kind: str          # "long_function" | "deep_nesting" | "duplicate" | "missing_annotation" | "magic_value"
+    file: str          # relative path
+    line_start: int
+    line_end: int
+    name: str          # function/class/variable name
+    description: str
+    severity: str = "info"   # "info" | "warning" | "error"
+    patch: Optional[str] = None
+    auto_fixable: bool = False
+
+    def to_dict(self) -> dict:
+        """Return a serialisable dict representation."""
+        return {
+            "kind": self.kind,
+            "file": self.file,
+            "line_start": self.line_start,
+            "line_end": self.line_end,
+            "name": self.name,
+            "description": self.description,
+            "severity": self.severity,
+            "patch": self.patch,
+            "auto_fixable": self.auto_fixable,
+        }
 
 
 @dataclass
 class RefactorReport:
-    """Collection of issues found in a single source file."""
+    """Full refactoring report for a repository."""
 
-    path: str
-    issues: list[RefactorIssue] = field(default_factory=list)
+    total_files: int = 0
+    total_suggestions: int = 0
+    auto_fixable_count: int = 0
+    suggestions: list[RefactorSuggestion] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
 
-    @property
-    def fixable_count(self) -> int:
-        """Number of issues that can be automatically fixed."""
-        return sum(1 for i in self.issues if i.fixable)
-
-
-# ---------------------------------------------------------------------------
-# Checkers
-# ---------------------------------------------------------------------------
-
-
-def _check_trailing_whitespace(lines: list[str]) -> list[RefactorIssue]:
-    """Detect trailing whitespace on each line."""
-    issues: list[RefactorIssue] = []
-    for i, line in enumerate(lines, start=1):
-        stripped = line.rstrip("\n").rstrip("\r")
-        if stripped != stripped.rstrip():
-            issues.append(
-                RefactorIssue(
-                    kind="trailing_whitespace",
-                    line=i,
-                    message="Trailing whitespace",
-                    fixable=True,
-                )
-            )
-    return issues
-
-
-def _check_mixed_indentation(lines: list[str]) -> list[RefactorIssue]:
-    """Detect lines that mix tabs and spaces for indentation."""
-    issues: list[RefactorIssue] = []
-    for i, line in enumerate(lines, start=1):
-        indent = line[: len(line) - len(line.lstrip())]
-        if "\t" in indent and " " in indent:
-            issues.append(
-                RefactorIssue(
-                    kind="mixed_indentation",
-                    line=i,
-                    message="Mixed tabs and spaces in indentation",
-                    fixable=True,
-                )
-            )
-        elif "\t" in indent:
-            issues.append(
-                RefactorIssue(
-                    kind="tab_indentation",
-                    line=i,
-                    message="Tab used for indentation (prefer spaces)",
-                    fixable=True,
-                )
-            )
-    return issues
-
-
-def _check_long_lines(lines: list[str], max_len: int = 120) -> list[RefactorIssue]:
-    """Flag lines longer than *max_len* characters."""
-    issues: list[RefactorIssue] = []
-    for i, line in enumerate(lines, start=1):
-        if len(line.rstrip("\n")) > max_len:
-            issues.append(
-                RefactorIssue(
-                    kind="long_line",
-                    line=i,
-                    message=f"Line exceeds {max_len} characters ({len(line.rstrip())} chars)",
-                    fixable=False,
-                )
-            )
-    return issues
-
-
-def _check_bare_except(source: str) -> list[RefactorIssue]:
-    """Detect bare ``except:`` clauses using the AST."""
-    issues: list[RefactorIssue] = []
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
-        return issues
-
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ExceptHandler) and node.type is None:
-            issues.append(
-                RefactorIssue(
-                    kind="bare_except",
-                    line=node.lineno,
-                    message="Bare 'except:' clause -- catch a specific exception type",
-                    fixable=False,
-                )
-            )
-    return issues
-
-
-def _check_unused_imports(source: str) -> list[RefactorIssue]:
-    """Heuristically detect imported names that are never used."""
-    issues: list[RefactorIssue] = []
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
-        return issues
-
-    imported: dict[str, int] = {}  # name -> line
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                local_name = alias.asname or alias.name.split(".")[0]
-                imported[local_name] = node.lineno
-        elif isinstance(node, ast.ImportFrom):
-            for alias in node.names:
-                if alias.name == "*":
-                    continue
-                local_name = alias.asname or alias.name
-                imported[local_name] = node.lineno
-
-    # Collect all Name nodes outside import statements
-    used: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Store):
-            used.add(node.id)
-        elif isinstance(node, ast.Attribute):
-            if isinstance(node.value, ast.Name):
-                used.add(node.value.id)
-
-    for name, lineno in imported.items():
-        if name not in used:
-            issues.append(
-                RefactorIssue(
-                    kind="unused_import",
-                    line=lineno,
-                    message=f"Imported name '{name}' appears unused",
-                    fixable=True,
-                )
-            )
-    return issues
+    def to_dict(self) -> dict:
+        """Return a serialisable dict representation."""
+        return {
+            "total_files": self.total_files,
+            "total_suggestions": self.total_suggestions,
+            "auto_fixable_count": self.auto_fixable_count,
+            "suggestions": [s.to_dict() for s in self.suggestions],
+            "errors": self.errors,
+        }
 
 
 # ---------------------------------------------------------------------------
-# Scanner
+# Configuration
 # ---------------------------------------------------------------------------
 
 
-def scan_file(path: str | Path, max_line_len: int = 120) -> RefactorReport:
-    """Scan a single Python file and return a :class:`RefactorReport`.
+@dataclass
+class RefactorConfig:
+    """Configuration for the refactoring engine."""
+
+    max_function_lines: int = 50
+    max_nesting_depth: int = 4
+    min_duplicate_lines: int = 6
+    check_annotations: bool = True
+    check_magic_values: bool = True
+
+
+# ---------------------------------------------------------------------------
+# AST helpers
+# ---------------------------------------------------------------------------
+
+
+def _get_end_line(node: ast.AST) -> int:
+    """Return the last line number of an AST node."""
+    return getattr(node, "end_lineno", getattr(node, "lineno", 0))
+
+
+def _count_nesting(node: ast.AST) -> int:
+    """Return the maximum nesting depth within a function/class body."""
+    NEST_TYPES = (ast.If, ast.For, ast.While, ast.With, ast.Try, ast.ExceptHandler)
+
+    def _depth(n: ast.AST, current: int) -> int:
+        if isinstance(n, NEST_TYPES):
+            current += 1
+        return max(
+            [current] + [_depth(child, current) for child in ast.iter_child_nodes(n)]
+        )
+
+    return _depth(node, 0)
+
+
+def _has_return_annotation(func: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """Check whether *func* has a return type annotation."""
+    return func.returns is not None
+
+
+def _is_public(name: str) -> bool:
+    """Return True if *name* is public (not prefixed with underscore)."""
+    return not name.startswith("_")
+
+
+# ---------------------------------------------------------------------------
+# Duplicate detection
+# ---------------------------------------------------------------------------
+
+
+def _block_hash(lines: list[str]) -> str:
+    """Return a short hash of a block of source lines."""
+    normalised = "\n".join(line.strip() for line in lines if line.strip())
+    return hashlib.md5(normalised.encode()).hexdigest()[:12]
+
+
+def _find_duplicates(
+    source_lines: list[str],
+    rel: str,
+    min_lines: int,
+) -> list[RefactorSuggestion]:
+    """Slide a window over source lines looking for repeated blocks."""
+    seen: dict[str, int] = {}
+    findings: list[RefactorSuggestion] = []
+    n = len(source_lines)
+    for start in range(n - min_lines + 1):
+        block = source_lines[start : start + min_lines]
+        h = _block_hash(block)
+        if h in seen:
+            findings.append(
+                RefactorSuggestion(
+                    kind="duplicate",
+                    file=rel,
+                    line_start=start + 1,
+                    line_end=start + min_lines,
+                    name=f"lines_{start + 1}_{start + min_lines}",
+                    description=(
+                        f"Duplicate block ({min_lines} lines) also seen at line {seen[h]}. "
+                        "Consider extracting into a shared function."
+                    ),
+                    severity="warning",
+                )
+            )
+        else:
+            seen[h] = start + 1
+    return findings
+
+
+# ---------------------------------------------------------------------------
+# Magic value detection
+# ---------------------------------------------------------------------------
+
+_MAGIC_NUMBER_PATTERN = re.compile(r"\b(?!0\b|1\b|2\b)\d{2,}\b")
+_MAGIC_STRING_PATTERN = re.compile(r'(?:"[^"]{4,}"|\x27[^\x27]{4,}\x27)')
+
+
+def _find_magic_values(
+    source: str,
+    rel: str,
+) -> list[RefactorSuggestion]:
+    """Find magic numbers and strings that should be named constants."""
+    findings = []
+    for i, line in enumerate(source.splitlines(), start=1):
+        stripped = line.strip()
+        # Skip comments, docstrings (very rough heuristic)
+        if stripped.startswith(("#", '"""', "'''")):
+            continue
+        for m in _MAGIC_NUMBER_PATTERN.finditer(line):
+            findings.append(
+                RefactorSuggestion(
+                    kind="magic_value",
+                    file=rel,
+                    line_start=i,
+                    line_end=i,
+                    name=m.group(),
+                    description=f"Magic number {m.group()!r} -- consider extracting to a named constant.",
+                    severity="info",
+                )
+            )
+    return findings
+
+
+# ---------------------------------------------------------------------------
+# Main scanner
+# ---------------------------------------------------------------------------
+
+
+def scan_refactor(
+    repo_path: str | Path,
+    config: Optional[RefactorConfig] = None,
+) -> RefactorReport:
+    """Scan all Python files under ``src/`` for refactoring opportunities.
 
     Parameters
     ----------
-    path:
-        Path to the Python source file.
-    max_line_len:
-        Maximum allowed line length (default 120).
+    repo_path:
+        Path to the repository root.
+    config:
+        Optional configuration; defaults to ``RefactorConfig()``.
 
     Returns
     -------
     RefactorReport
-        All issues found in the file.
     """
-    path = Path(path)
-    try:
-        source = path.read_text(encoding="utf-8")
-    except OSError as exc:
-        return RefactorReport(path=str(path), issues=[RefactorIssue(kind="read_error", line=0, message=str(exc), fixable=False)])
+    if config is None:
+        config = RefactorConfig()
+    repo = Path(repo_path)
+    src_dir = repo / "src"
+    if not src_dir.exists():
+        return RefactorReport(errors=[f"src/ not found at {repo}"])
 
-    lines = source.splitlines(keepends=True)
-    report = RefactorReport(path=str(path))
-    report.issues.extend(_check_trailing_whitespace(lines))
-    report.issues.extend(_check_mixed_indentation(lines))
-    report.issues.extend(_check_long_lines(lines, max_line_len))
-    report.issues.extend(_check_bare_except(source))
-    report.issues.extend(_check_unused_imports(source))
-    report.issues.sort(key=lambda i: i.line)
+    report = RefactorReport()
+    py_files = sorted(src_dir.rglob("*.py"))
+    report.total_files = len(py_files)
+
+    for py_file in py_files:
+        rel = str(py_file.relative_to(repo))
+        try:
+            source = py_file.read_text(encoding="utf-8")
+            tree = ast.parse(source, filename=str(py_file))
+        except (SyntaxError, UnicodeDecodeError) as e:
+            report.errors.append(f"{rel}: {e}")
+            continue
+
+        source_lines = source.splitlines()
+
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+
+            end = _get_end_line(node)
+            length = end - node.lineno + 1
+
+            # Long function
+            if length > config.max_function_lines:
+                report.suggestions.append(
+                    RefactorSuggestion(
+                        kind="long_function",
+                        file=rel,
+                        line_start=node.lineno,
+                        line_end=end,
+                        name=node.name,
+                        description=(
+                            f"Function `{node.name}` is {length} lines long "
+                            f"(threshold: {config.max_function_lines}). "
+                            "Consider splitting into smaller functions."
+                        ),
+                        severity="warning",
+                    )
+                )
+
+            # Deep nesting
+            depth = _count_nesting(node)
+            if depth > config.max_nesting_depth:
+                report.suggestions.append(
+                    RefactorSuggestion(
+                        kind="deep_nesting",
+                        file=rel,
+                        line_start=node.lineno,
+                        line_end=end,
+                        name=node.name,
+                        description=(
+                            f"Function `{node.name}` has nesting depth {depth} "
+                            f"(threshold: {config.max_nesting_depth}). "
+                            "Consider using early returns or extracting helpers."
+                        ),
+                        severity="warning",
+                    )
+                )
+
+            # Missing type annotations (public functions only)
+            if config.check_annotations and _is_public(node.name):
+                if not _has_return_annotation(node):
+                    report.suggestions.append(
+                        RefactorSuggestion(
+                            kind="missing_annotation",
+                            file=rel,
+                            line_start=node.lineno,
+                            line_end=node.lineno,
+                            name=node.name,
+                            description=(
+                                f"Public function `{node.name}` is missing a return type annotation."
+                            ),
+                            severity="info",
+                        )
+                    )
+
+        # Duplicate detection
+        dups = _find_duplicates(source_lines, rel, config.min_duplicate_lines)
+        report.suggestions.extend(dups)
+
+        # Magic values
+        if config.check_magic_values:
+            magic = _find_magic_values(source, rel)
+            report.suggestions.extend(magic)
+
+    report.total_suggestions = len(report.suggestions)
+    report.auto_fixable_count = sum(1 for s in report.suggestions if s.auto_fixable)
     return report
 
 
-def scan_repo(root: str | Path, max_line_len: int = 120) -> list[RefactorReport]:
-    """Scan all Python files under *root* and return reports.
-
-    Parameters
-    ----------
-    root:
-        Repository root directory.
-    max_line_len:
-        Maximum allowed line length.
-
-    Returns
-    -------
-    list[RefactorReport]
-        One report per Python file found.
-    """
-    root = Path(root)
-    reports: list[RefactorReport] = []
-    for py_file in sorted(root.rglob("*.py")):
-        reports.append(scan_file(py_file, max_line_len))
-    return reports
-
-
 # ---------------------------------------------------------------------------
-# Auto-fixer
+# Markdown renderer
 # ---------------------------------------------------------------------------
 
 
-def apply_fixes(report: RefactorReport) -> str:
-    """Return the source of *report.path* with all fixable issues resolved.
-
-    Parameters
-    ----------
-    report:
-        The report whose file should be patched.
-
-    Returns
-    -------
-    str
-        The patched source code string.
-    """
-    path = Path(report.path)
-    try:
-        source = path.read_text(encoding="utf-8")
-    except OSError:
-        return ""
-
-    lines = source.splitlines(keepends=True)
-
-    # Collect line numbers to fix by kind
-    trailing_ws_lines: set[int] = set()
-    tab_lines: set[int] = set()
-    unused_import_lines: set[int] = set()
-
-    for issue in report.issues:
-        if issue.fixable:
-            if issue.kind in ("trailing_whitespace",):
-                trailing_ws_lines.add(issue.line)
-            elif issue.kind in ("mixed_indentation", "tab_indentation"):
-                tab_lines.add(issue.line)
-            elif issue.kind == "unused_import":
-                unused_import_lines.add(issue.line)
-
-    patched: list[str] = []
-    for i, line in enumerate(lines, start=1):
-        if i in unused_import_lines:
-            continue  # drop the line entirely
-        if i in tab_lines:
-            line = line.replace("\t", "    ")
-        if i in trailing_ws_lines:
-            eol = "\n" if line.endswith("\n") else ""
-            line = line.rstrip() + eol
-        patched.append(line)
-
-    return "".join(patched)
+def render_markdown(report: RefactorReport) -> str:
+    """Render the refactoring report as Markdown."""
+    lines = [
+        "# Refactor Report",
+        "",
+        f"| Metric | Value |",
+        f"|--------|-------|",
+        f"| Files scanned | {report.total_files} |",
+        f"| Total suggestions | {report.total_suggestions} |",
+        f"| Auto-fixable | {report.auto_fixable_count} |",
+        "",
+    ]
+    if report.suggestions:
+        lines += [
+            "## Suggestions",
+            "",
+            "| File | Lines | Kind | Name | Description |",
+            "|------|-------|------|------|-------------|" ,
+        ]
+        for s in report.suggestions:
+            loc = f"{s.line_start}" if s.line_start == s.line_end else f"{s.line_start}-{s.line_end}"
+            desc = s.description[:80].replace("|", "\\|")
+            lines.append(f"| {s.file} | {loc} | `{s.kind}` | `{s.name}` | {desc} |")
+        lines.append("")
+    if report.errors:
+        lines += ["## Errors", ""]
+        for err in report.errors:
+            lines.append(f"- {err}")
+        lines.append("")
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -316,68 +378,47 @@ def apply_fixes(report: RefactorReport) -> str:
 # ---------------------------------------------------------------------------
 
 
-def main(argv: list[str] | None = None) -> int:
-    """CLI entry point for the refactor engine.
-
-    Parameters
-    ----------
-    argv:
-        Command-line arguments.
-
-    Returns
-    -------
-    int
-        Exit code.
-    """
+def main(argv=None) -> int:
+    """CLI entry point for the refactoring engine."""
     import argparse
-    import sys
 
-    parser = argparse.ArgumentParser(
-        prog="awake refactor",
-        description="Detect and fix code-quality issues.",
+    p = argparse.ArgumentParser(prog="awake-refactor")
+    p.add_argument("--repo", default=None, help="Repository root")
+    p.add_argument("--apply", action="store_true", help="Apply auto-fixable suggestions")
+    p.add_argument("--write", action="store_true", help="Write report to docs/")
+    p.add_argument("--json", action="store_true", help="Output raw JSON")
+    p.add_argument("--max-lines", type=int, default=50, help="Max function lines (default 50)")
+    p.add_argument("--max-depth", type=int, default=4, help="Max nesting depth (default 4)")
+    args = p.parse_args(argv)
+
+    if args.repo:
+        repo_path = Path(args.repo).expanduser().resolve()
+    else:
+        repo_path = Path(__file__).resolve().parents[1]
+
+    config = RefactorConfig(
+        max_function_lines=args.max_lines,
+        max_nesting_depth=args.max_depth,
     )
-    parser.add_argument("repo", nargs="?", default=".", help="Repo root")
-    parser.add_argument("--apply", action="store_true", help="Apply fixes")
-    parser.add_argument("--yes", action="store_true", help="Skip confirmation")
-    parser.add_argument(
-        "--max-line-len",
-        type=int,
-        default=120,
-        help="Maximum allowed line length (default: 120)",
-    )
-    args = parser.parse_args(argv)
+    report = scan_refactor(repo_path, config)
 
-    root = Path(args.repo).resolve()
-    if not root.is_dir():
-        print(f"Error: {root} is not a directory", file=sys.stderr)
-        return 1
+    if args.apply:
+        fixable = [s for s in report.suggestions if s.auto_fixable and s.patch]
+        for suggestion in fixable:
+            print(f"  Applying: {suggestion.file}:{suggestion.line_start} -- {suggestion.kind}")
+        print(f"  Applied {len(fixable)} auto-fixable suggestion(s).")
 
-    reports = scan_repo(root, max_line_len=args.max_line_len)
-    total_issues = sum(len(r.issues) for r in reports)
-    fixable = sum(r.fixable_count for r in reports)
+    if args.json:
+        print(json.dumps(report.to_dict(), indent=2))
+    else:
+        print(render_markdown(report))
 
-    for report in reports:
-        if report.issues:
-            print(f"\n{report.path}")
-            for issue in report.issues:
-                fix_tag = " [fixable]" if issue.fixable else ""
-                print(f"  line {issue.line:>4}: [{issue.kind}] {issue.message}{fix_tag}")
-
-    print(f"\nTotal issues: {total_issues}  ({fixable} fixable)")
-
-    if args.apply and fixable:
-        if not args.yes:
-            ans = input("Apply all fixable issues? [y/N] ").strip().lower()
-            if ans != "y":
-                print("Aborted.")
-                return 0
-        written = 0
-        for report in reports:
-            if report.fixable_count:
-                patched = apply_fixes(report)
-                Path(report.path).write_text(patched, encoding="utf-8")
-                written += 1
-        print(f"Fixed {written} files.")
+    if args.write:
+        docs = repo_path / "docs"
+        docs.mkdir(exist_ok=True)
+        out_path = docs / "refactor_report.json"
+        out_path.write_text(json.dumps(report.to_dict(), indent=2) + "\n", encoding="utf-8")
+        print(f"  Wrote {out_path}")
 
     return 0
 

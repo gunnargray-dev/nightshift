@@ -1,80 +1,85 @@
 """Test quality analyzer for Awake.
 
-Grades each test file (and individual test functions) on a rubric that
-checks for:
-
-- **Docstrings** -- every test function should have a one-line description.
-- **Assertions** -- tests with zero ``assert`` statements are flagged.
-- **Fixture usage** -- tests that never use a fixture may be under-isolated.
-- **Parametrize coverage** -- tests with many near-duplicate names suggest
-  they should use ``@pytest.mark.parametrize``.
-- **Magic literals** -- hard-coded numbers / strings inside ``assert``
-  expressions indicate missing named constants.
-
-Scores are 0-100 per file and 0-100 overall.
+Grades each test file on assertion density, test isolation, naming
+conventions, fixture usage, and overall coverage proxy metrics.
 
 Public API
 ----------
-- ``TestIssue``       -- a single quality issue
-- ``TestFileReport``  -- issues + score for one test file
-- ``TestQualityReport`` -- aggregate report
-- ``analyze_test_quality(repo_path)`` -> ``TestQualityReport``
+- ``TestFileGrade``  -- grade for a single test file
+- ``TestQualityReport`` -- full report
+- ``grade_test_file(path, rel)`` -> ``TestFileGrade``
+- ``scan_test_quality(repo_path)`` -> ``TestQualityReport``
+- ``save_test_quality_report(report, out_path)``
 
 CLI
 ---
-    awake test-quality [--json] [--threshold N]
+    awake test-quality         # Print report to stdout
+    awake test-quality --write # Write docs/test_quality_report.json
+    awake test-quality --json  # Output raw JSON
 """
 
 from __future__ import annotations
 
 import ast
-import re
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
 
 
 # ---------------------------------------------------------------------------
-# Data model
+# Data classes
 # ---------------------------------------------------------------------------
 
 
 @dataclass
-class TestIssue:
-    """A single quality issue found in a test function or file."""
+class TestFileGrade:
+    """Grade for a single test file."""
 
-    kind: str
-    name: str   # test function name or file path
-    line: int
-    message: str
-    severity: str = "warning"  # "warning" | "error"
+    file: str
+    total_tests: int = 0
+    assertion_count: int = 0
+    assertion_density: float = 0.0   # assertions per test
+    has_fixtures: bool = False
+    naming_ok: bool = True            # all test funcs start with test_
+    isolated: bool = True             # no global state mutations detected
+    score: float = 0.0                # 0-100
+    notes: list[str] = field(default_factory=list)
 
-
-@dataclass
-class TestFileReport:
-    """Quality report for a single test file."""
-
-    path: str
-    issues: list[TestIssue] = field(default_factory=list)
-    test_count: int = 0
-    score: float = 100.0
+    def to_dict(self) -> dict:
+        """Return a serialisable dict."""
+        return {
+            "file": self.file,
+            "total_tests": self.total_tests,
+            "assertion_count": self.assertion_count,
+            "assertion_density": round(self.assertion_density, 2),
+            "has_fixtures": self.has_fixtures,
+            "naming_ok": self.naming_ok,
+            "isolated": self.isolated,
+            "score": round(self.score, 1),
+            "notes": self.notes,
+        }
 
 
 @dataclass
 class TestQualityReport:
-    """Aggregate quality report across all test files."""
+    """Full test quality report for a repository."""
 
-    files: list[TestFileReport] = field(default_factory=list)
-    overall_score: float = 100.0
+    files_graded: int = 0
+    total_tests: int = 0
+    overall_score: float = 0.0
+    grades: list[TestFileGrade] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
 
-    @property
-    def total_tests(self) -> int:
-        """Total number of test functions across all files."""
-        return sum(f.test_count for f in self.files)
-
-    @property
-    def total_issues(self) -> int:
-        """Total number of quality issues across all files."""
-        return sum(len(f.issues) for f in self.files)
+    def to_dict(self) -> dict:
+        """Return a serialisable dict."""
+        return {
+            "files_graded": self.files_graded,
+            "total_tests": self.total_tests,
+            "overall_score": round(self.overall_score, 1),
+            "grades": [g.to_dict() for g in self.grades],
+            "errors": self.errors,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -82,185 +87,241 @@ class TestQualityReport:
 # ---------------------------------------------------------------------------
 
 
-def _has_docstring(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """Return True if *node* has a docstring."""
-    if not node.body:
-        return False
-    first = node.body[0]
-    return (
-        isinstance(first, ast.Expr)
-        and isinstance(first.value, ast.Constant)
-        and isinstance(first.value.value, str)
-    )
+def _count_assertions(tree: ast.AST) -> int:
+    """Count assert statements and self.assert* calls in an AST."""
+    count = 0
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assert):
+            count += 1
+        elif isinstance(node, ast.Call):
+            # self.assertEqual / self.assertTrue / etc.
+            if isinstance(node.func, ast.Attribute):
+                if node.func.attr.startswith("assert"):
+                    count += 1
+            # pytest.raises / pytest.approx used in assert
+            elif isinstance(node.func, ast.Attribute):
+                if isinstance(node.func.value, ast.Name) and node.func.value.id == "pytest":
+                    count += 1
+    return count
 
 
-def _count_assertions(node: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
-    """Count the number of assert statements in *node*."""
-    return sum(
-        1 for child in ast.walk(node) if isinstance(child, ast.Assert)
-    )
-
-
-def _uses_fixture(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """Return True if *node* accepts any pytest fixture parameters."""
-    args = node.args
-    params = [a.arg for a in args.args]
-    # Common pytest fixtures and any non-self/cls parameter suggests fixture use
-    return any(p not in ("self", "cls") for p in params)
-
-
-def _has_magic_literals_in_assert(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """Return True if any assert in *node* contains a bare numeric or string literal."""
-    for child in ast.walk(node):
-        if isinstance(child, ast.Assert):
-            for subnode in ast.walk(child.test):
-                if isinstance(subnode, ast.Constant):
-                    if isinstance(subnode.value, (int, float, complex)) and subnode.value not in (0, 1, -1, True, False):
-                        return True
-                    if isinstance(subnode.value, str) and len(subnode.value) > 3:
+def _has_fixtures(tree: ast.AST) -> bool:
+    """Return True if any function uses @pytest.fixture or has a 'fixture' decorator."""
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for deco in node.decorator_list:
+                if isinstance(deco, ast.Attribute) and deco.attr == "fixture":
+                    return True
+                if isinstance(deco, ast.Name) and deco.id == "fixture":
+                    return True
+                if isinstance(deco, ast.Call):
+                    inner = deco.func
+                    if isinstance(inner, ast.Attribute) and inner.attr == "fixture":
                         return True
     return False
 
 
-# ---------------------------------------------------------------------------
-# File analyser
-# ---------------------------------------------------------------------------
-
-
-def _analyze_file(py_file: Path, repo_root: Path) -> TestFileReport:
-    """Analyse a single test file and return a :class:`TestFileReport`."""
-    rel = str(py_file.relative_to(repo_root))
-    report = TestFileReport(path=rel)
-
-    try:
-        source = py_file.read_text(encoding="utf-8")
-        tree = ast.parse(source, filename=rel)
-    except (SyntaxError, OSError) as exc:
-        report.issues.append(
-            TestIssue(
-                kind="parse_error",
-                name=rel,
-                line=0,
-                message=str(exc),
-                severity="error",
-            )
-        )
-        return report
-
-    # Collect test functions (top-level and inside Test* classes)
-    test_funcs: list[ast.FunctionDef | ast.AsyncFunctionDef] = []
+def _get_test_functions(tree: ast.AST) -> list[ast.FunctionDef]:
+    """Return all top-level test functions (names starting with 'test_' or 'test')."""
+    funcs = []
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if node.name.startswith("test_") or node.name.startswith("Test"):
-                test_funcs.append(node)
+            if node.name.startswith("test"):
+                funcs.append(node)
+    return funcs
 
-    report.test_count = len(test_funcs)
 
-    # Check for duplicate-name groups suggesting parametrize opportunity
-    name_bases: list[str] = []
-    for fn in test_funcs:
-        # Strip trailing _N or _case_X suffix
-        base = re.sub(r"_\d+$", "", fn.name)
-        base = re.sub(r"_case_\w+$", "", base)
-        name_bases.append(base)
+def _check_naming(funcs: list[ast.FunctionDef]) -> bool:
+    """Return True if all test functions follow test_ naming convention."""
+    for f in funcs:
+        if not f.name.startswith("test_"):
+            return False
+    return True
 
-    from collections import Counter
-    counts = Counter(name_bases)
-    flagged_bases: set[str] = {b for b, c in counts.items() if c >= 3}
 
-    penalty = 0.0
-    for fn in test_funcs:
-        # Missing docstring
-        if not _has_docstring(fn):
-            report.issues.append(
-                TestIssue(
-                    kind="missing_docstring",
-                    name=fn.name,
-                    line=fn.lineno,
-                    message=f"{fn.name}: missing docstring",
-                    severity="warning",
-                )
-            )
-            penalty += 2.0
-
-        # No assertions
-        if _count_assertions(fn) == 0:
-            report.issues.append(
-                TestIssue(
-                    kind="no_assertions",
-                    name=fn.name,
-                    line=fn.lineno,
-                    message=f"{fn.name}: no assert statements",
-                    severity="error",
-                )
-            )
-            penalty += 10.0
-
-        # Magic literals
-        if _has_magic_literals_in_assert(fn):
-            report.issues.append(
-                TestIssue(
-                    kind="magic_literal",
-                    name=fn.name,
-                    line=fn.lineno,
-                    message=f"{fn.name}: magic literal in assert",
-                    severity="warning",
-                )
-            )
-            penalty += 3.0
-
-        # Parametrize opportunity
-        base = re.sub(r"_\d+$", "", fn.name)
-        base = re.sub(r"_case_\w+$", "", base)
-        if base in flagged_bases:
-            report.issues.append(
-                TestIssue(
-                    kind="parametrize_opportunity",
-                    name=fn.name,
-                    line=fn.lineno,
-                    message=f"{fn.name}: consider @pytest.mark.parametrize",
-                    severity="warning",
-                )
-            )
-            penalty += 1.0
-
-    report.score = max(0.0, 100.0 - penalty)
-    return report
+def _check_isolation(tree: ast.AST) -> bool:
+    """Heuristic: return False if global variables are assigned (potential shared state)."""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Global):
+            return False
+    return True
 
 
 # ---------------------------------------------------------------------------
-# Public API
+# Grader
 # ---------------------------------------------------------------------------
 
 
-def analyze_test_quality(repo_path: str | Path) -> TestQualityReport:
-    """Analyze test quality across the whole repository.
+def grade_test_file(path: Path, rel: str) -> TestFileGrade:
+    """Grade a single test file.
+
+    Parameters
+    ----------
+    path:
+        Absolute path to the test file.
+    rel:
+        Relative path for display.
+
+    Returns
+    -------
+    TestFileGrade
+    """
+    grade = TestFileGrade(file=rel)
+    try:
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(path))
+    except (SyntaxError, UnicodeDecodeError) as e:
+        grade.notes.append(f"Parse error: {e}")
+        return grade
+
+    funcs = _get_test_functions(tree)
+    grade.total_tests = len(funcs)
+
+    if grade.total_tests == 0:
+        grade.notes.append("No test functions found.")
+        grade.score = 0.0
+        return grade
+
+    grade.assertion_count = _count_assertions(tree)
+    grade.assertion_density = grade.assertion_count / grade.total_tests
+    grade.has_fixtures = _has_fixtures(tree)
+    grade.naming_ok = _check_naming(funcs)
+    grade.isolated = _check_isolation(tree)
+
+    # Scoring heuristic (0-100)
+    score = 0.0
+
+    # Assertion density (up to 40 pts)
+    density_score = min(grade.assertion_density / 3.0, 1.0) * 40
+    score += density_score
+
+    # Naming (20 pts)
+    if grade.naming_ok:
+        score += 20
+    else:
+        grade.notes.append("Some test functions do not follow test_ naming convention.")
+
+    # Isolation (20 pts)
+    if grade.isolated:
+        score += 20
+    else:
+        grade.notes.append("Global state mutations detected -- tests may not be isolated.")
+
+    # Fixtures (20 pts)
+    if grade.has_fixtures:
+        score += 20
+    else:
+        grade.notes.append("No pytest fixtures detected.")
+
+    grade.score = min(score, 100.0)
+    return grade
+
+
+# ---------------------------------------------------------------------------
+# Repository scanner
+# ---------------------------------------------------------------------------
+
+
+def scan_test_quality(repo_path: str | Path) -> TestQualityReport:
+    """Scan all test files in the repository.
 
     Parameters
     ----------
     repo_path:
-        Root directory of the repository.
+        Path to the repository root.
 
     Returns
     -------
     TestQualityReport
-        Aggregate quality report.
     """
-    root = Path(repo_path)
-    aggregate = TestQualityReport()
+    repo = Path(repo_path)
+    test_dirs = [repo / "tests", repo / "test"]
+    report = TestQualityReport()
 
-    test_files = sorted(
-        f for f in root.rglob("*.py") if f.name.startswith("test_") or "tests" in f.parts
+    py_files: list[Path] = []
+    for test_dir in test_dirs:
+        if test_dir.exists():
+            py_files.extend(sorted(test_dir.rglob("test_*.py")))
+            py_files.extend(sorted(test_dir.rglob("*_test.py")))
+
+    # Deduplicate
+    seen: set[Path] = set()
+    unique_files: list[Path] = []
+    for f in py_files:
+        if f not in seen:
+            seen.add(f)
+            unique_files.append(f)
+
+    report.files_graded = len(unique_files)
+
+    for py_file in unique_files:
+        rel = str(py_file.relative_to(repo))
+        try:
+            grade = grade_test_file(py_file, rel)
+            report.grades.append(grade)
+            report.total_tests += grade.total_tests
+        except Exception as e:
+            report.errors.append(f"{rel}: {e}")
+
+    if report.grades:
+        report.overall_score = sum(g.score for g in report.grades) / len(report.grades)
+
+    return report
+
+
+def save_test_quality_report(report: TestQualityReport, out_path: str | Path) -> None:
+    """Save the report as JSON.
+
+    Parameters
+    ----------
+    report:
+        The report to save.
+    out_path:
+        Output file path.
+    """
+    Path(out_path).write_text(
+        json.dumps(report.to_dict(), indent=2) + "\n",
+        encoding="utf-8",
     )
 
-    for tf in test_files:
-        file_report = _analyze_file(tf, root)
-        aggregate.files.append(file_report)
 
-    if aggregate.files:
-        aggregate.overall_score = sum(f.score for f in aggregate.files) / len(aggregate.files)
+# ---------------------------------------------------------------------------
+# Markdown renderer
+# ---------------------------------------------------------------------------
 
-    return aggregate
+
+def render_markdown(report: TestQualityReport) -> str:
+    """Render the test quality report as Markdown."""
+    lines = [
+        "# Test Quality Report",
+        "",
+        "| Metric | Value |",
+        "|--------|-------|",
+        f"| Files graded | {report.files_graded} |",
+        f"| Total tests | {report.total_tests} |",
+        f"| Overall score | {report.overall_score:.1f} / 100 |",
+        "",
+    ]
+    if report.grades:
+        lines += [
+            "## File Grades",
+            "",
+            "| File | Tests | Assertions | Density | Fixtures | Score |",
+            "|------|-------|------------|---------|----------|-------|",
+        ]
+        for g in sorted(report.grades, key=lambda x: x.score):
+            lines.append(
+                f"| {g.file} | {g.total_tests} | {g.assertion_count} "
+                f"| {g.assertion_density:.1f} | {'yes' if g.has_fixtures else 'no'} "
+                f"| {g.score:.1f} |"
+            )
+        lines.append("")
+    if report.errors:
+        lines += ["## Errors", ""]
+        for err in report.errors:
+            lines.append(f"- {err}")
+        lines.append("")
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -268,84 +329,33 @@ def analyze_test_quality(repo_path: str | Path) -> TestQualityReport:
 # ---------------------------------------------------------------------------
 
 
-def main(argv: list[str] | None = None) -> int:
-    """CLI entry point for the test quality analyzer.
-
-    Parameters
-    ----------
-    argv:
-        Command-line arguments.
-
-    Returns
-    -------
-    int
-        Exit code.
-    """
+def main(argv=None) -> int:
+    """CLI entry point for test quality analysis."""
     import argparse
-    import json
-    import sys
 
-    parser = argparse.ArgumentParser(
-        prog="awake test-quality",
-        description="Grade test quality across the repository.",
-    )
-    parser.add_argument("repo", nargs="?", default=".", help="Repo root")
-    parser.add_argument("--json", action="store_true", help="Emit JSON output")
-    parser.add_argument(
-        "--threshold",
-        type=float,
-        default=70.0,
-        help="Minimum acceptable overall score (default: 70)",
-    )
-    args = parser.parse_args(argv)
+    p = argparse.ArgumentParser(prog="awake-test-quality")
+    p.add_argument("--repo", default=None, help="Repository root")
+    p.add_argument("--write", action="store_true", help="Write report to docs/")
+    p.add_argument("--json", action="store_true", help="Output raw JSON")
+    args = p.parse_args(argv)
 
-    root = Path(args.repo).resolve()
-    if not root.is_dir():
-        print(f"Error: {root} is not a directory", file=sys.stderr)
-        return 1
+    if args.repo:
+        repo_path = Path(args.repo).expanduser().resolve()
+    else:
+        repo_path = Path(__file__).resolve().parents[1]
 
-    report = analyze_test_quality(root)
+    report = scan_test_quality(repo_path)
 
     if args.json:
-        data = {
-            "overall_score": report.overall_score,
-            "total_tests": report.total_tests,
-            "total_issues": report.total_issues,
-            "files": [
-                {
-                    "path": f.path,
-                    "score": f.score,
-                    "test_count": f.test_count,
-                    "issues": [
-                        {
-                            "kind": i.kind,
-                            "name": i.name,
-                            "line": i.line,
-                            "message": i.message,
-                            "severity": i.severity,
-                        }
-                        for i in f.issues
-                    ],
-                }
-                for f in report.files
-            ],
-        }
-        print(json.dumps(data, indent=2))
-        return 0
+        print(json.dumps(report.to_dict(), indent=2))
+    else:
+        print(render_markdown(report))
 
-    print(f"Overall score: {report.overall_score:.1f}/100")
-    print(f"Test files analyzed: {len(report.files)}")
-    print(f"Total tests: {report.total_tests}")
-    print(f"Total issues: {report.total_issues}")
-    for f in report.files:
-        if f.issues:
-            print(f"\n  {f.path}  (score={f.score:.0f})")
-            for issue in f.issues:
-                print(f"    line {issue.line:>4}: [{issue.kind}] {issue.message}")
-
-    if report.overall_score < args.threshold:
-        print(f"\nFAIL: score {report.overall_score:.1f} below threshold {args.threshold}")
-        return 1
+    if args.write:
+        docs = repo_path / "docs"
+        docs.mkdir(exist_ok=True)
+        save_test_quality_report(report, docs / "test_quality_report.json")
+        print(f"  Wrote docs/test_quality_report.json")
 
     return 0
 
