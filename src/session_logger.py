@@ -93,7 +93,7 @@ class SessionEntry:
             lines += ["", "**Pull requests:**", ""]
             for pr in self.prs:
                 url_part = f"[#{pr.number}]({pr.url})" if pr.url else f"#{pr.number}"
-                lines.append(f"- {url_part} — {pr.title} (`{pr.branch}`))"
+                lines.append(f"- {url_part} — {pr.title} (`{pr.branch}`))")
 
         # Decisions
         if self.decisions:

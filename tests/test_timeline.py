@@ -30,8 +30,7 @@ SAMPLE_LOG = textwrap.dedent("""\
     - ✅ README updater → PR #6 — src/readme_updater.py
     - ✅ PR scorer → PR #7 — src/pr_scorer.py
     - ✅ Diff visualizer → PR #8 — src/diff_visualizer.py
-"""
-)
+""")
 
 @pytest.fixture
 def log_file(tmp_path):

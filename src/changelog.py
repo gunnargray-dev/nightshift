@@ -1,206 +1,184 @@
-"""Changelog generator for Awake.
-
-Generates a structured CHANGELOG.md from git history, grouping commits
-by session and conventional-commit type.
-"""
-
+"""Changelog generation utilities."""
 from __future__ import annotations
 
 import re
-import subprocess
-from collections import defaultdict
-from datetime import datetime
+from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
-from typing import NamedTuple
+from typing import Optional
 
+from .utils import run_cmd
 
-# ---------------------------------------------------------------------------
-# Data model
-# ---------------------------------------------------------------------------
-
-
-class Commit(NamedTuple):
-    sha: str
-    date: str
-    subject: str
-    body: str
-
-
-COMMIT_TYPES = {
+# Conventional-commit prefix -> changelog section
+_SECTION_MAP: dict[str, str] = {
     "feat": "Features",
     "fix": "Bug Fixes",
-    "docs": "Documentation",
-    "style": "Style",
-    "refactor": "Refactoring",
     "perf": "Performance",
+    "refactor": "Refactoring",
+    "docs": "Documentation",
     "test": "Tests",
-    "build": "Build",
+    "chore": "Chores",
     "ci": "CI",
-    "chore": "Chore",
-    "revert": "Reverts",
+    "build": "Build",
 }
 
-# Detect "Session N" references in commit subjects
-SESSION_RE = re.compile(r"session\s*(\d+)", re.IGNORECASE)
+_CC_RE = re.compile(
+    r"^(?P<type>[a-z]+)(\((?P<scope>[^)]+)\))?(?P<breaking>!)?:\s*(?P<desc>.+)$"
+)
+
+
+@dataclass
+class ChangelogEntry:
+    commit_hash: str
+    type: str
+    scope: Optional[str]
+    breaking: bool
+    description: str
+    body: str = ""
+
+
+@dataclass
+class ChangelogRelease:
+    version: str
+    release_date: date
+    entries: list[ChangelogEntry] = field(default_factory=list)
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def sections(self) -> dict[str, list[ChangelogEntry]]:
+        """Group entries by section name."""
+        result: dict[str, list[ChangelogEntry]] = {}
+        for entry in self.entries:
+            section = _SECTION_MAP.get(entry.type, "Other")
+            result.setdefault(section, []).append(entry)
+        return result
+
+    def breaking_changes(self) -> list[ChangelogEntry]:
+        return [e for e in self.entries if e.breaking]
 
 
 # ---------------------------------------------------------------------------
-# Git helpers
+# Git log parsing
 # ---------------------------------------------------------------------------
 
 
-def _git_log(repo_path: Path) -> list[Commit]:
-    """Return all commits from the git log as Commit objects."""
-    fmt = "%H%x1f%ad%x1f%s%x1f%b%x1e"
-    try:
-        out = subprocess.check_output(
-            ["git", "log", f"--format={fmt}", "--date=short"],
-            cwd=repo_path,
-            stderr=subprocess.DEVNULL,
-            text=True,
+def _parse_commit_message(raw: str) -> tuple[str, str, Optional[str], bool, str]:
+    """Return (type, description, scope, breaking, body)."""
+    lines = raw.strip().splitlines()
+    subject = lines[0] if lines else ""
+    body = "\n".join(lines[2:]) if len(lines) > 2 else ""
+
+    m = _CC_RE.match(subject)
+    if not m:
+        return "chore", subject, None, False, body
+
+    return (
+        m.group("type"),
+        m.group("desc"),
+        m.group("scope"),
+        bool(m.group("breaking")),
+        body,
+    )
+
+
+def get_commits_between(
+    from_ref: str,
+    to_ref: str = "HEAD",
+    repo: Optional[Path] = None,
+) -> list[ChangelogEntry]:
+    cwd = repo or Path(".")
+    log = run_cmd(
+        [
+            "git",
+            "log",
+            f"{from_ref}..{to_ref}",
+            "--pretty=format:%H%x00%B%x00---END---",
+        ],
+        cwd=cwd,
+    )
+
+    entries: list[ChangelogEntry] = []
+    for block in log.split("---END---"):
+        block = block.strip()
+        if not block:
+            continue
+        parts = block.split("\x00", 2)
+        if len(parts) < 2:
+            continue
+        commit_hash, raw_msg = parts[0].strip(), parts[1]
+        ctype, desc, scope, breaking, body = _parse_commit_message(raw_msg)
+        entries.append(
+            ChangelogEntry(
+                commit_hash=commit_hash,
+                type=ctype,
+                scope=scope,
+                breaking=breaking,
+                description=desc,
+                body=body,
+            )
         )
-    except subprocess.CalledProcessError:
-        return []
-
-    commits: list[Commit] = []
-    for record in out.strip().split("\x1e"):
-        record = record.strip()
-        if not record:
-            continue
-        parts = record.split("\x1f")
-        if len(parts) < 4:
-            continue
-        sha, date, subject, body = parts[0], parts[1], parts[2], parts[3]
-        commits.append(Commit(sha=sha, date=date, subject=subject, body=body))
-    return commits
-
-
-# ---------------------------------------------------------------------------
-# Parsing helpers
-# ---------------------------------------------------------------------------
-
-
-def _parse_type(subject: str) -> str:
-    """Extract conventional-commit type from a commit subject."""
-    m = re.match(r"^(\w+)(?:\(.+\))?!?:", subject)
-    if m:
-        return m.group(1).lower()
-    return "other"
-
-
-def _parse_session(subject: str, body: str) -> int | None:
-    """Extract session number from commit subject or body, if present."""
-    for text in (subject, body):
-        m = SESSION_RE.search(text)
-        if m:
-            return int(m.group(1))
-    return None
-
-
-# ---------------------------------------------------------------------------
-# Grouping
-# ---------------------------------------------------------------------------
-
-
-def _group_commits(
-    commits: list[Commit],
-) -> dict[str, dict[str, list[Commit]]]:
-    """Group commits by session label then by conventional-commit type.
-
-    Returns a nested dict::
-
-        {
-            "Session 5": {"feat": [Commit, ...], "fix": [...]},
-            "Unsessioned": {...},
-        }
-    """
-    grouped: dict[str, dict[str, list[Commit]]] = defaultdict(lambda: defaultdict(list))
-    for commit in commits:
-        session = _parse_session(commit.subject, commit.body)
-        session_label = f"Session {session}" if session is not None else "Unsessioned"
-        ctype = _parse_type(commit.subject)
-        grouped[session_label][ctype].append(commit)
-    return dict(grouped)
+    return entries
 
 
 # ---------------------------------------------------------------------------
 # Rendering
 # ---------------------------------------------------------------------------
 
+_SECTION_ORDER = [
+    "Features",
+    "Bug Fixes",
+    "Performance",
+    "Refactoring",
+    "Documentation",
+    "Tests",
+    "CI",
+    "Build",
+    "Chores",
+    "Other",
+]
 
-def _render_changelog(grouped: dict[str, dict[str, list[Commit]]]) -> str:
-    """Render grouped commits as Markdown text."""
-    lines: list[str] = ["# Changelog\n", ""]
-    lines.append(
-        "_Auto-generated by `awake changelog`. "
-        "Do not edit manually._\n"
-    )
-    lines.append("")
 
-    # Sort sessions: numbered ones first (descending), then Unsessioned
-    def _sort_key(label: str) -> tuple[int, int]:
-        m = re.match(r"Session (\d+)", label)
-        return (0, -int(m.group(1))) if m else (1, 0)
+def render_markdown(
+    release: ChangelogRelease,
+    include_hashes: bool = True,
+) -> str:
+    lines: list[str] = [
+        f"## [{release.version}] - {release.release_date.isoformat()}",
+        "",
+    ]
 
-    for session_label in sorted(grouped, key=_sort_key):
-        lines.append(f"## {session_label}\n")
-        type_map = grouped[session_label]
+    breaking = release.breaking_changes()
+    if breaking:
+        lines += ["### BREAKING CHANGES", ""]
+        for e in breaking:
+            lines.append(f"- {e.description}")
+        lines.append("")
 
-        for ctype, human in COMMIT_TYPES.items():
-            commits_of_type = type_map.get(ctype, [])
-            if not commits_of_type:
-                continue
-            lines.append(f"### {human}\n")
-            for c in commits_of_type:
-                lines.append(f"- {c.subject} (`{c.sha[:8]}`)")  
-            lines.append("")
-
-        other = type_map.get("other", [])
-        if other:
-            lines.append("### Other\n")
-            for c in other:
-                lines.append(f"- {c.subject} (`{c.sha[:8]}`)")  
-            lines.append("")
+    sections = release.sections()
+    for section in _SECTION_ORDER:
+        entries = sections.get(section, [])
+        if not entries:
+            continue
+        lines += [f"### {section}", ""]
+        for e in entries:
+            scope_str = f"**{e.scope}**: " if e.scope else ""
+            hash_str = f" ([{e.commit_hash[:7]}](../../commit/{e.commit_hash}))" if include_hashes else ""
+            lines.append(f"- {scope_str}{e.description}{hash_str}")
+        lines.append("")
 
     return "\n".join(lines)
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
-
-
-def generate_changelog(repo_path: Path | None = None) -> str:
-    """Generate a Markdown changelog from git history.
-
-    Args:
-        repo_path: Path to the git repository root.  Defaults to the
-            current working directory.
-
-    Returns:
-        Markdown string containing the full changelog.
-    """
-    if repo_path is None:
-        repo_path = Path(".")
-    commits = _git_log(repo_path)
-    grouped = _group_commits(commits)
-    return _render_changelog(grouped)
-
-
-def write_changelog(repo_path: Path | None = None, output: Path | None = None) -> Path:
-    """Write the changelog to *output* (default: ``CHANGELOG.md``).
-
-    Args:
-        repo_path: Repository root directory.
-        output: Destination file path.
-
-    Returns:
-        The path where the changelog was written.
-    """
-    if repo_path is None:
-        repo_path = Path(".")
-    if output is None:
-        output = repo_path / "CHANGELOG.md"
-    text = generate_changelog(repo_path)
-    output.write_text(text, encoding="utf-8")
-    return output
+def write_changelog(
+    release: ChangelogRelease,
+    output_path: Path,
+    prepend: bool = True,
+    include_hashes: bool = True,
+) -> None:
+    content = render_markdown(release, include_hashes=include_hashes)
+    if prepend and output_path.exists():
+        existing = output_path.read_text(encoding="utf-8")
+        content = content + "\n" + existing
+    output_path.write_text(content, encoding="utf-8")

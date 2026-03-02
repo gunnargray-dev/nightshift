@@ -1,296 +1,299 @@
 """Health trend visualization for Awake.
 
-Tracks code health scores across sessions and renders sparklines,
-tables, and trend summaries to the terminal.
+Tracks code health scores across sessions and renders sparklines and
+trend tables in Markdown.  Stores history in ``docs/health_history.json``
+alongside the existing ``docs/coverage_history.json`` pattern.
 
-CLI: awake health-trend [--json] [--sessions N] [--sparkline]
-API: GET /api/health-trend
+Health trend data is collected at the end of each session by running
+``generate_health_report()`` from ``src/health.py`` and appending the
+per-file and aggregate scores to the history file.
+
+Sparklines use Unicode block characters (▁▂▃▄▅▆▇█) so they render
+inline in any Markdown viewer or terminal that supports UTF-8.
+
+Session summary includes:
+- Overall health score (0-100)
+- Per-file scores
+- Delta vs previous session
+- 8-point sparkline of the last 8 sessions
 """
 
 from __future__ import annotations
 
 import json
-import math
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, field, asdict
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 
 # ---------------------------------------------------------------------------
-# Constants
+# Sparkline helper
 # ---------------------------------------------------------------------------
 
-LOG_PATH = Path(".awake/health_log.json")
-DEFAULT_SESSIONS = 10
+_SPARK_CHARS = "▁▂▃▄▅▆▇█"
 
-# Unicode block characters for sparkline rendering
-_SPARK_CHARS = " ▁▂▃▄▅▆▇█"
+
+def sparkline(values: list[float], width: Optional[int] = None) -> str:
+    """Render a list of floats as a Unicode sparkline string.
+
+    Args:
+        values: A list of numeric values (0–100 for health scores).
+        width: Maximum number of characters. Defaults to len(values).
+
+    Returns:
+        A string like ``▂▃▅▇█▆▄▃``.
+    """
+    if not values:
+        return ""
+    vals = values[-width:] if width else values
+    lo, hi = min(vals), max(vals)
+    if lo == hi:
+        return _SPARK_CHARS[4] * len(vals)
+    buckets = len(_SPARK_CHARS) - 1
+    return "".join(
+        _SPARK_CHARS[round((v - lo) / (hi - lo) * buckets)]
+        for v in vals
+    )
 
 
 # ---------------------------------------------------------------------------
-# Data structures
+# Data classes
 # ---------------------------------------------------------------------------
+
+
+@dataclass
+class FileHealthSnapshot:
+    """Health score for one file at one point in time."""
+
+    path: str
+    score: float          # 0.0–100.0
+    lines: int = 0
+    docstring_coverage: float = 0.0
+    todo_count: int = 0
+    long_lines: int = 0
+
+    def to_dict(self) -> dict:
+        """Serialize to dictionary."""
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "FileHealthSnapshot":
+        """Deserialize from dictionary."""
+        return cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
+
 
 @dataclass
 class HealthSnapshot:
-    """A single health score observation."""
+    """Aggregate health measurement for one session."""
 
     session: int
-    date: str               # ISO-8601 date
-    score: int              # 0–100
-    grade: str              # A / B / C / D / F
-    total_files: int
-    total_lines: int
-    long_files: int
-    long_functions: int
-    todo_density: float
-    test_coverage_ratio: float
+    timestamp: str
+    overall_score: float      # 0.0–100.0
+    files: list[FileHealthSnapshot] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        """Serialize to dictionary."""
+        return {
+            "session": self.session,
+            "timestamp": self.timestamp,
+            "overall_score": self.overall_score,
+            "files": [f.to_dict() for f in self.files],
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "HealthSnapshot":
+        """Deserialize from dictionary."""
+        files = [FileHealthSnapshot.from_dict(f) for f in d.get("files", [])]
+        return cls(
+            session=d["session"],
+            timestamp=d["timestamp"],
+            overall_score=d["overall_score"],
+            files=files,
+        )
+
+    @property
+    def health_badge(self) -> str:
+        """Color-coded badge for the overall score."""
+        s = self.overall_score
+        if s >= 90:
+            return f"🟢 {s:.1f}"
+        elif s >= 70:
+            return f"🟡 {s:.1f}"
+        else:
+            return f"🔴 {s:.1f}"
 
 
 @dataclass
-class TrendReport:
-    """Multi-session health trend report."""
+class HealthTrendHistory:
+    """Append-only history of health snapshots."""
 
-    snapshots: List[HealthSnapshot]
-    first_score: int
-    last_score: int
-    min_score: int
-    max_score: int
-    mean_score: float
-    delta: int              # last_score - first_score
-    trend: str              # IMPROVING / DECLINING / STABLE
-    sparkline: str
-    summary: str
+    snapshots: list[HealthSnapshot] = field(default_factory=list)
 
+    def to_dict(self) -> dict:
+        """Serialize to dictionary."""
+        return {"snapshots": [s.to_dict() for s in self.snapshots]}
 
-# ---------------------------------------------------------------------------
-# Log I/O
-# ---------------------------------------------------------------------------
+    @classmethod
+    def from_dict(cls, d: dict) -> "HealthTrendHistory":
+        """Deserialize from dictionary."""
+        snaps = [HealthSnapshot.from_dict(s) for s in d.get("snapshots", [])]
+        return cls(snapshots=snaps)
 
-def _load_log(path: Path = LOG_PATH) -> list[dict]:
-    """Load the health log JSON array, returning [] on any error."""
-    if not path.exists():
-        return []
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return []
+    def append(self, snapshot: HealthSnapshot) -> None:
+        """Add a snapshot, replacing any existing entry for the same session."""
+        self.snapshots = [s for s in self.snapshots if s.session != snapshot.session]
+        self.snapshots.append(snapshot)
+        self.snapshots.sort(key=lambda s: s.session)
 
+    def latest(self) -> Optional[HealthSnapshot]:
+        """Return the most recent snapshot."""
+        return max(self.snapshots, key=lambda s: s.session) if self.snapshots else None
 
-def append_snapshot(snapshot: HealthSnapshot, path: Path = LOG_PATH) -> None:
-    """Append a health snapshot to the persistent log."""
-    log = _load_log(path)
-    # Avoid duplicate session entries — update if session already present
-    existing = {entry.get("session"): i for i, entry in enumerate(log)}
-    entry = asdict(snapshot)
-    if snapshot.session in existing:
-        log[existing[snapshot.session]] = entry
-    else:
-        log.append(entry)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(log, indent=2), encoding="utf-8")
+    def scores(self) -> list[tuple[int, float]]:
+        """Return (session, overall_score) pairs sorted by session."""
+        return [(s.session, s.overall_score) for s in sorted(self.snapshots, key=lambda s: s.session)]
 
+    def to_markdown(self) -> str:
+        """Render the health trend as a Markdown table with sparkline."""
+        if not self.snapshots:
+            return "*No health trend data recorded yet.*\n"
 
-# ---------------------------------------------------------------------------
-# Sparkline renderer
-# ---------------------------------------------------------------------------
+        sorted_snaps = sorted(self.snapshots, key=lambda s: s.session)
+        score_values = [s.overall_score for s in sorted_snaps]
+        spark = sparkline(score_values)
 
-def _sparkline(values: list[int]) -> str:
-    """Render a list of 0-100 integers as a Unicode block sparkline."""
-    if not values:
-        return ""
-    lo, hi = min(values), max(values)
-    span = hi - lo or 1
-    chars = []
-    for v in values:
-        idx = round((v - lo) / span * (len(_SPARK_CHARS) - 1))
-        chars.append(_SPARK_CHARS[idx])
-    return "".join(chars)
-
-
-# ---------------------------------------------------------------------------
-# Trend analysis
-# ---------------------------------------------------------------------------
-
-def _classify_trend(delta: int, n: int) -> str:
-    """Classify overall trend based on delta and number of observations."""
-    if n < 2:
-        return "STABLE"
-    if delta >= 3:
-        return "IMPROVING"
-    if delta <= -3:
-        return "DECLINING"
-    return "STABLE"
-
-
-def generate_trend_report(
-    sessions: int = DEFAULT_SESSIONS,
-    log_path: Path = LOG_PATH,
-) -> TrendReport:
-    """Generate a health trend report from the persistent log."""
-    raw = _load_log(log_path)
-
-    # Parse and sort by session number
-    snapshots: list[HealthSnapshot] = []
-    for entry in raw:
-        try:
-            snapshots.append(HealthSnapshot(
-                session=int(entry["session"]),
-                date=str(entry.get("date", "")),
-                score=int(entry["score"]),
-                grade=str(entry.get("grade", "?")),
-                total_files=int(entry.get("total_files", 0)),
-                total_lines=int(entry.get("total_lines", 0)),
-                long_files=int(entry.get("long_files", 0)),
-                long_functions=int(entry.get("long_functions", 0)),
-                todo_density=float(entry.get("todo_density", 0.0)),
-                test_coverage_ratio=float(entry.get("test_coverage_ratio", 0.0)),
-            ))
-        except (KeyError, ValueError, TypeError):
-            continue
-
-    snapshots.sort(key=lambda s: s.session)
-    # Limit to the last N sessions
-    snapshots = snapshots[-sessions:]
-
-    if not snapshots:
-        return TrendReport(
-            snapshots=[],
-            first_score=0,
-            last_score=0,
-            min_score=0,
-            max_score=0,
-            mean_score=0.0,
-            delta=0,
-            trend="STABLE",
-            sparkline="",
-            summary="No health data recorded yet. Run `awake health` to capture a snapshot.",
-        )
-
-    scores = [s.score for s in snapshots]
-    first_score = scores[0]
-    last_score = scores[-1]
-    min_score = min(scores)
-    max_score = max(scores)
-    mean_score = sum(scores) / len(scores)
-    delta = last_score - first_score
-    trend = _classify_trend(delta, len(scores))
-    spark = _sparkline(scores)
-
-    trend_icon = {"IMPROVING": "↑", "DECLINING": "↓", "STABLE": "→"}.get(trend, "")
-    summary = (
-        f"{len(snapshots)} sessions tracked. "
-        f"Current score: {last_score} (Grade {snapshots[-1].grade}). "
-        f"Trend: {trend} {trend_icon} (Δ{delta:+d}). "
-        f"Range: {min_score}–{max_score}. "
-        f"Mean: {mean_score:.1f}."
-    )
-
-    return TrendReport(
-        snapshots=snapshots,
-        first_score=first_score,
-        last_score=last_score,
-        min_score=min_score,
-        max_score=max_score,
-        mean_score=round(mean_score, 2),
-        delta=delta,
-        trend=trend,
-        sparkline=spark,
-        summary=summary,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Formatting
-# ---------------------------------------------------------------------------
-
-def _trend_badge(trend: str) -> str:
-    return {"IMPROVING": "↑ IMPROVING", "DECLINING": "↓ DECLINING", "STABLE": "→ STABLE"}.get(
-        trend, trend
-    )
-
-
-def _grade_icon(grade: str) -> str:
-    return {"A": "✅", "B": "🟢", "C": "🟡", "D": "🟠", "F": "🔴"}.get(grade, "")
-
-
-def format_trend_report(report: TrendReport, show_sparkline: bool = True) -> str:
-    """Render a TrendReport as a human-readable string."""
-
-    lines = [
-        "═" * 70,
-        "  AWAKE — HEALTH TREND REPORT",
-        "═" * 70,
-        f"  Sessions tracked : {len(report.snapshots)}",
-        f"  Current score    : {report.last_score}  (was {report.first_score})",
-        f"  Trend            : {_trend_badge(report.trend)}  (Δ{report.delta:+d})",
-        f"  Range            : {report.min_score} – {report.max_score}  (mean {report.mean_score:.1f})",
-        f"  Summary          : {report.summary}",
-        "",
-    ]
-
-    if show_sparkline and report.sparkline:
-        lines += [
-            "─" * 70,
-            "  SPARKLINE (older → newer)",
-            "─" * 70,
-            f"  {report.sparkline}",
+        lines = [
+            f"**Health Trend:** `{spark}`",
             "",
+            "| Session | Score | Delta | Files | Spark |",
+            "|---------|-------|-------|-------|-------|",
         ]
 
-    if report.snapshots:
-        lines += [
-            "─" * 70,
-            "  SESSION HISTORY",
-            "─" * 70,
-            f"  {'Sess':>4}  {'Date':>10}  {'Score':>5}  {'Grade':>5}  "
-            f"{'Files':>5}  {'Lines':>6}  {'TODOd':>6}  {'Cov':>5}",
-            "  " + "-" * 60,
-        ]
-        for s in report.snapshots:
-            icon = _grade_icon(s.grade)
+        for i, snap in enumerate(sorted_snaps):
+            delta_str = "—"
+            if i > 0:
+                delta = snap.overall_score - sorted_snaps[i - 1].overall_score
+                delta_str = f"+{delta:.1f}" if delta >= 0 else f"{delta:.1f}"
+            file_count = len(snap.files)
+            spark_char = spark[i] if i < len(spark) else "·"
             lines.append(
-                f"  {s.session:>4}  {s.date:>10}  {s.score:>5}  "
-                f"{s.grade:>4}{icon}  "
-                f"{s.total_files:>5}  {s.total_lines:>6}  "
-                f"{s.todo_density:>6.1f}  {s.test_coverage_ratio:>5.0%}"
+                f"| {snap.session} | {snap.health_badge} | {delta_str} | {file_count} | {spark_char} |"
             )
+
         lines.append("")
+        return "\n".join(lines)
 
-    lines.append("═" * 70)
-    return "\n".join(lines)
+    def file_trends(self) -> dict[str, list[tuple[int, float]]]:
+        """Return per-file trend data: {path: [(session, score), ...]}."""
+        trends: dict[str, list[tuple[int, float]]] = {}
+        for snap in sorted(self.snapshots, key=lambda s: s.session):
+            for fh in snap.files:
+                trends.setdefault(fh.path, []).append((snap.session, fh.score))
+        return trends
+
+    def to_per_file_markdown(self) -> str:
+        """Render per-file trends as a Markdown table."""
+        trends = self.file_trends()
+        if not trends:
+            return "*No per-file data available.*\n"
+
+        sessions = sorted({s.session for s in self.snapshots})
+        header = "| File | " + " | ".join(str(s) for s in sessions) + " | Trend |"
+        sep = "|------|" + "-------|" * len(sessions) + "-------|"
+        lines = [header, sep]
+
+        for file_path in sorted(trends.keys()):
+            file_scores = dict(trends[file_path])
+            cells = []
+            for sess in sessions:
+                score = file_scores.get(sess)
+                cells.append(f"{score:.0f}" if score is not None else "—")
+            score_vals = [file_scores[s] for s in sessions if s in file_scores]
+            spark = sparkline(score_vals) if len(score_vals) > 1 else "·"
+            short_name = Path(file_path).name
+            lines.append(f"| `{short_name}` | " + " | ".join(cells) + f" | `{spark}` |")
+
+        lines.append("")
+        return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
-# CLI entry point
+# Integration helpers
 # ---------------------------------------------------------------------------
 
-def main(args=None) -> int:
-    """CLI entry point for `awake health-trend`."""
-    import argparse
 
-    parser = argparse.ArgumentParser(
-        prog="awake health-trend",
-        description="Show health score trend across sessions",
+def snapshot_from_health_report(session: int, report: object) -> HealthSnapshot:
+    """Create a HealthSnapshot from a HealthReport (src/health.py).
+
+    Args:
+        session: The current session number.
+        report: A ``HealthReport`` instance from ``src/health.py``.
+
+    Returns:
+        A HealthSnapshot ready to append to HealthTrendHistory.
+    """
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    file_snaps = []
+    for fh in getattr(report, "files", []):
+        file_snaps.append(FileHealthSnapshot(
+            path=fh.path,
+            score=fh.health_score,
+            lines=fh.total_lines,
+            docstring_coverage=fh.docstring_coverage,
+            todo_count=fh.todo_count,
+            long_lines=fh.long_lines,
+        ))
+    return HealthSnapshot(
+        session=session,
+        timestamp=ts,
+        overall_score=getattr(report, "overall_health_score", 0.0),
+        files=file_snaps,
     )
-    parser.add_argument("--json", action="store_true", help="Output as JSON")
-    parser.add_argument(
-        "--sessions", type=int, default=DEFAULT_SESSIONS,
-        help=f"Number of sessions to display (default: {DEFAULT_SESSIONS})",
-    )
-    parser.add_argument("--sparkline", action="store_true", help="Show Unicode sparkline")
-
-    parsed = parser.parse_args(args)
-
-    report = generate_trend_report(sessions=parsed.sessions)
-
-    if parsed.json:
-        print(json.dumps(asdict(report), indent=2))
-    else:
-        print(format_trend_report(report, show_sparkline=parsed.sparkline))
-
-    return 0
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+def load_health_history(history_path: Path) -> HealthTrendHistory:
+    """Load HealthTrendHistory from JSON file, creating empty if missing."""
+    if not history_path.exists():
+        return HealthTrendHistory()
+    with history_path.open(encoding="utf-8") as f:
+        return HealthTrendHistory.from_dict(json.load(f))
+
+
+def save_health_history(history: HealthTrendHistory, history_path: Path) -> None:
+    """Persist HealthTrendHistory to JSON.
+
+    Args:
+        history: The history object to save.
+        history_path: Destination path (usually docs/health_history.json).
+    """
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+    with history_path.open("w", encoding="utf-8") as f:
+        json.dump(history.to_dict(), f, indent=2)
+
+
+def record_session_health(
+    repo_path: Path,
+    session: int,
+    *,
+    history_path: Optional[Path] = None,
+) -> HealthTrendHistory:
+    """Run health analysis and append snapshot to history.
+
+    Args:
+        repo_path: Repository root.
+        session: Current session number.
+        history_path: Override for docs/health_history.json.
+
+    Returns:
+        Updated HealthTrendHistory.
+    """
+    from src.health import generate_health_report
+
+    hp = history_path or (repo_path / "docs" / "health_history.json")
+    history = load_health_history(hp)
+    report = generate_health_report(repo_path=repo_path)
+    snap = snapshot_from_health_report(session, report)
+    history.append(snap)
+    save_health_history(history, hp)
+    return history

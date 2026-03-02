@@ -1,69 +1,26 @@
-"""Docstring generator for Awake.
-
-Scans the repository for Python modules and functions that are missing
-docstrings, then produces stub docstrings using a simple template engine.
-
-The generator intentionally avoids LLM calls; it produces deterministic,
-structurally-valid docstrings that can later be enriched by a human or AI.
-
-CLI
----
-    awake docstrings                # Show missing-docstring report
-    awake docstrings --apply        # Write stubs to source files
-    awake docstrings --dry-run      # Preview changes without writing
-    awake docstrings --write        # Write JSON + Markdown report to docs/
-    awake docstrings --json         # Emit JSON to stdout
-"""
-
+"""AI-powered docstring generation for Python source files."""
 from __future__ import annotations
 
 import ast
 import textwrap
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
-
-
-# ---------------------------------------------------------------------------
-# Data models
-# ---------------------------------------------------------------------------
+from typing import Optional, Union
 
 
 @dataclass
-class MissingDocstring:
-    """A single location where a docstring is absent."""
+class DocstringConfig:
+    """Configuration for docstring generation."""
 
-    file: str
-    line: int
-    kind: str          # "module", "class", "function", "method"
-    name: str
-    stub: str = ""     # generated stub text (filled later)
-    context: str = ""  # up to 3 lines of source context
-
-    def to_dict(self) -> dict:
-        """Return a dictionary representation of the missing docstring entry."""
-        return asdict(self)
-
-
-@dataclass
-class DocstringReport:
-    """Aggregate report: coverage metrics and list of missing locations."""
-
-    repo_path: str
-    total_checked: int = 0
-    missing_count: int = 0
-    coverage_pct: float = 0.0
-    missing: list[MissingDocstring] = field(default_factory=list)
-
-    def to_dict(self) -> dict:
-        """Return a dictionary representation of the report."""
-        return {
-            "repo_path": self.repo_path,
-            "total_checked": self.total_checked,
-            "missing_count": self.missing_count,
-            "coverage_pct": round(self.coverage_pct, 1),
-            "missing": [m.to_dict() for m in self.missing],
-        }
+    model: str = "gpt-4o-mini"
+    style: str = "google"  # google | numpy | sphinx
+    overwrite: bool = False
+    dry_run: bool = False
+    max_tokens: int = 512
+    temperature: float = 0.2
+    include_private: bool = False
+    include_dunder: bool = False
+    extra_context: dict = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -71,295 +28,212 @@ class DocstringReport:
 # ---------------------------------------------------------------------------
 
 
-def _has_docstring(node: ast.AST) -> bool:
-    """Return True if *node* already has a docstring."""
-    body = getattr(node, "body", [])
-    if not body:
-        return False
-    first = body[0]
+def _has_docstring(node: Union[ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef]) -> bool:
+    """Return True if the node already has a docstring."""
     return (
-        isinstance(first, ast.Expr)
-        and isinstance(getattr(first, "value", None), ast.Constant)
-        and isinstance(first.value.value, str)
+        bool(node.body)
+        and isinstance(node.body[0], ast.Expr)
+        and isinstance(node.body[0].value, ast.Constant)
+        and isinstance(node.body[0].value.value, str)
     )
 
 
-def _node_name(node: ast.AST) -> str:
-    """Return the human-readable name of an AST node."""
-    return getattr(node, "name", "<anonymous>")
+def _get_source_segment(source: str, node: ast.AST) -> str:
+    """Extract the source lines for a node."""
+    lines = source.splitlines()
+    start = node.lineno - 1  # type: ignore[attr-defined]
+    end = node.end_lineno  # type: ignore[attr-defined]
+    return "\n".join(lines[start:end])
 
 
-def _source_context(lines: list[str], lineno: int, window: int = 2) -> str:
-    """Return up to *window* lines around *lineno* (1-based) as a string."""
-    start = max(0, lineno - 1 - window)
-    end = min(len(lines), lineno - 1 + window + 1)
-    snippet = lines[start:end]
-    return "\n".join(snippet).strip()
+def _build_google_docstring(summary: str, params: list[str], returns: Optional[str]) -> str:
+    parts = [f'"""\n{summary}\n']
+    if params:
+        parts.append("\nArgs:\n")
+        for p in params:
+            parts.append(f"    {p}: TODO\n")
+    if returns:
+        parts.append(f"\nReturns:\n    {returns}\n")
+    parts.append('"""')
+    return "".join(parts)
 
 
-# ---------------------------------------------------------------------------
-# Stub generator
-# ---------------------------------------------------------------------------
+def _build_numpy_docstring(summary: str, params: list[str], returns: Optional[str]) -> str:
+    parts = [f'"""\n{summary}\n']
+    if params:
+        parts.append("\nParameters\n----------\n")
+        for p in params:
+            parts.append(f"{p} : type\n    TODO\n")
+    if returns:
+        parts.append(f"\nReturns\n-------\ntype\n    {returns}\n")
+    parts.append('"""')
+    return "".join(parts)
 
-_KIND_TEMPLATES: dict[str, str] = {
-    "module": "{name} module.",
-    "class": "{name} class.",
-    "function": "{name}.",
-    "method": "{name}.",
+
+def _build_sphinx_docstring(summary: str, params: list[str], returns: Optional[str]) -> str:
+    parts = [f'"""\n{summary}\n']
+    for p in params:
+        parts.append(f"\n:param {p}: TODO")
+    if returns:
+        parts.append(f"\n:returns: {returns}")
+    parts.append('\n"""')
+    return "".join(parts)
+
+
+_BUILDERS = {
+    "google": _build_google_docstring,
+    "numpy": _build_numpy_docstring,
+    "sphinx": _build_sphinx_docstring,
 }
 
 
-def _generate_stub(kind: str, name: str, node: ast.AST) -> str:
-    """Generate a minimal docstring stub for the given node."""
-    template = _KIND_TEMPLATES.get(kind, "{name}.")
-    summary = template.format(name=name)
-
-    # For functions/methods, add Args/Returns sections if they have params
-    if kind in ("function", "method"):
-        func_node = node  # type: ignore[assignment]
-        args = getattr(getattr(func_node, "args", None), "args", [])
-        # Filter out 'self' and 'cls'
-        params = [a.arg for a in args if a.arg not in ("self", "cls")]
-        if params:
-            args_block = "\n".join(f"    {p}: Description of {p}." for p in params)
-            returns = getattr(func_node, "returns", None)
-            returns_line = "    Description of return value." if returns else ""
-            if returns_line:
-                return (
-                    f"{summary}\n\nArgs:\n{args_block}\n\nReturns:\n{returns_line}"
-                )
-            return f"{summary}\n\nArgs:\n{args_block}"
-    return summary
-
-
 # ---------------------------------------------------------------------------
-# Scanner
+# Stub prompt builder (would call LLM in production)
 # ---------------------------------------------------------------------------
 
 
-def _scan_file(
-    path: Path,
-    repo_root: Path,
-) -> tuple[list[MissingDocstring], int]:
-    """Scan a single Python file and return (missing_list, total_checked)."""
-    try:
-        source = path.read_text(encoding="utf-8", errors="replace")
-        tree = ast.parse(source, filename=str(path))
-    except SyntaxError:
-        return [], 0
+def _generate_docstring_stub(
+    node: Union[ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef],
+    source: str,
+    config: DocstringConfig,
+) -> str:
+    """Generate a placeholder docstring (production would call the LLM)."""
+    name = node.name
+    params: list[str] = []
+    returns: Optional[str] = None
 
-    lines = source.splitlines()
-    rel_path = str(path.relative_to(repo_root))
-    missing: list[MissingDocstring] = []
-    total = 0
-
-    # Module-level docstring
-    total += 1
-    if not _has_docstring(tree):
-        stub = _generate_stub("module", path.stem, tree)
-        missing.append(
-            MissingDocstring(
-                file=rel_path, line=1, kind="module", name=path.stem,
-                stub=stub, context=_source_context(lines, 1),
-            )
-        )
-
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ClassDef):
-            total += 1
-            if not _has_docstring(node):
-                stub = _generate_stub("class", _node_name(node), node)
-                missing.append(
-                    MissingDocstring(
-                        file=rel_path,
-                        line=node.lineno,
-                        kind="class",
-                        name=_node_name(node),
-                        stub=stub,
-                        context=_source_context(lines, node.lineno),
-                    )
-                )
-        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            total += 1
-            kind = "method" if "self" in [a.arg for a in node.args.args] else "function"
-            if not _has_docstring(node):
-                stub = _generate_stub(kind, _node_name(node), node)
-                missing.append(
-                    MissingDocstring(
-                        file=rel_path,
-                        line=node.lineno,
-                        kind=kind,
-                        name=_node_name(node),
-                        stub=stub,
-                        context=_source_context(lines, node.lineno),
-                    )
-                )
-    return missing, total
-
-
-def scan_missing_docstrings(repo_root: Path) -> DocstringReport:
-    """Scan the entire repository for missing docstrings."""
-    src_dir = repo_root / "src"
-    if not src_dir.exists():
-        src_dir = repo_root
-
-    all_missing: list[MissingDocstring] = []
-    total_checked = 0
-
-    for py_file in sorted(src_dir.rglob("*.py")):
-        missing, checked = _scan_file(py_file, repo_root)
-        all_missing.extend(missing)
-        total_checked += checked
-
-    coverage = (
-        (total_checked - len(all_missing)) / total_checked * 100
-        if total_checked
-        else 100.0
-    )
-    return DocstringReport(
-        repo_path=str(repo_root),
-        total_checked=total_checked,
-        missing_count=len(all_missing),
-        coverage_pct=round(coverage, 1),
-        missing=all_missing,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Applier
-# ---------------------------------------------------------------------------
-
-
-def apply_docstrings(
-    report: DocstringReport,
-    repo_root: Path,
-    dry_run: bool = False,
-) -> list[str]:
-    """Insert stub docstrings into source files.
-
-    Args:
-        report: DocstringReport with the list of missing docstrings.
-        repo_root: Root path of the repository.
-        dry_run: If True, do not write changes to disk.
-
-    Returns:
-        List of relative file paths that were (or would be) modified.
-    """
-    from collections import defaultdict
-    import tokenize
-    import io
-
-    # Group by file
-    by_file: dict[str, list[MissingDocstring]] = defaultdict(list)
-    for item in report.missing:
-        by_file[item.file].append(item)
-
-    modified: list[str] = []
-
-    for rel_path, items in by_file.items():
-        path = repo_root / rel_path
-        try:
-            source = path.read_text(encoding="utf-8")
-        except OSError:
-            continue
-
-        lines = source.splitlines(keepends=True)
-        # Sort by line descending so insertions don't shift later line numbers
-        items_sorted = sorted(items, key=lambda x: x.line, reverse=True)
-
-        changed = False
-        for item in items_sorted:
-            insert_after = _find_insert_line(lines, item.line, item.kind)
-            if insert_after is None:
-                continue
-            indent = _detect_indent(lines, item.line)
-            docstring = _format_docstring(item.stub, indent)
-            lines.insert(insert_after, docstring + "\n")
-            changed = True
-
-        if changed:
-            modified.append(rel_path)
-            if not dry_run:
-                path.write_text("".join(lines), encoding="utf-8")
-
-    return modified
-
-
-def _find_insert_line(lines: list[str], def_lineno: int, kind: str) -> Optional[int]:
-    """Find the line index (0-based) *after* which to insert the docstring.
-
-    For modules (kind=="module"), insert at line 0.
-    For classes/functions, insert after the `def` or `class` header line,
-    accounting for multi-line signatures.
-    """
-    if kind == "module":
-        # Insert before any existing content on line 0
-        return 0
-
-    idx = def_lineno - 1  # 0-based
-    # Advance past multi-line signatures (lines ending with `(`, `,`, `:` continuation)
-    while idx < len(lines):
-        stripped = lines[idx].rstrip()
-        if stripped.endswith(":"):
-            return idx + 1
-        idx += 1
-    return None
-
-
-def _detect_indent(lines: list[str], def_lineno: int) -> str:
-    """Detect the indentation of the def/class line."""
-    idx = def_lineno - 1
-    if idx < len(lines):
-        raw = lines[idx]
-        return raw[: len(raw) - len(raw.lstrip())]
-    return ""
-
-
-def _format_docstring(stub: str, indent: str) -> str:
-    """Wrap *stub* in triple-quotes with consistent indentation."""
-    inner_indent = indent + "    "
-    if "\n" in stub:
-        body = textwrap.indent(stub, inner_indent)
-        return f'{indent}"""\n{body}\n{indent}"""'
-    return f'{indent}"""{ stub }"""'
-
-
-# ---------------------------------------------------------------------------
-# Report writers
-# ---------------------------------------------------------------------------
-
-
-def save_docstring_report(report: DocstringReport, output_path: Path) -> None:
-    """Serialise the report to a JSON file."""
-    import json
-    output_path.write_text(
-        json.dumps(report.to_dict(), indent=2), encoding="utf-8"
-    )
-
-
-def render_markdown(report: DocstringReport) -> str:
-    """Render the report as a Markdown document."""
-    lines: list[str] = [
-        "## Docstring Coverage Report",
-        "",
-        f"| Metric | Value |",
-        f"|--------|-------|]",
-        f"| Repo | `{report.repo_path}` |",
-        f"| Total checked | {report.total_checked} |",
-        f"| Missing | {report.missing_count} |",
-        f"| Coverage | **{report.coverage_pct:.1f}%** |",
-        "",
-    ]
-    if report.missing:
-        lines += [
-            "### Missing Docstrings",
-            "",
-            "| File | Line | Kind | Name |",
-            "|------|------|------|------|",
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        params = [
+            a.arg
+            for a in node.args.args
+            if a.arg not in ("self", "cls")
         ]
-        for m in report.missing[:50]:  # cap at 50 rows
-            lines.append(f"| `{m.file}` | {m.line} | {m.kind} | `{m.name}` |")
-        if len(report.missing) > 50:
-            lines.append(f"| ... | | | _{len(report.missing) - 50} more_ |")
-        lines.append("")
-    return "\n".join(lines)
+        if node.returns:
+            returns = ast.unparse(node.returns)
+
+    summary = f"{name.replace('_', ' ').capitalize()}."
+    builder = _BUILDERS.get(config.style, _build_google_docstring)
+    raw = builder(summary, params, returns)
+    # Indent to match the node's indentation
+    indent = " " * (node.col_offset + 4)
+    return textwrap.indent(raw, indent)
+
+
+# ---------------------------------------------------------------------------
+# Core transformer
+# ---------------------------------------------------------------------------
+
+
+class DocstringInserter(ast.NodeTransformer):
+    """AST transformer that inserts missing docstrings."""
+
+    def __init__(self, source: str, config: DocstringConfig) -> None:
+        self.source = source
+        self.config = config
+        self.modified: list[str] = []
+
+    def _maybe_insert(
+        self,
+        node: Union[ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef],
+    ) -> Union[ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef]:
+        name = node.name
+
+        # Skip private / dunder methods unless configured
+        if name.startswith("__") and not self.config.include_dunder:
+            return node
+        if name.startswith("_") and not name.startswith("__") and not self.config.include_private:
+            return node
+
+        if _has_docstring(node) and not self.config.overwrite:
+            return node
+
+        docstring = _generate_docstring_stub(node, self.source, self.config)
+        doc_node = ast.Expr(value=ast.Constant(value=docstring))
+        ast.copy_location(doc_node, node.body[0])
+
+        if _has_docstring(node):
+            node.body[0] = doc_node  # overwrite
+        else:
+            node.body.insert(0, doc_node)
+
+        self.modified.append(name)
+        return node
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:  # type: ignore[override]
+        self._maybe_insert(node)
+        self.generic_visit(node)
+        return node
+
+    def visit_AsyncFunctionDef(  # type: ignore[override]
+        self, node: ast.AsyncFunctionDef
+    ) -> ast.AsyncFunctionDef:
+        self._maybe_insert(node)
+        self.generic_visit(node)
+        return node
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:  # type: ignore[override]
+        self._maybe_insert(node)
+        self.generic_visit(node)
+        return node
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+
+def add_docstrings_to_source(source: str, config: Optional[DocstringConfig] = None) -> dict:
+    """Add missing docstrings to Python *source* code.
+
+    Returns a dict with keys ``modified_source`` and ``modified_functions``.
+    """
+    cfg = config or DocstringConfig()
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as exc:
+        return {"error": str(exc), "modified_source": source, "modified_functions": []}
+
+    inserter = DocstringInserter(source, cfg)
+    new_tree = inserter.visit(tree)
+    ast.fix_missing_locations(new_tree)
+
+    if cfg.dry_run:
+        return {
+            "modified_source": source,
+            "modified_functions": inserter.modified,
+            "dry_run": True,
+        }
+
+    try:
+        new_source = ast.unparse(new_tree)
+    except Exception:  # pragma: no cover
+        new_source = source
+
+    return {
+        "modified_source": new_source,
+        "modified_functions": inserter.modified,
+        "dry_run": False,
+    }
+
+
+def add_docstrings_to_file(path: Path, config: Optional[DocstringConfig] = None) -> dict:
+    """Add missing docstrings to the Python file at *path*."""
+    source = path.read_text(encoding="utf-8")
+    result = add_docstrings_to_source(source, config)
+    if not result.get("error") and not (config and config.dry_run):
+        path.write_text(result["modified_source"], encoding="utf-8")
+    result["path"] = str(path)
+    return result
+
+
+def batch_add_docstrings(
+    root: Path,
+    config: Optional[DocstringConfig] = None,
+    glob: str = "**/*.py",
+) -> list[dict]:
+    """Process all Python files under *root*."""
+    results = []
+    for py_file in sorted(root.glob(glob)):
+        if py_file.is_file():
+            results.append(add_docstrings_to_file(py_file, config))
+    return results
