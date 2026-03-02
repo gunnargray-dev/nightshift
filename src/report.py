@@ -1,192 +1,293 @@
-"""Reporting helpers for awake session summaries."""
+"""Executive HTML report generator for Awake.
+
+Combines all analysis outputs into a single polished HTML document suitable
+for sharing with stakeholders.  Uses only the standard library.
+
+Usage
+-----
+    from src.report import generate_report
+    report = generate_report(repo_root)
+    report.save(repo_root / "docs" / "report.html")
+
+CLI
+---
+    awake report                     # Generate and open in browser
+    awake report --output report.html
+    awake report --json              # Emit summary metadata as JSON
+"""
+
+from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
-from datetime import datetime
+import subprocess
+import sys
+import webbrowser
+from dataclasses import dataclass, field, asdict
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
+
+from src.scoring import grade_colour as _grade_colour, score_colour as _score_colour, score_to_grade as _score_to_grade
 
 
 @dataclass
-class FileHealth:
-    file: str
-    score: float
-    long_lines: int = 0
-    todo_count: int = 0
-    parse_error: bool = False
-    docstring_coverage: float = 1.0
+class ReportSection:
+    """A single section within the executive report."""
+    title: str
+    icon: str
+    content_html: str
+    score: Optional[float] = None
+    grade: str = ""
+    subsections: list[dict] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        """Return a dictionary representation of this report section"""
+        return asdict(self)
 
 
 @dataclass
-class SessionReport:
-    session_id: str
-    start_time: datetime
-    end_time: Optional[datetime]
-    prs_merged: int
-    tests_added: int
-    features_shipped: int
-    nights_active: int
-    file_health: list[FileHealth]
-    notes: Optional[str] = None
+class ExecutiveReport:
+    """Full executive report combining all analysis dimensions."""
+    repo_name: str
+    generated_at: str
+    session_number: int
+    overall_grade: str
+    overall_score: float
+    sections: list[ReportSection] = field(default_factory=list)
+    headline_metrics: dict = field(default_factory=dict)
 
-    @property
-    def duration_seconds(self) -> Optional[float]:
-        if self.end_time is None:
+    def to_dict(self) -> dict:
+        """Return a dictionary representation of the full executive report"""
+        return asdict(self)
+
+    def save(self, output_path: Path) -> None:
+        """Write the HTML report to the given file path"""
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(self.to_html(), encoding="utf-8")
+
+    def to_html(self) -> str:
+        """Render the executive report as a standalone HTML document"""
+        return _render_html(self)
+
+
+# _grade_colour, _score_colour and _score_to_grade are imported from src.scoring
+
+
+def _render_section(sec: ReportSection) -> str:
+    score_html = ""
+    if sec.score is not None:
+        sc = _score_colour(sec.score)
+        grade_sc = _grade_colour(sec.grade)
+        score_html = f"""
+        <div class="section-score">
+            <span class="score-badge" style="background:{sc}">{sec.score:.0f}</span>
+            {'<span class="grade-badge" style="background:' + grade_sc + '">' + sec.grade + '</span>' if sec.grade else ''}
+        </div>"""
+
+    return f"""
+    <div class="section">
+        <div class="section-header">
+            <span class="section-icon">{sec.icon}</span>
+            <h2>{sec.title}</h2>
+            {score_html}
+        </div>
+        <div class="section-body">
+            {sec.content_html}
+        </div>
+    </div>"""
+
+
+def _render_html(report: ExecutiveReport) -> str:
+    sections_html = "\n".join(_render_section(s) for s in report.sections)
+    metric_cards = ""
+    for label, value in report.headline_metrics.items():
+        metric_cards += f"""
+        <div class="metric-card">
+            <div class="metric-value">{value}</div>
+            <div class="metric-label">{label}</div>
+        </div>"""
+
+    overall_colour = _grade_colour(report.overall_grade)
+    overall_score_colour = _score_colour(report.overall_score)
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Awake Report - {report.repo_name}</title>
+<style>
+  :root {{
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #21262d;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #bc8cff;
+  }}
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{ background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; font-size: 14px; line-height: 1.6; }}
+  .header {{ background: linear-gradient(135deg, #161b22 0%, #0d1117 100%); border-bottom: 1px solid var(--border); padding: 40px 48px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 24px; }}
+  .header-left h1 {{ font-size: 28px; font-weight: 700; }}
+  .metric-card {{ flex: 1; min-width: 120px; background: var(--surface); padding: 20px 24px; text-align: center; }}
+  .metric-value {{ font-size: 24px; font-weight: 700; color: var(--accent); }}
+  .metric-label {{ font-size: 12px; color: var(--muted); text-transform: uppercase; margin-top: 4px; }}
+  .container {{ max-width: 1200px; margin: 0 auto; padding: 32px 48px; }}
+  .section {{ background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 24px; overflow: hidden; }}
+  .section-header {{ display: flex; align-items: center; gap: 12px; padding: 18px 24px; background: var(--surface2); border-bottom: 1px solid var(--border); }}
+  .section-body {{ padding: 20px 24px; }}
+  .section-header h2 {{ font-size: 16px; font-weight: 600; flex: 1; }}
+  .score-badge, .grade-badge {{ padding: 4px 10px; border-radius: 20px; font-size: 13px; font-weight: 700; color: #0d1117; }}
+  .metrics-strip {{ display: flex; flex-wrap: wrap; gap: 1px; background: var(--border); border-bottom: 1px solid var(--border); }}
+  .footer {{ text-align: center; padding: 32px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--border); margin-top: 32px; }}
+  table {{ width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 12px; }}
+  th {{ text-align: left; padding: 8px 12px; background: var(--surface2); color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border); }}
+  td {{ padding: 8px 12px; border-bottom: 1px solid var(--border); }}
+  .bar-row {{ display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }}
+  .bar-label {{ width: 150px; font-size: 12px; color: var(--muted); }}
+  .bar-track {{ flex: 1; height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; }}
+  .bar-fill {{ height: 100%; border-radius: 4px; }}
+  .bar-value {{ width: 40px; font-size: 12px; font-weight: 600; }}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="header-left">
+    <h1>Awake Report</h1>
+    <p>{report.repo_name} - Session {report.session_number} - {report.generated_at}</p>
+  </div>
+  <div style="display:flex;gap:16px;align-items:center">
+    <div style="text-align:center">
+      <div style="font-size:11px;color:#8b949e">SCORE</div>
+      <div style="width:80px;height:80px;border-radius:50%;background:{overall_score_colour};display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:800;color:#0d1117">{report.overall_score:.0f}</div>
+    </div>
+    <div style="text-align:center">
+      <div style="font-size:11px;color:#8b949e">GRADE</div>
+      <div style="width:80px;height:80px;border-radius:12px;background:{overall_colour};display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:800;color:#0d1117">{report.overall_grade}</div>
+    </div>
+  </div>
+</div>
+<div class="metrics-strip">{metric_cards}</div>
+<div class="container">
+{sections_html}
+<div class="footer">Generated by <a href="https://github.com/gunnargray-dev/awake" style="color:#8b949e">Awake</a> - {report.generated_at}</div>
+</div>
+</body>
+</html>"""
+
+
+def _run_cmd(args: list[str], repo_root: Path) -> Optional[dict]:
+    """Run a awake CLI command and return parsed JSON."""
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "src.cli"] + args + ["--json"],
+            capture_output=True, text=True, cwd=str(repo_root), timeout=60,
+        )
+        if result.returncode != 0:
             return None
-        return (self.end_time - self.start_time).total_seconds()
+        out = result.stdout
+        for i, ch in enumerate(out):
+            if ch in ("{", "["):
+                return json.loads(out[i:])
+        return None
+    except Exception:
+        return None
 
-    @property
-    def overall_health(self) -> Optional[float]:
-        if not self.file_health:
+
+def _safe_score(d: Optional[dict], *keys: str) -> Optional[float]:
+    if not d:
+        return None
+    for k in keys:
+        if isinstance(d, dict):
+            d = d.get(k)
+        else:
             return None
-        return round(sum(f.score for f in self.file_health) / len(self.file_health), 1)
+    try:
+        return float(d)
+    except (TypeError, ValueError):
+        return None
 
 
-# ---------------------------------------------------------------------------
-# Serialization helpers
-# ---------------------------------------------------------------------------
+# _score_to_grade imported from src.scoring above
 
 
-def _datetime_to_iso(dt: Optional[datetime]) -> Optional[str]:
-    return dt.isoformat() if dt else None
+def _html_table_from_list(rows: list[dict], columns: list[str]) -> str:
+    if not rows:
+        return "<p><em>No data available.</em></p>"
+    headers = "".join(f"<th>{c}</th>" for c in columns)
+    body_rows = []
+    for row in rows[:20]:
+        cells = "".join(f"<td>{row.get(c, '-')}</td>" for c in columns)
+        body_rows.append(f"<tr>{cells}</tr>")
+    return f"<table><thead><tr>{headers}</tr></thead><tbody>{''.join(body_rows)}</tbody></table>"
 
 
-def report_to_dict(report: SessionReport) -> dict[str, Any]:
-    """
-    Serialize a SessionReport to a plain dict (JSON-safe).
-
-    Args:
-        report: The SessionReport to serialize.
-
-    Returns:
-        A JSON-serializable dict.
-    """
-    d = asdict(report)
-    d["start_time"] = _datetime_to_iso(report.start_time)
-    d["end_time"] = _datetime_to_iso(report.end_time)
-    return d
+def _bar_chart_html(items: list) -> str:
+    rows = []
+    for label, val, colour in items[:15]:
+        rows.append(
+            f'<div class="bar-row">'
+            f'<div class="bar-label">{label}</div>'
+            f'<div class="bar-track"><div class="bar-fill" style="width:{val:.0f}%;background:{colour}"></div></div>'
+            f'<div class="bar-value">{val:.0f}</div>'
+            f'</div>'
+        )
+    return f'<div>{"".join(rows)}</div>'
 
 
-def report_from_dict(data: dict[str, Any]) -> SessionReport:
-    """
-    Deserialize a SessionReport from a plain dict.
+def generate_report(repo_root: Path, session_number: int = 0) -> ExecutiveReport:
+    """Build the full executive report by gathering all analysis outputs."""
+    now = datetime.now(timezone.utc).strftime("%B %d, %Y at %H:%M UTC")
+    repo_name = repo_root.name
 
-    Args:
-        data: Dict as produced by report_to_dict.
+    if session_number == 0:
+        log = repo_root / "AWAKE_LOG.md"
+        if log.exists():
+            import re
+            matches = re.findall(r"## Session (\d+)", log.read_text())
+            if matches:
+                session_number = int(matches[-1])
 
-    Returns:
-        A SessionReport instance.
-    """
-    data = dict(data)
-    data["start_time"] = datetime.fromisoformat(data["start_time"])
-    if data.get("end_time"):
-        data["end_time"] = datetime.fromisoformat(data["end_time"])
-    else:
-        data["end_time"] = None
-    data["file_health"] = [FileHealth(**fh) for fh in data.get("file_health", [])]
-    return SessionReport(**data)
+    sections: list[ReportSection] = []
+    scores: list[float] = []
+    headline: dict = {}
 
+    stats_data = _run_cmd(["stats"], repo_root)
+    if stats_data:
+        nights = stats_data.get("sessions_count", 0)
+        prs = stats_data.get("total_prs", 0)
+        commits = stats_data.get("total_commits", 0)
+        lines = stats_data.get("total_lines_changed", 0)
+        headline.update({"Sessions": nights, "Total PRs": prs, "Commits": commits, "Lines Changed": f"{lines:,}" if isinstance(lines, int) else lines})
+        content = _html_table_from_list([{"Metric": k, "Value": v} for k, v in headline.items()], ["Metric", "Value"])
+        sections.append(ReportSection(title="Repository Stats", icon="&#128202;", content_html=content))
 
-def save_report(report: SessionReport, path: str) -> None:
-    """
-    Write a SessionReport to a JSON file.
+    health_data = _run_cmd(["health"], repo_root)
+    health_score = _safe_score(health_data, "overall_health_score")
+    if health_score is None:
+        health_score = _safe_score(health_data, "summary", "average_health")
+    if health_score is not None:
+        scores.append(health_score)
+    if health_data:
+        files = health_data.get("files", [])
+        bar_items = [(f.get("name", ""), float(f.get("health_score", 0)), _score_colour(float(f.get("health_score", 0)))) for f in files[:10]]
+        content = f"<p>Overall health: <strong>{health_score:.0f}/100</strong></p>{_bar_chart_html(bar_items)}"
+        sections.append(ReportSection(title="Code Health", icon="&#127973;", content_html=content, score=health_score, grade=_score_to_grade(health_score)))
 
-    Args:
-        report: The report to save.
-        path: Destination file path.
-    """
-    Path(path).write_text(
-        json.dumps(report_to_dict(report), indent=2), encoding="utf-8"
+    overall_score = sum(scores) / len(scores) if scores else 75.0
+    overall_grade = _score_to_grade(overall_score)
+
+    if "Sessions" not in headline:
+        headline["Sessions"] = session_number
+
+    return ExecutiveReport(
+        repo_name=repo_name,
+        generated_at=now,
+        session_number=session_number,
+        overall_grade=overall_grade,
+        overall_score=overall_score,
+        sections=sections,
+        headline_metrics=headline,
     )
-
-
-def load_report(path: str) -> SessionReport:
-    """
-    Load a SessionReport from a JSON file.
-
-    Args:
-        path: Path to the JSON file.
-
-    Returns:
-        A SessionReport instance.
-    """
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
-    return report_from_dict(data)
-
-
-# ---------------------------------------------------------------------------
-# Markdown rendering
-# ---------------------------------------------------------------------------
-
-
-_HEALTH_THRESHOLDS = [(85, "Excellent"), (70, "Good"), (0, "Needs work")]
-
-
-def _health_label(score: float) -> str:
-    for threshold, label in _HEALTH_THRESHOLDS:
-        if score >= threshold:
-            return label
-    return "Needs work"
-
-
-def render_markdown_report(report: SessionReport) -> str:
-    """
-    Render a human-readable Markdown summary of a SessionReport.
-
-    Args:
-        report: The session report to render.
-
-    Returns:
-        A Markdown string.
-    """
-    lines = [
-        f"# Session Report: {report.session_id}",
-        "",
-        f"**Start:** {report.start_time.isoformat()}",
-    ]
-    if report.end_time:
-        lines.append(f"**End:** {report.end_time.isoformat()}")
-        if report.duration_seconds is not None:
-            mins = int(report.duration_seconds // 60)
-            secs = int(report.duration_seconds % 60)
-            lines.append(f"**Duration:** {mins}m {secs}s")
-    lines += [
-        "",
-        "## Stats",
-        "",
-        f"| Metric | Value |",
-        f"|--------|-------|",
-        f"| PRs merged | {report.prs_merged} |",
-        f"| Tests added | {report.tests_added} |",
-        f"| Features shipped | {report.features_shipped} |",
-        f"| Nights active | {report.nights_active} |",
-    ]
-    if report.overall_health is not None:
-        label = _health_label(report.overall_health)
-        lines.append(f"| Code health | {report.overall_health}% ({label}) |")
-
-    if report.file_health:
-        lines += [
-            "",
-            "## File Health",
-            "",
-            "| File | Score | Status | Issues |",
-            "|------|-------|--------|--------|",
-        ]
-        for fh in report.file_health:
-            issues = []
-            if fh.long_lines:
-                issues.append(f"{fh.long_lines} long lines")
-            if fh.todo_count:
-                issues.append(f"{fh.todo_count} TODOs")
-            if fh.parse_error:
-                issues.append("parse error")
-            issue_str = ", ".join(issues) or "None"
-            lines.append(
-                f"| {fh.file} | {fh.score}% | {_health_label(fh.score)} | {issue_str} |"
-            )
-
-    if report.notes:
-        lines += ["", "## Notes", "", report.notes]
-
-    return "\n".join(lines) + "\n"
