@@ -333,3 +333,32 @@ def cmd_diff_sessions(args) -> int:
     print()
     print(report.to_rich_table())
     return 0
+
+
+# ---------------------------------------------------------------------------
+# insights
+# ---------------------------------------------------------------------------
+
+
+def cmd_insights(args) -> int:
+    """Analyze patterns across all sessions and generate insights."""
+    from src.insights import generate_insights, save_insights_report
+    _print_header("Session Insights")
+    repo = _repo(getattr(args, "repo", None))
+    report = generate_insights(repo_path=repo)
+    if args.json:
+        print(report.to_json())
+        return 0
+    if args.write:
+        out = repo / "docs" / "insights_report.md"
+        save_insights_report(report, out)
+        _print_ok(f"Report written to {out}")
+        return 0
+    print(report.to_markdown())
+    _print_info(
+        f"Sessions: {report.sessions_analyzed}  "
+        f"PRs: {report.total_prs}  "
+        f"Insights: {len(report.insights)}  "
+        f"Streaks: {len(report.streaks)}"
+    )
+    return 0
