@@ -189,6 +189,7 @@ class TestCLIPredict:
         report.next_session = 16
         report.session_count = 15
         report.items = []
+        report.top_items = []
         report.to_dict.return_value = {
             "next_session": 16,
             "items": [],
@@ -200,7 +201,7 @@ class TestCLIPredict:
 
     def test_predict_json_output(self, tmp_path):
         mock_report = self._mock_report()
-        with patch("src.predict.run_predict", create=True, return_value=mock_report):
+        with patch("src.predict.predict_next_session", return_value=mock_report):
             rc, output = _run(["predict", "--repo", str(tmp_path), "--json"])
 
         assert rc == 0
@@ -209,7 +210,7 @@ class TestCLIPredict:
 
     def test_predict_markdown_output(self, tmp_path):
         mock_report = self._mock_report()
-        with patch("src.predict.run_predict", create=True, return_value=mock_report):
+        with patch("src.predict.predict_next_session", return_value=mock_report):
             rc, output = _run(["predict", "--repo", str(tmp_path)])
 
         assert rc == 0
