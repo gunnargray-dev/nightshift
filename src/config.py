@@ -260,6 +260,10 @@ def save_default_config(repo_root: Optional[Path] = None) -> Path:
     return config_path
 
 
+# Convenience constant: the TOML text for a default configuration.
+DEFAULT_CONFIG_TOML = AwakeConfig().to_toml()
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
