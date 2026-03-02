@@ -333,7 +333,7 @@ class Brain:
                 in_backlog = False
                 break
             if in_backlog and line.startswith("- [ ]"):
-                match = re.match(r"- \[ \] \*\*(.+?)\*\*\s*[\u2014-]\s*(.+)", line)
+                match = re.match(r"- \[ \] \*\*(.+?)\*\*\s*[—-]\s*(.+)", line)
                 if match:
                     items.append({
                         "title": match.group(1).strip(),
