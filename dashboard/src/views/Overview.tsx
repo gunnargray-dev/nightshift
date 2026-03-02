@@ -53,76 +53,79 @@ export function Overview() {
           <>
             <StatCard
               label="Sessions"
-              value={s?.nights_active ?? "\u2014"}
+              value={s?.nights_active ?? "—"}
               sub="Nights active"
               icon={<Clock size={15} />}
             />
             <StatCard
               label="PRs"
-              value={s?.prs_merged ?? "\u2014"}
+              value={s?.total_prs ?? "—"}
               sub="Merged"
               icon={<GitPullRequest size={15} />}
             />
             <StatCard
-              label="Features"
-              value={s?.features_shipped ?? "\u2014"}
-              sub="Shipped"
+              label="Modules"
+              value={fileList.length || "—"}
+              sub="in src/"
               icon={<Blocks size={15} />}
             />
             <StatCard
-              label="Tests"
-              value={s?.tests_added ?? "\u2014"}
-              sub="Added"
+              label="Commits"
+              value={s?.total_commits ?? "—"}
+              sub="Total"
               icon={<TestTubeDiagonal size={15} />}
             />
             <StatCard
               label="Health"
-              value={overallHealth !== null ? `${overallHealth}%` : "\u2014"}
-              sub="Code quality"
+              value={overallHealth != null ? `${overallHealth}` : "—"}
               icon={<TrendingUp size={15} />}
             />
           </>
         )}
       </div>
 
-      {health.isLoading ? (
-        <div className="text-sm text-gray-500">Loading health data...</div>
-      ) : (
-        <div className="border border-gray-800 rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-800 bg-gray-900">
-                <th className="text-left px-4 py-2 text-gray-400 font-medium">File</th>
-                <th className="text-left px-4 py-2 text-gray-400 font-medium">Score</th>
-                <th className="text-left px-4 py-2 text-gray-400 font-medium">Status</th>
-                <th className="text-left px-4 py-2 text-gray-400 font-medium">Issues</th>
-              </tr>
-            </thead>
-            <tbody>
-              {fileList.map((f, i) => {
-                const score = computeScore(f);
-                return (
-                  <tr
-                    key={i}
-                    className="border-b border-gray-800 last:border-0 hover:bg-gray-900/50"
-                  >
-                    <td className="px-4 py-2 font-mono text-xs text-gray-300">{f.file}</td>
-                    <td className="px-4 py-2 text-gray-300">{score}%</td>
-                    <td className="px-4 py-2">{healthBadge(score)}</td>
-                    <td className="px-4 py-2 text-gray-500 text-xs">
-                      {[
-                        f.long_lines ? `${f.long_lines} long lines` : null,
-                        f.todo_count ? `${f.todo_count} TODOs` : null,
-                        f.parse_error ? "parse error" : null,
-                      ]
-                        .filter(Boolean)
-                        .join(", ") || "None"}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      {overallHealth != null && (
+        <div className="rounded-md border border-border bg-bg-surface p-5 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-sm font-medium text-text-primary">Overall Health</span>
+            {healthBadge(overallHealth)}
+          </div>
+          <div className="h-2 rounded-full bg-bg-elevated overflow-hidden">
+            <div
+              className="h-full rounded-full bg-accent transition-all duration-500"
+              style={{ width: `${overallHealth}%` }}
+            />
+          </div>
+          <div className="mt-2 text-xs text-text-tertiary tabular-nums">
+            {overallHealth} / 100
+          </div>
+        </div>
+      )}
+
+      {s?.sessions && s.sessions.length > 0 && (
+        <div className="rounded-md border border-border bg-bg-surface">
+          <div className="px-4 py-3 border-b border-border">
+            <span className="text-xs font-medium uppercase tracking-wider text-text-tertiary">
+              Recent Sessions
+            </span>
+          </div>
+          <div className="divide-y divide-border">
+            {[...s.sessions].reverse().slice(0, 5).map((session: any, i: number) => (
+              <div key={i} className="flex items-center gap-3 px-4 py-3">
+                <span className="shrink-0 rounded bg-bg-elevated px-2 py-0.5 text-[11px] font-semibold text-accent tabular-nums">
+                  S{session.session ?? i}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] text-text-primary truncate">
+                    {session.title ?? `Session ${session.session ?? i}`}
+                  </div>
+                  <div className="text-xs text-text-tertiary">
+                    {session.date ?? "—"} {"—"} {session.prs ?? 0} PRs
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

@@ -1,166 +1,245 @@
-"""Plugin loader for awake agent capabilities."""
+"""Plugin and hook architecture for Awake.
+
+Allows users to register custom Python analyzer functions via ``awake.toml``.
+These plugins are discovered, loaded, and executed alongside the built-in analyzers.
+
+Configuration example (awake.toml)
+----------------------------------------
+[[plugins]]
+name = "my_complexity_check"
+module = "scripts.custom_checks"
+function = "check_complexity"
+description = "Custom complexity thresholds for our team"
+hooks = ["pre_health", "post_health"]
+
+[[plugins]]
+name = "secret_scanner"
+module = "scripts.security"
+function = "scan_secrets"
+hooks = ["pre_run"]
+
+Plugin contract
+---------------
+Every plugin function receives a single ``PluginContext`` dict and returns a
+``PluginResult`` dict.  This keeps the interface simple and forward-compatible.
+
+    def my_plugin(ctx: dict) -> dict:
+        # ctx keys: repo_path, config, session_number, trigger_hook
+        return {
+            "status": "ok",          # ok | warn | error
+            "message": "All clear",
+            "data": {},            # any JSON-serialisable payload
+        }
+"""
+
+from __future__ import annotations
 
 import importlib
 import importlib.util
-import inspect
-import logging
-import os
-from dataclasses import dataclass, field
+import json
+import sys
+import traceback
+from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-logger = logging.getLogger(__name__)
-
-_REGISTRY: dict[str, "Plugin"] = {}
+try:
+    import tomllib
+except ImportError:
+    try:
+        import tomli as tomllib  # type: ignore[no-redef]
+    except ImportError:
+        tomllib = None  # type: ignore[assignment]
 
 
 @dataclass
-class Plugin:
-    """Represents a loaded plugin."""
-
+class PluginDefinition:
+    """A plugin entry as declared in awake.toml."""
     name: str
-    module_path: str
+    module: str
+    function: str
     description: str = ""
-    hooks: dict[str, Callable] = field(default_factory=dict)
-    metadata: dict[str, Any] = field(default_factory=dict)
+    hooks: list[str] = field(default_factory=list)
+    enabled: bool = True
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "PluginDefinition":
+        """Construct a PluginDefinition from a raw TOML dictionary"""
+        return cls(
+            name=d.get("name", "unknown"),
+            module=d.get("module", ""),
+            function=d.get("function", ""),
+            description=d.get("description", ""),
+            hooks=d.get("hooks", []),
+            enabled=d.get("enabled", True),
+        )
+
+    def to_dict(self) -> dict:
+        """Return a dictionary representation of the plugin definition"""
+        return asdict(self)
 
 
-def _extract_plugin_meta(module) -> tuple[str, dict[str, Callable]]:
-    """Pull description and hook functions from a module."""
-    description = getattr(module, "PLUGIN_DESCRIPTION", "") or ""
-    hooks: dict[str, Callable] = {}
+@dataclass
+class PluginResult:
+    """Result returned by a plugin execution."""
+    plugin_name: str
+    hook: str
+    status: str
+    message: str = ""
+    data: dict = field(default_factory=dict)
+    duration_ms: float = 0.0
+    error: str = ""
 
-    for name, obj in inspect.getmembers(module, inspect.isfunction):
-        if name.startswith("hook_"):
-            hooks[name[len("hook_"):]] = obj
-
-    return description, hooks
-
-
-def load_plugin(path: str, name: Optional[str] = None) -> Plugin:
-    """
-    Load a plugin from a .py file path.
-
-    Args:
-        path: Absolute or relative path to the plugin .py file.
-        name: Optional override for the plugin name. Defaults to the stem of the file.
-
-    Returns:
-        A Plugin instance.
-    """
-    resolved = Path(path).resolve()
-    plugin_name = name or resolved.stem
-
-    spec = importlib.util.spec_from_file_location(plugin_name, resolved)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Cannot load plugin from {resolved}")
-
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)  # type: ignore[attr-defined]
-
-    description, hooks = _extract_plugin_meta(module)
-
-    plugin = Plugin(
-        name=plugin_name,
-        module_path=str(resolved),
-        description=description,
-        hooks=hooks,
-    )
-    _REGISTRY[plugin_name] = plugin
-    logger.info("Loaded plugin '%s' with hooks: %s", plugin_name, list(hooks))
-    return plugin
+    def to_dict(self) -> dict:
+        """Return a dictionary representation of the plugin result"""
+        return asdict(self)
 
 
-def load_plugins_from_dir(directory: str) -> list[Plugin]:
-    """
-    Load all .py files in a directory as plugins.
+@dataclass
+class PluginRunReport:
+    """Aggregated results for all plugins run against a hook."""
+    hook: str
+    plugins_run: int = 0
+    ok: int = 0
+    warnings: int = 0
+    errors: int = 0
+    skipped: int = 0
+    results: list[PluginResult] = field(default_factory=list)
 
-    Args:
-        directory: Path to the directory containing plugin files.
+    def to_dict(self) -> dict:
+        """Return a dictionary representation of the run report"""
+        return asdict(self)
 
-    Returns:
-        List of loaded Plugin instances.
-    """
-    plugins = []
-    for filepath in sorted(Path(directory).glob("*.py")):
-        if filepath.name.startswith("_"):
-            continue
-        try:
-            plugins.append(load_plugin(str(filepath)))
-        except Exception as exc:  # pylint: disable=broad-except
-            logger.warning("Failed to load plugin %s: %s", filepath.name, exc)
-    return plugins
+    def to_markdown(self) -> str:
+        """Render the run report as a Markdown summary table"""
+        lines = [
+            f"## Plugin Run Report -- Hook: `{self.hook}`",
+            "",
+            "| Metric | Value |",
+            "|--------|-------|",
+            f"| Plugins run | {self.plugins_run} |",
+            f"| OK | {self.ok} |",
+            f"| Warnings | {self.warnings} |",
+            f"| Errors | {self.errors} |",
+            f"| Skipped | {self.skipped} |",
+            "",
+        ]
+        if self.results:
+            lines += ["## Results", ""]
+            for r in self.results:
+                status_icon = {"ok": "✓", "warn": "⚠", "error": "✗"}.get(r.status, "?")
+                lines.append(f"- {status_icon} **{r.plugin_name}** ({r.hook}): {r.message}")
+                if r.error:
+                    lines.append(f"  - Error: `{r.error}`")
+        return "\n".join(lines)
 
 
-def get_plugin(name: str) -> Optional[Plugin]:
-    """Return a registered plugin by name, or None."""
-    return _REGISTRY.get(name)
+def load_plugins_from_config(repo_root: Path) -> list[PluginDefinition]:
+    """Discover and load plugin definitions from ``awake.toml``."""
+    config_path = repo_root / "awake.toml"
+    if not config_path.exists():
+        return []
+    if tomllib is None:
+        return []
+    with config_path.open("rb") as fh:
+        config = tomllib.load(fh)
+    raw_plugins = config.get("plugins", [])
+    if not isinstance(raw_plugins, list):
+        return []
+    return [PluginDefinition.from_dict(p) for p in raw_plugins if isinstance(p, dict)]
 
 
-def list_plugins() -> list[Plugin]:
-    """Return all registered plugins."""
-    return list(_REGISTRY.values())
+def _load_plugin_function(plugin: PluginDefinition, repo_root: Path) -> Optional[Callable]:
+    """Import and return the callable for a plugin definition."""
+    module_path = repo_root / plugin.module.replace(".", "/")
+    py_file = module_path.with_suffix(".py")
+    if py_file.exists():
+        spec = importlib.util.spec_from_file_location(plugin.module, py_file)
+        if spec and spec.loader:
+            mod = importlib.util.module_from_spec(spec)
+            sys.modules[plugin.module] = mod
+            spec.loader.exec_module(mod)  # type: ignore[union-attr]
+            return getattr(mod, plugin.function, None)
+    try:
+        mod = importlib.import_module(plugin.module)
+        return getattr(mod, plugin.function, None)
+    except ImportError:
+        return None
 
 
-def call_hook(
-    hook_name: str,
-    *args: Any,
-    plugin_name: Optional[str] = None,
-    **kwargs: Any,
-) -> list[Any]:
-    """
-    Call a named hook on all registered plugins (or a specific one).
+def run_plugins(
+    plugins: list[PluginDefinition],
+    hook: str,
+    context: dict,
+    repo_root: Path,
+) -> PluginRunReport:
+    """Execute all plugins registered for ``hook`` and return a report."""
+    import time
 
-    Args:
-        hook_name: The hook to invoke (without 'hook_' prefix).
-        plugin_name: If given, only call the hook on this plugin.
-
-    Returns:
-        List of return values from each hook invocation.
-    """
-    plugins = [_REGISTRY[plugin_name]] if plugin_name else list(_REGISTRY.values())
-    results = []
+    report = PluginRunReport(hook=hook)
     for plugin in plugins:
-        hook = plugin.hooks.get(hook_name)
-        if hook:
-            try:
-                results.append(hook(*args, **kwargs))
-            except Exception as exc:  # pylint: disable=broad-except
-                logger.warning(
-                    "Hook '%s' in plugin '%s' raised: %s", hook_name, plugin.name, exc
+        if not plugin.enabled:
+            report.skipped += 1
+            continue
+        if hook not in plugin.hooks:
+            continue
+        report.plugins_run += 1
+        fn = _load_plugin_function(plugin, repo_root)
+        if fn is None:
+            report.errors += 1
+            report.results.append(
+                PluginResult(
+                    plugin_name=plugin.name,
+                    hook=hook,
+                    status="error",
+                    error=f"Could not load {plugin.module}.{plugin.function}",
                 )
-    return results
+            )
+            continue
+        t0 = time.perf_counter()
+        try:
+            raw = fn(context)
+        except Exception:
+            elapsed = (time.perf_counter() - t0) * 1000
+            tb = traceback.format_exc()
+            report.errors += 1
+            report.results.append(
+                PluginResult(
+                    plugin_name=plugin.name,
+                    hook=hook,
+                    status="error",
+                    duration_ms=elapsed,
+                    error=tb,
+                )
+            )
+            continue
+        elapsed = (time.perf_counter() - t0) * 1000
+        status = raw.get("status", "ok") if isinstance(raw, dict) else "ok"
+        message = raw.get("message", "") if isinstance(raw, dict) else str(raw)
+        data = raw.get("data", {}) if isinstance(raw, dict) else {}
+        result = PluginResult(
+            plugin_name=plugin.name,
+            hook=hook,
+            status=status,
+            message=message,
+            data=data,
+            duration_ms=elapsed,
+        )
+        report.results.append(result)
+        if status == "ok":
+            report.ok += 1
+        elif status == "warn":
+            report.warnings += 1
+        else:
+            report.errors += 1
+    return report
 
 
-def unload_plugin(name: str) -> bool:
-    """
-    Remove a plugin from the registry.
-
-    Args:
-        name: Plugin name to remove.
-
-    Returns:
-        True if removed, False if not found.
-    """
-    if name in _REGISTRY:
-        del _REGISTRY[name]
-        logger.info("Unloaded plugin '%s'", name)
-        return True
-    return False
-
-
-def reload_plugin(path: str, name: Optional[str] = None) -> Plugin:
-    """
-    Reload a plugin from disk, replacing any existing registration.
-
-    Args:
-        path: Path to the plugin file.
-        name: Optional name override.
-
-    Returns:
-        The reloaded Plugin instance.
-    """
-    resolved = Path(path).resolve()
-    plugin_name = name or resolved.stem
-    unload_plugin(plugin_name)
-    return load_plugin(path, name=plugin_name)
+def plugins_to_api_response(plugins: list[PluginDefinition]) -> dict:
+    """Serialize plugin definitions to the /api/plugins JSON response format."""
+    return {
+        "plugins": [p.to_dict() for p in plugins],
+        "total": len(plugins),
+        "enabled": sum(1 for p in plugins if p.enabled),
+        "hooks": sorted({h for p in plugins for h in p.hooks}),
+    }

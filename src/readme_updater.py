@@ -1,199 +1,226 @@
-"""Automated README updater for awake sessions."""
+"""README auto-updater for Awake.
+
+This module injects live stats badges into the project README automatically
+after each session. It scans for specially formatted comment markers and
+replaces the content between them with fresh data.
+
+Marker format::
+
+    <!-- awake:stats -->
+    ...replaced content...
+    <!-- /awake:stats -->
+
+Supported blocks:
+    awake:stats   -- project stat badges (sessions, PRs, commits, etc.)
+    awake:health  -- code health score badge
+    awake:toc     -- auto-generated table of contents
+"""
+
+from __future__ import annotations
 
 import re
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 
 @dataclass
-class SessionSummary:
-    """Summary of a single awake session."""
+class UpdateResult:
+    """Result of a README update operation."""
+    path: Path
+    blocks_found: int
+    blocks_updated: int
+    changed: bool
+    error: Optional[str] = None
 
-    date: str  # ISO-8601, e.g. '2025-03-01'
-    features: list[str]
-    tests_added: int
-    prs_merged: int
-    notes: Optional[str] = None
+    def to_dict(self) -> dict:
+        """Return dict representation of this result."""
+        return {
+            "path": str(self.path),
+            "blocks_found": self.blocks_found,
+            "blocks_updated": self.blocks_updated,
+            "changed": self.changed,
+            "error": self.error,
+        }
 
 
 # ---------------------------------------------------------------------------
-# Parsing
+# Git helpers
 # ---------------------------------------------------------------------------
 
-_SECTION_HEADER_RE = re.compile(
-    r"^#{1,3}\s+Session\s+Log",
-    re.IGNORECASE | re.MULTILINE,
-)
-
-_SESSION_BLOCK_RE = re.compile(
-    r"^###\s+(\d{4}-\d{2}-\d{2})\b",
-    re.MULTILINE,
-)
-
-
-def _find_section_bounds(content: str) -> tuple[int, int]:
-    """
-    Return (start, end) character offsets for the 'Session Log' section.
-
-    'start' points to the '#' of the header line.
-    'end' points to the start of the next same-or-higher-level section,
-    or end-of-string if none exists.
-    """
-    m = _SECTION_HEADER_RE.search(content)
-    if not m:
-        return len(content), len(content)  # section not found
-
-    start = m.start()
-    header_hashes = re.match(r"^(#+)", content[start:]).group(1)
-    level = len(header_hashes)
-
-    # Find next heading of equal or higher importance
-    next_section_re = re.compile(
-        rf"^#{{1,{level}}}(?!#)\s",
-        re.MULTILINE,
-    )
-    nxt = next_section_re.search(content, m.end())
-    end = nxt.start() if nxt else len(content)
-    return start, end
-
-
-def parse_session_log(content: str) -> list[SessionSummary]:
-    """
-    Parse the 'Session Log' section of a README and return a list of sessions.
-
-    Args:
-        content: Full README text.
-
-    Returns:
-        List of SessionSummary objects, newest-first.
-    """
-    start, end = _find_section_bounds(content)
-    section = content[start:end]
-
-    entries = []
-    for m in _SESSION_BLOCK_RE.finditer(section):
-        date = m.group(1)
-        # Collect lines until next session block or end
-        block_start = m.end()
-        nxt = _SESSION_BLOCK_RE.search(section, block_start)
-        block_end = nxt.start() if nxt else len(section)
-        block = section[block_start:block_end]
-
-        features = re.findall(r"^-\s+(.+)", block, re.MULTILINE)
-        tests_m = re.search(r"(\d+)\s+test", block, re.IGNORECASE)
-        prs_m = re.search(r"(\d+)\s+PR", block, re.IGNORECASE)
-        notes_m = re.search(r"Notes?:\s*(.+)", block, re.IGNORECASE)
-
-        entries.append(
-            SessionSummary(
-                date=date,
-                features=features,
-                tests_added=int(tests_m.group(1)) if tests_m else 0,
-                prs_merged=int(prs_m.group(1)) if prs_m else 0,
-                notes=notes_m.group(1).strip() if notes_m else None,
-            )
+def _run(cmd: list[str], cwd: Path) -> str:
+    """Run a subprocess command and return stdout, ignoring errors."""
+    try:
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, cwd=cwd, timeout=10
         )
-    return entries
+        return result.stdout.strip()
+    except Exception:
+        return ""
+
+
+def _gather_stats(repo_root: Path) -> dict[str, Any]:
+    """Gather repo statistics for badge generation."""
+    commits = _run(["git", "rev-list", "--count", "HEAD"], repo_root)
+    total_commits = int(commits) if commits.isdigit() else 0
+
+    log = _run(["git", "log", "--oneline", "--all"], repo_root)
+    pr_lines = [l for l in log.splitlines() if "[awake]" in l.lower() and "merge" in l.lower()]
+    total_prs = len(pr_lines)
+
+    awake_lines = [l for l in log.splitlines() if l.startswith("[awake]") or "[awake]" in l]
+    sessions_set: set[str] = set()
+    for line in awake_lines:
+        m = re.search(r"session[\s#-]*(\d+)", line, re.IGNORECASE)
+        if m:
+            sessions_set.add(m.group(1))
+    nights_active = len(sessions_set) if sessions_set else max(1, total_commits // 20)
+
+    return {
+        "total_commits": total_commits,
+        "total_prs": total_prs,
+        "nights_active": nights_active,
+    }
+
+
+def _make_stat_badges(stats: dict[str, Any]) -> str:
+    """Render stat badges as Markdown."""
+    sessions = stats.get("nights_active", 0)
+    prs = stats.get("total_prs", 0)
+    commits = stats.get("total_commits", 0)
+    lines = [
+        f"![Sessions](https://img.shields.io/badge/sessions-{sessions}-blue)",
+        f"![PRs](https://img.shields.io/badge/PRs-{prs}-green)",
+        f"![Commits](https://img.shields.io/badge/commits-{commits}-lightgrey)",
+    ]
+    return "  ".join(lines)
+
+
+def _make_health_badge(health_score: Optional[int] = None) -> str:
+    """Render a health score badge as Markdown."""
+    if health_score is None:
+        return "![Health](https://img.shields.io/badge/health-unknown-lightgrey)"
+    if health_score >= 85:
+        color = "brightgreen"
+    elif health_score >= 70:
+        color = "yellow"
+    else:
+        color = "red"
+    return f"![Health](https://img.shields.io/badge/health-{health_score}%25-{color})"
 
 
 # ---------------------------------------------------------------------------
-# Rendering
+# TOC generator
 # ---------------------------------------------------------------------------
 
-
-def _render_session_block(session: SessionSummary) -> str:
-    lines = [f"### {session.date}"]
-    for feat in session.features:
-        lines.append(f"- {feat}")
-    meta_parts = []
-    if session.tests_added:
-        meta_parts.append(f"{session.tests_added} tests added")
-    if session.prs_merged:
-        meta_parts.append(f"{session.prs_merged} PRs merged")
-    if meta_parts:
-        lines.append("\n" + ", ".join(meta_parts))
-    if session.notes:
-        lines.append(f"\nNotes: {session.notes}")
-    return "\n".join(lines) + "\n"
-
-
-def render_session_log(sessions: list[SessionSummary]) -> str:
-    """
-    Render a sorted 'Session Log' section from a list of sessions.
-
-    Args:
-        sessions: List of SessionSummary objects (any order).
-
-    Returns:
-        Markdown string for the entire section.
-    """
-    sorted_sessions = sorted(sessions, key=lambda s: s.date, reverse=True)
-    lines = ["## Session Log\n"]
-    for session in sorted_sessions:
-        lines.append(_render_session_block(session))
+def _make_toc(content: str) -> str:
+    """Generate a Markdown TOC from headings in ``content``."""
+    lines = []
+    for line in content.splitlines():
+        m = re.match(r"^(#{1,6})\s+(.+)", line)
+        if not m:
+            continue
+        level = len(m.group(1))
+        title = m.group(2).strip()
+        # Skip the TOC heading itself
+        if re.match(r"table of contents", title, re.IGNORECASE):
+            continue
+        anchor = re.sub(r"[^\w\s-]", "", title.lower())
+        anchor = re.sub(r"[\s]+", "-", anchor).strip("-")
+        indent = "  " * (level - 1)
+        lines.append(f"{indent}- [{title}](#{anchor})")
     return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
-# High-level update helpers
+# Core updater
 # ---------------------------------------------------------------------------
+
+def _replace_block(content: str, tag: str, replacement: str) -> tuple[str, bool]:
+    """Replace the content between ``<!-- tag -->`` and ``<!-- /tag -->`` markers."""
+    pattern = rf"(<!-- {re.escape(tag)} -->)[\s\S]*?(<!-- /{re.escape(tag)} -->)"
+    new_content = f"\n{replacement}\n"
+    result, n = re.subn(pattern, rf"\g<1>{new_content}\g<2>", content)
+    return result, n > 0
 
 
 def update_readme(
-    readme_path: str,
-    new_session: SessionSummary,
-    *,
-    create_section_if_missing: bool = True,
-) -> str:
+    repo_root: Path,
+    readme_name: str = "README.md",
+    health_score: Optional[int] = None,
+    dry_run: bool = False,
+) -> UpdateResult:
+    """Update the README with fresh stats and health badges.
+
+    Parameters
+    ----------
+    repo_root:
+        Root directory of the repository.
+    readme_name:
+        Name of the README file (default: ``README.md``).
+    health_score:
+        Pre-computed health score; if ``None``, the badge shows "unknown".
+    dry_run:
+        If ``True``, compute changes but do not write to disk.
+
+    Returns
+    -------
+    UpdateResult
+        Summary of changes made.
     """
-    Insert or update a session entry in a README file.
+    readme_path = repo_root / readme_name
+    if not readme_path.exists():
+        return UpdateResult(
+            path=readme_path,
+            blocks_found=0,
+            blocks_updated=0,
+            changed=False,
+            error=f"README not found: {readme_path}",
+        )
 
-    Args:
-        readme_path: Path to the README.md file.
-        new_session: Session to add or replace.
-        create_section_if_missing: If True, append a new section when none exists.
+    original = readme_path.read_text(encoding="utf-8")
+    content = original
+    blocks_found = 0
+    blocks_updated = 0
 
-    Returns:
-        The updated README content as a string.
-    """
-    path = Path(readme_path)
-    content = path.read_text(encoding="utf-8") if path.exists() else ""
+    # --- awake:stats block ---
+    if "<!-- awake:stats -->" in content:
+        blocks_found += 1
+        stats = _gather_stats(repo_root)
+        badge_str = _make_stat_badges(stats)
+        content, changed = _replace_block(content, "awake:stats", badge_str)
+        if changed:
+            blocks_updated += 1
 
-    start, end = _find_section_bounds(content)
-    section_exists = start < len(content)
+    # --- awake:health block ---
+    if "<!-- awake:health -->" in content:
+        blocks_found += 1
+        badge_str = _make_health_badge(health_score)
+        content, changed = _replace_block(content, "awake:health", badge_str)
+        if changed:
+            blocks_updated += 1
 
-    if section_exists:
-        section_content = content[start:end]
-        existing = parse_session_log(content)
-        # Remove duplicate if same date
-        sessions = [s for s in existing if s.date != new_session.date]
-        sessions.append(new_session)
-        new_section = render_session_log(sessions)
-        content = content[:start] + new_section + content[end:]
-    elif create_section_if_missing:
-        content = content.rstrip() + "\n\n" + render_session_log([new_session]) + "\n"
+    # --- awake:toc block ---
+    if "<!-- awake:toc -->" in content:
+        blocks_found += 1
+        toc = _make_toc(content)
+        content, changed = _replace_block(content, "awake:toc", toc)
+        if changed:
+            blocks_updated += 1
 
-    return content
+    file_changed = content != original
+    if file_changed and not dry_run:
+        readme_path.write_text(content, encoding="utf-8")
 
-
-def write_readme(
-    readme_path: str,
-    new_session: SessionSummary,
-    *,
-    create_section_if_missing: bool = True,
-) -> None:
-    """
-    Update the README file in-place with a new session entry.
-
-    Args:
-        readme_path: Path to the README.md file.
-        new_session: Session to add or replace.
-        create_section_if_missing: If True, create the section when absent.
-    """
-    updated = update_readme(
-        readme_path,
-        new_session,
-        create_section_if_missing=create_section_if_missing,
+    return UpdateResult(
+        path=readme_path,
+        blocks_found=blocks_found,
+        blocks_updated=blocks_updated,
+        changed=file_changed,
     )
-    Path(readme_path).write_text(updated, encoding="utf-8")
+
+
+def update_readme_to_dict(result: UpdateResult) -> dict:
+    """Serialize an ``UpdateResult`` to the /api/readme JSON response format."""
+    return result.to_dict()
