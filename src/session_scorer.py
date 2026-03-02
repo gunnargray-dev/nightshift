@@ -237,7 +237,7 @@ def format_session_score(score):
     lines.append(f"  {'Dimension':<25} {'Weight':>7}  {'Score':>6}  {'Pts':>6}")
     lines.append(f"  {'-'*25} {'-------':>7}  {'------':>6}  {'------':>6}")
     for d in score.dimensions:
-        bar = "█" * int(d.raw * 12) + "░" * (12 - int(d.raw * 12))
+        bar = "\u2588" * int(d.raw * 12) + "\u2591" * (12 - int(d.raw * 12))
         lines.append(
             f"  {d.name:<25} {d.weight*100:>6.0f}%  {d.raw*100:>5.1f}%  {d.weighted:>6.1f}"
         )
