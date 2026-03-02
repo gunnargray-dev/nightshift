@@ -53,31 +53,31 @@ export function Overview() {
           <>
             <StatCard
               label="Sessions"
-              value={s?.nights_active ?? "—"}
+              value={s?.nights_active ?? "\u2014"}
               sub="Nights active"
               icon={<Clock size={15} />}
             />
             <StatCard
               label="PRs"
-              value={s?.total_prs ?? "—"}
+              value={s?.total_prs ?? "\u2014"}
               sub="Merged"
               icon={<GitPullRequest size={15} />}
             />
             <StatCard
               label="Modules"
-              value={fileList.length || "—"}
+              value={fileList.length || "\u2014"}
               sub="in src/"
               icon={<Blocks size={15} />}
             />
             <StatCard
               label="Commits"
-              value={s?.total_commits ?? "—"}
+              value={s?.total_commits ?? "\u2014"}
               sub="Total"
               icon={<TestTubeDiagonal size={15} />}
             />
             <StatCard
               label="Health"
-              value={overallHealth != null ? `${overallHealth}` : "—"}
+              value={overallHealth != null ? `${overallHealth}` : "\u2014"}
               icon={<TrendingUp size={15} />}
             />
           </>
@@ -120,7 +120,7 @@ export function Overview() {
                     {session.title ?? `Session ${session.session ?? i}`}
                   </div>
                   <div className="text-xs text-text-tertiary">
-                    {session.date ?? "—"} {"—"} {session.prs ?? 0} PRs
+                    {session.date ?? "\u2014"} {"\u2014"} {session.prs ?? 0} PRs
                   </div>
                 </div>
               </div>
