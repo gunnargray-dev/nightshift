@@ -58,12 +58,12 @@ class InitResult:
         if self.created:
             lines.append(f"## Created ({len(self.created)} files)\n")
             for f in self.created:
-                lines.append(f"- ✅ `{f}`")
+                lines.append(f"- \u2705 `{f}`")
             lines.append("")
         if self.skipped:
             lines.append(f"## Skipped (already exist)\n")
             for f in self.skipped:
-                lines.append(f"- ⏭  `{f}`")
+                lines.append(f"- \u23ed  `{f}`")
             lines.append("")
         lines.append("---")
         lines.append("Run `awake health` to verify your setup.")

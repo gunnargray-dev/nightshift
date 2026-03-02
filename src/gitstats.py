@@ -121,7 +121,7 @@ class GitStatsReport:
         """Render the git stats report as a Markdown document"""
         lines: list[str] = ["# Awake Git Statistics Deep-Dive\n"]
         if self.first_commit_date:
-            lines.append(f"*Date range: {self.first_commit_date} → {self.last_commit_date}*\n")
+            lines.append(f"*Date range: {self.first_commit_date} \u2192 {self.last_commit_date}*\n")
 
         lines += [
             "## Overview\n",
