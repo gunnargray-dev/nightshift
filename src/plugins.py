@@ -125,121 +125,153 @@ class PluginRunReport:
             "",
         ]
         if self.results:
-            lines += ["## Results", ""]
+            lines += ["### Results", ""]
             for r in self.results:
-                status_icon = {"ok": "✓", "warn": "⚠", "error": "✗"}.get(r.status, "?")
-                lines.append(f"- {status_icon} **{r.plugin_name}** ({r.hook}): {r.message}")
+                icon = {"ok": "[OK]", "warn": "[WARN]", "error": "[ERR]", "skipped": "[SKIP]"}.get(r.status, "[?]")
+                lines.append(f"{icon} **{r.plugin_name}** ({r.duration_ms:.1f}ms) -- {r.message}")
                 if r.error:
-                    lines.append(f"  - Error: `{r.error}`")
+                    lines.append(f"  > Error: `{r.error}`")
         return "\n".join(lines)
 
 
-def load_plugins_from_config(repo_root: Path) -> list[PluginDefinition]:
-    """Discover and load plugin definitions from ``awake.toml``."""
-    config_path = repo_root / "awake.toml"
-    if not config_path.exists():
+def load_plugin_definitions(repo_root: Path) -> list[PluginDefinition]:
+    """Read [[plugins]] entries from awake.toml."""
+    toml_path = repo_root / "awake.toml"
+    if not toml_path.exists() or tomllib is None:
         return []
-    if tomllib is None:
-        return []
-    with config_path.open("rb") as fh:
-        config = tomllib.load(fh)
+    with toml_path.open("rb") as f:
+        config = tomllib.load(f)
     raw_plugins = config.get("plugins", [])
-    if not isinstance(raw_plugins, list):
-        return []
-    return [PluginDefinition.from_dict(p) for p in raw_plugins if isinstance(p, dict)]
+    return [PluginDefinition.from_dict(p) for p in raw_plugins]
 
 
-def _load_plugin_function(plugin: PluginDefinition, repo_root: Path) -> Optional[Callable]:
-    """Import and return the callable for a plugin definition."""
-    module_path = repo_root / plugin.module.replace(".", "/")
-    py_file = module_path.with_suffix(".py")
-    if py_file.exists():
-        spec = importlib.util.spec_from_file_location(plugin.module, py_file)
+def _load_function(defn: PluginDefinition, repo_root: Path) -> Optional[Callable]:
+    """Import a plugin module and retrieve the registered function."""
+    module_name = defn.module
+    func_name = defn.function
+    candidate = repo_root / module_name.replace(".", "/")
+    if not candidate.suffix:
+        candidate = candidate.with_suffix(".py")
+    if candidate.exists():
+        spec = importlib.util.spec_from_file_location(module_name, candidate)
         if spec and spec.loader:
             mod = importlib.util.module_from_spec(spec)
-            sys.modules[plugin.module] = mod
-            spec.loader.exec_module(mod)  # type: ignore[union-attr]
-            return getattr(mod, plugin.function, None)
+            sys.modules[module_name] = mod
+            spec.loader.exec_module(mod)
+            return getattr(mod, func_name, None)
+    repo_str = str(repo_root)
+    if repo_str not in sys.path:
+        sys.path.insert(0, repo_str)
     try:
-        mod = importlib.import_module(plugin.module)
-        return getattr(mod, plugin.function, None)
+        mod = importlib.import_module(module_name)
+        return getattr(mod, func_name, None)
     except ImportError:
         return None
 
 
 def run_plugins(
-    plugins: list[PluginDefinition],
     hook: str,
-    context: dict,
+    *,
     repo_root: Path,
+    session_number: int = 0,
+    extra_context: Optional[dict] = None,
 ) -> PluginRunReport:
-    """Execute all plugins registered for ``hook`` and return a report."""
+    """Discover and run all enabled plugins registered for *hook*."""
     import time
-
+    definitions = load_plugin_definitions(repo_root)
     report = PluginRunReport(hook=hook)
-    for plugin in plugins:
-        if not plugin.enabled:
+    ctx: dict[str, Any] = {
+        "repo_path": str(repo_root),
+        "session_number": session_number,
+        "trigger_hook": hook,
+    }
+    if extra_context:
+        ctx.update(extra_context)
+    for defn in definitions:
+        if not defn.enabled:
             report.skipped += 1
+            report.results.append(PluginResult(
+                plugin_name=defn.name, hook=hook, status="skipped",
+                message="Plugin disabled in awake.toml",
+            ))
             continue
-        if hook not in plugin.hooks:
+        if hook not in defn.hooks and defn.hooks:
             continue
         report.plugins_run += 1
-        fn = _load_plugin_function(plugin, repo_root)
-        if fn is None:
+        func = _load_function(defn, repo_root)
+        if func is None:
             report.errors += 1
-            report.results.append(
-                PluginResult(
-                    plugin_name=plugin.name,
-                    hook=hook,
-                    status="error",
-                    error=f"Could not load {plugin.module}.{plugin.function}",
-                )
-            )
+            report.results.append(PluginResult(
+                plugin_name=defn.name, hook=hook, status="error",
+                error=f"Could not load {defn.module}.{defn.function}",
+            ))
             continue
         t0 = time.perf_counter()
         try:
-            raw = fn(context)
-        except Exception:
-            elapsed = (time.perf_counter() - t0) * 1000
-            tb = traceback.format_exc()
-            report.errors += 1
-            report.results.append(
-                PluginResult(
-                    plugin_name=plugin.name,
-                    hook=hook,
-                    status="error",
-                    duration_ms=elapsed,
-                    error=tb,
-                )
+            raw = func(dict(ctx))
+            duration_ms = (time.perf_counter() - t0) * 1000
+            if not isinstance(raw, dict):
+                raw = {"status": "ok", "message": str(raw), "data": {}}
+            status = raw.get("status", "ok")
+            result = PluginResult(
+                plugin_name=defn.name,
+                hook=hook,
+                status=status,
+                message=raw.get("message", ""),
+                data=raw.get("data", {}),
+                duration_ms=duration_ms,
             )
-            continue
-        elapsed = (time.perf_counter() - t0) * 1000
-        status = raw.get("status", "ok") if isinstance(raw, dict) else "ok"
-        message = raw.get("message", "") if isinstance(raw, dict) else str(raw)
-        data = raw.get("data", {}) if isinstance(raw, dict) else {}
-        result = PluginResult(
-            plugin_name=plugin.name,
-            hook=hook,
-            status=status,
-            message=message,
-            data=data,
-            duration_ms=elapsed,
-        )
-        report.results.append(result)
-        if status == "ok":
-            report.ok += 1
-        elif status == "warn":
-            report.warnings += 1
-        else:
+            if status == "warn":
+                report.warnings += 1
+            elif status == "error":
+                report.errors += 1
+            else:
+                report.ok += 1
+            report.results.append(result)
+        except Exception as exc:
+            duration_ms = (time.perf_counter() - t0) * 1000
             report.errors += 1
+            report.results.append(PluginResult(
+                plugin_name=defn.name,
+                hook=hook,
+                status="error",
+                error=f"{type(exc).__name__}: {exc}",
+                duration_ms=duration_ms,
+            ))
     return report
 
 
-def plugins_to_api_response(plugins: list[PluginDefinition]) -> dict:
-    """Serialize plugin definitions to the /api/plugins JSON response format."""
-    return {
-        "plugins": [p.to_dict() for p in plugins],
-        "total": len(plugins),
-        "enabled": sum(1 for p in plugins if p.enabled),
-        "hooks": sorted({h for p in plugins for h in p.hooks}),
-    }
+def list_plugins(repo_root: Path) -> str:
+    """Return a Markdown table of registered plugins."""
+    definitions = load_plugin_definitions(repo_root)
+    if not definitions:
+        return "_No plugins registered in awake.toml_\n"
+    lines = [
+        "| Name | Module | Function | Hooks | Enabled |",
+        "|------|--------|----------|-------|---------|",
+    ]
+    for d in definitions:
+        hooks_str = ", ".join(f"`{h}`" for h in d.hooks) if d.hooks else "_any_"
+        enabled_str = "[YES]" if d.enabled else "[NO]"
+        lines.append(
+            f"| `{d.name}` | `{d.module}` | `{d.function}` | {hooks_str} | {enabled_str} |"
+        )
+    return "\n".join(lines)
+
+
+EXAMPLE_TOML_SNIPPET = """
+# Example plugin configuration in awake.toml
+#
+# [[plugins]]
+# name        = "team_style_check"
+# module      = "scripts.style"
+# function    = "check_style"
+# description = "Enforce team-specific style rules beyond PEP 8"
+# hooks       = ["pre_health", "pre_run"]
+# enabled     = true
+#
+# Plugin function signature:
+#   def my_plugin(ctx: dict) -> dict:
+#       # ctx: {repo_path, session_number, trigger_hook, ...}
+#       return {"status": "ok", "message": "...", "data": {}}
+""".strip()
