@@ -1,0 +1,60 @@
+name: Auto-merge Executor
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Pull request number to attempt to merge'
+        required: true
+        type: string
+      pr_score:
+        description: 'PR quality score (0-100)'
+        required: true
+        type: string
+      ci_passed:
+        description: 'Whether CI passed (true/false)'
+        required: true
+        type: string
+      min_score:
+        description: 'Minimum score required'
+        required: false
+        default: '80'
+        type: string
+      dry_run:
+        description: 'Dry run (do not merge)'
+        required: false
+        default: 'true'
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+
+      - name: Attempt merge
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python -m src.automerge_exec \
+            --pr ${{ inputs.pr_number }} \
+            --score ${{ inputs.pr_score }} \
+            --ci-passed ${{ inputs.ci_passed }} \
+            --min-score ${{ inputs.min_score }} \
+            --dry-run ${{ inputs.dry_run }} \
+            --json
