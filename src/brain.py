@@ -221,7 +221,6 @@ def _score_issue_urgency(issues: list[dict]) -> float:
         if "human-priority" in labels:
             score += 15.0
         score += (6 - priority) * 3.0
-
         if issue.get("comment_count", 0) >= 3:
             score += 3.0
 
@@ -334,7 +333,7 @@ class Brain:
                 in_backlog = False
                 break
             if in_backlog and line.startswith("- [ ]"):
-                match = re.match(r"- \[ \] \*\*(.+?)\*\*\s*[—-]\s*(.+)", line)
+                match = re.match(r"- \[ \] \*\*(.+?)\*\*\s*[\u2014-]\s*(.+)", line)
                 if match:
                     items.append({
                         "title": match.group(1).strip(),
