@@ -17,6 +17,8 @@ Awake is a self-improving autonomous development system. An AI runs overnight, a
 
 **24 sessions. 54 PRs. 68 modules. 2,443+ tests. Zero human commits.**
 
+Note: Session 25 is in progress (see open PRs).
+
 ---
 
 ## How It Works
