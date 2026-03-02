@@ -281,15 +281,15 @@ def cmd_replay(args) -> int:
 
 def cmd_compare(args) -> int:
     """Compare two sessions side-by-side."""
-    from src.compare import compare_sessions, render_comparison
-    _print_header(f"Session Comparison — {args.session_a} vs {args.session_b}")
+    from src.compare import compare_sessions
+    _print_header(f"Session Comparison - {args.session_a} vs {args.session_b}")
     repo = _repo(getattr(args, "repo", None))
     log_path = repo / "AWAKE_LOG.md"
     comparison = compare_sessions(log_path=log_path, session_a=args.session_a, session_b=args.session_b)
     if args.json:
         print(json.dumps(comparison.to_dict(), indent=2, default=str))
         return 0
-    print(render_comparison(comparison))
+    print(comparison.to_markdown())
     return 0
 
 
