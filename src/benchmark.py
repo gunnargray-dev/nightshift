@@ -46,14 +46,14 @@ class BenchmarkResult:
 
     @property
     def regression_label(self) -> str:
-        """Human-readable regression string, e.g. ``"\u25b2 +35%  \u26a0"`` or ``"—"``."""
+        """Human-readable regression string, e.g. ``"▲ +35%  ⚠"`` or ``"—"``."""
         r = self.regression
         if r is None:
             return "—"
         if r > 20:
-            return f"\u25b2 +{r:.0f}%  \u26a0"
+            return f"▲ +{r:.0f}%  ⚠"
         if r < -10:
-            return f"\u25bc {r:.0f}%"
+            return f"▼ {r:.0f}%"
         return f"{r:+.0f}%"
 
     def to_dict(self) -> dict:
