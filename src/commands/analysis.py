@@ -96,17 +96,18 @@ def cmd_coupling(args) -> int:
 
 def cmd_deadcode(args) -> int:
     """Dead code detector: unused functions, classes, imports."""
-    from src.dead_code import detect_dead_code
+    from src.dead_code import find_dead_code
     _print_header("Dead Code Detector")
     repo = _repo(getattr(args, "repo", None))
-    report = detect_dead_code(repo)
+    report = find_dead_code(repo)
     if args.json:
         print(json.dumps(report.to_dict(), indent=2))
         return 0
     print(report.to_markdown())
     _print_info(
-        f"Dead symbols: {report.dead_count}  "
-        f"HIGH: {report.high_count}  MEDIUM: {report.medium_count}  LOW: {report.low_count}"
+        f"Dead symbols: {len(report.items)}  "
+        f"Functions: {len(report.dead_functions)}  Classes: {len(report.dead_classes)}  "
+        f"Imports: {len(report.dead_imports)}  High-confidence: {len(report.high_confidence)}"
     )
     return 0
 
@@ -149,7 +150,7 @@ def cmd_coveragemap(args) -> int:
         print(json.dumps(report.to_dict(), indent=2))
         return 0
     print(report.to_markdown())
-    _print_info(f"Overall: {report.overall_pct:.1f}%  Files: {report.file_count}")
+    _print_info(f"Avg score: {report.avg_score:.1f}  Modules: {len(report.entries)}  Without tests: {len(report.modules_without_tests)}")
     return 0
 
 
@@ -169,8 +170,8 @@ def cmd_blame(args) -> int:
         return 0
     print(report.to_markdown())
     _print_info(
-        f"Human: {report.human_pct:.1f}%  AI: {report.ai_pct:.1f}%  "
-        f"Files analysed: {report.file_count}"
+        f"Human: {report.repo_human_pct:.1f}%  AI: {report.repo_ai_pct:.1f}%  "
+        f"Files analysed: {len(report.files)}"
     )
     return 0
 
