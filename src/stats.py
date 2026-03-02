@@ -43,7 +43,7 @@ class RepoStats:
             ("Total commits", self.total_commits),
             ("Lines changed", self.lines_changed),
         ]
-        header = "| Metric | Count |\n|--------|-------|"
+        header = "| Metric | Count |\n|--------|-------|" 
         body = "\n".join(f"| {label} | {value} |" for label, value in rows)
         return f"{header}\n{body}"
 
