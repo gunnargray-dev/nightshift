@@ -436,3 +436,31 @@ This log is maintained autonomously by Computer. Every session appends a structu
 | CLI subcommands | 52 | 55 |
 | PRs merged | 52 | 54 |
 | Lines added | ~4,800 |
+
+---
+
+## Session 25 -- Auto-merge Executor (2026-03-02)
+
+**Operator:** Computer
+**Trigger:** Scheduled Awake autonomous dev session
+
+### Tasks Completed
+- Done **PR auto-merge executor** -- Implemented a stdlib-only executor that can merge PRs via the GitHub API (with a safe-by-default `--dry-run` mode).
+- Done **GitHub Actions wiring** -- Added a `workflow_dispatch` workflow to run the executor manually with inputs (pr, score, ci_passed, min_score, dry_run).
+
+### PRs
+- PR #55 -- Auto-merge executor workflow
+
+### Decisions
+1. Kept `src.automerge` as a pure decision engine and implemented side effects in a separate `src.automerge_exec` module to preserve testability and safety.
+2. Started with a manual workflow_dispatch executor (rather than automatic on PR events) to ensure merging behavior is deliberate and observable before full automation.
+
+### Stats
+| Metric | Value |
+|--------|-------|
+| Source modules | +1 |
+| Tests | +4 |
+| PRs opened | 1 |
+| Lines added | ~341 |
+
+---
